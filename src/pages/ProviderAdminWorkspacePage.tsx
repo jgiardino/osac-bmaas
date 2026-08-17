@@ -19,6 +19,16 @@ import { ProviderAdminQuotasPage } from './ProviderAdminQuotasPage'
 import { PlaceholderProviderAdminPage } from './PlaceholderProviderAdminPage'
 import { ProviderServiceSelectionPage } from './provider-setup/ProviderServiceSelectionPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
+import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
+import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
+import {
+  clearGenaiApiKeysDetailParams,
+  clearMaasGovernanceDetailParams,
+  isGenaiApiKeysNavId,
+} from './tenant-user/genai/genaiNavParams'
+import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
+import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
+import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
@@ -274,6 +284,45 @@ export function ProviderAdminWorkspacePage({
     setActiveNavId(navId)
     setProviderActiveNav(navId)
     syncWorkspaceNavParam(setSearchParams, navId)
+
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (isGenaiApiKeysNavId(navId)) {
+        next.set('nav', navId)
+        clearGenaiApiKeysDetailParams(next)
+        clearMaasGovernanceDetailParams(next)
+        return next
+      }
+      if (navId === 'ai-maas-governance') {
+        next.set('nav', 'ai-maas-governance')
+        clearGenaiApiKeysDetailParams(next)
+        clearMaasGovernanceDetailParams(next)
+        return next
+      }
+      let changed = false
+      for (const key of [
+        'keyId',
+        'subscriptionId',
+        'subTab',
+        'tab',
+        'modal',
+        'maasWizard',
+        'maasSubId',
+        'maasPolId',
+        'edit',
+        'prefillModel',
+        'prefillGroup',
+        'from',
+        'view',
+      ] as const) {
+        if (next.has(key)) {
+          next.delete(key)
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+
     if (
       navId === 'services-baremetal' ||
       navId === 'services-clusters' ||
@@ -378,6 +427,22 @@ export function ProviderAdminWorkspacePage({
             onWizardFinished={handleNavigateToServices}
           />
         )
+      case 'genai-asset-endpoints':
+        return (
+          <AiAssetEndpointsPage
+            onNavigateToPlayground={() => handleNavChange('genai-playground')}
+          />
+        )
+      case 'genai-playground':
+        return <PlaygroundPage />
+      case 'genai-api-keys':
+        return <GenaiApiKeysPage />
+      case 'ai-maas-governance':
+        return <MaaSGovernancePage />
+      case 'ai-model-catalog-settings':
+        return <ModelCatalogSettingsPage />
+      case 'ai-admin-api-keys':
+        return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
       case 'infrastructure-data-centers':
         return <ProviderAdminDataCentersPage />
       case 'infrastructure-hardware-inventory':

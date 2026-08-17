@@ -35,6 +35,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 
 import { MOCK_AI_MODELS } from './mocks'
 import type { AIModel } from './types'
+import { GenaiPageStack } from '../GenaiPageStack'
 
 const CAPABILITY_DISPLAY: Record<string, { label: string; color: 'green' | 'purple' | 'teal' }> = {
   vision: { label: 'Vision', color: 'green' },
@@ -157,7 +158,8 @@ export function ModelsTab() {
 
   return (
     <>
-      <Toolbar id="aae-prod-models-toolbar" clearAllFilters={clearAllFilters}>
+      <GenaiPageStack>
+      <Toolbar id="aae-prod-models-toolbar" clearAllFilters={clearAllFilters} hasNoPadding>
         <ToolbarContent>
           <ToolbarGroup variant="filter-group">
             <ToolbarItem>
@@ -376,6 +378,7 @@ export function ModelsTab() {
           ))}
         </Tbody>
       </Table>
+      </GenaiPageStack>
 
       <Modal
         variant="small"

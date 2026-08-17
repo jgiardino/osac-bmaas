@@ -16,7 +16,8 @@ export function useApiKeysPaths() {
   const withApiKeysNav = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
       const next = new URLSearchParams(searchParams)
-      next.set('nav', 'genai-api-keys')
+      const currentNav = searchParams.get('nav')
+      next.set('nav', currentNav === 'ai-admin-api-keys' ? 'ai-admin-api-keys' : 'genai-api-keys')
       mutate(next)
       return `${pathname}?${next.toString()}`
     },

@@ -41,11 +41,12 @@ import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import type { ThProps } from '@patternfly/react-table';
 
 import ListPage from '../osacStubs/ListPage';
+import { GenaiPageStack } from '../GenaiPageStack';
 
 import { addDynamicKey, getDynamicKeys } from './apiKeysStoreV34';
 import { CreateAPIKeyModalV34 } from './components/CreateAPIKeyModalV34';
 import { ModelAccessTable } from './components/ModelAccessTable';
-import { RevokeAllAPIKeysModal, type RevokePreviewMode } from './components/RevokeAllAPIKeysModal';
+import { RevokeAllAPIKeysModal, type RevokeAllTargetKind, type RevokePreviewMode } from './components/RevokeAllAPIKeysModal';
 import { mockApiKeysAdminV34, mockApiKeysEngineerV34, mockHeavyUserKeysV34 } from './mockDataV34';
 import { useModalFromURL, useUserProfile } from './stubs';
 import type { ApiKeyStatusV34, ApiKeyV34 } from './typesV34';
@@ -59,6 +60,7 @@ interface APIKeysV34Props {
   maxExpirationDays?: number;
   simulateExpiryServerError?: number;
   modelDisplayStyle?: 'chips' | 'flat' | 'table';
+  kicker?: string;
 }
 
 const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
@@ -66,6 +68,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
   maxExpirationDays,
   simulateExpiryServerError,
   modelDisplayStyle = 'chips',
+  kicker,
 }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,6 +95,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
     close: closeCreateModal,
   } = useModalFromURL('create');
   const [isRevokeAllModalOpen, setIsRevokeAllModalOpen] = React.useState(false);
+  const [revokeTargetKind, setRevokeTargetKind] = React.useState<RevokeAllTargetKind>('user');
   const [openKebabMenus, setOpenKebabMenus] = React.useState<Set<string>>(new Set());
   const [isPageActionsOpen, setIsPageActionsOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
@@ -323,22 +327,32 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
     addToast(`API key "${apiKey.name}" revoked`);
   };
 
-  const handleRevokeAll = (targetUsername?: string) => {
+  const handleRevokeAll = (target: string, kind: RevokeAllTargetKind) => {
+    const needle = target.toLowerCase();
     setApiKeys((prev) =>
       prev.map((k) => {
         if (k.status !== 'active') {
           return k;
         }
-        if (targetUsername && k.username.toLowerCase() !== targetUsername.toLowerCase()) {
+        if (kind === 'subscription') {
+          const matches =
+            (k.subscriptionName ?? '').toLowerCase() === needle ||
+            (k.subscriptionId ?? '').toLowerCase() === needle;
+          return matches ? { ...k, status: 'revoked' as ApiKeyStatusV34 } : k;
+        }
+        if (k.username.toLowerCase() !== needle) {
           return k;
         }
         return { ...k, status: 'revoked' as ApiKeyStatusV34 };
       }),
     );
 
-    const msg = targetUsername
-      ? `All active keys for "${targetUsername}" revoked`
-      : 'All your active API keys revoked';
+    const msg =
+      kind === 'subscription'
+        ? `All active keys for subscription "${target}" revoked`
+        : isAdmin
+          ? `All active keys for "${target}" revoked`
+          : 'All your active API keys revoked';
     addToast(msg);
   };
 
@@ -383,7 +397,8 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
 
   const apiKeysPanel = (
     <>
-        <Toolbar id="api-keys-toolbar-v34">
+        <GenaiPageStack>
+        <Toolbar id="api-keys-toolbar-v34" hasNoPadding>
           <ToolbarContent>
             <ToolbarGroup>
               <ToolbarItem>
@@ -504,25 +519,45 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
               >
                 <DropdownList>
                   {isAdmin ? (
-                    <DropdownItem
-                      key="revoke-all"
-                      onClick={() => {
-                        setIsRevokeAllModalOpen(true);
-                        setIsPageActionsOpen(false);
-                      }}
-                      isDanger
-                      id="revoke-all-keys-action-v34"
-                      tooltipProps={{
-                        content: 'You will select the user in the next step',
-                        position: 'left',
-                      }}
-                    >
-                      Revoke all keys for a single user
-                    </DropdownItem>
+                    <>
+                      <DropdownItem
+                        key="revoke-all-user"
+                        onClick={() => {
+                          setRevokeTargetKind('user');
+                          setIsRevokeAllModalOpen(true);
+                          setIsPageActionsOpen(false);
+                        }}
+                        isDanger
+                        id="revoke-all-keys-action-v34"
+                        tooltipProps={{
+                          content: 'You will select the user in the next step',
+                          position: 'left',
+                        }}
+                      >
+                        Revoke all keys for a single user
+                      </DropdownItem>
+                      <DropdownItem
+                        key="revoke-all-subscription"
+                        onClick={() => {
+                          setRevokeTargetKind('subscription');
+                          setIsRevokeAllModalOpen(true);
+                          setIsPageActionsOpen(false);
+                        }}
+                        isDanger
+                        id="revoke-all-keys-subscription-action-v34"
+                        tooltipProps={{
+                          content: 'You will select the subscription in the next step',
+                          position: 'left',
+                        }}
+                      >
+                        Revoke all keys for a single subscription
+                      </DropdownItem>
+                    </>
                   ) : (
                     <DropdownItem
                       key="revoke-all"
                       onClick={() => {
+                        setRevokeTargetKind('user');
                         setIsRevokeAllModalOpen(true);
                         setIsPageActionsOpen(false);
                       }}
@@ -681,6 +716,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
           variant="bottom"
           id="api-keys-pagination-bottom-v34"
         />
+        </GenaiPageStack>
 
         <CreateAPIKeyModalV34
           isOpen={isCreateModalOpen}
@@ -695,11 +731,12 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
         <RevokeAllAPIKeysModal
           isOpen={isRevokeAllModalOpen}
           onClose={() => setIsRevokeAllModalOpen(false)}
-          onConfirm={(targetUser) => handleRevokeAll(targetUser)}
+          onConfirm={(target, kind) => handleRevokeAll(target, kind)}
           allKeys={apiKeys}
           isAdmin={isAdmin}
           currentUsername={getCurrentUsername()}
           previewMode={revokePreviewMode}
+          targetKind={revokeTargetKind}
         />
     </>
   );
@@ -708,6 +745,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
     <ListPage
       title="API keys"
       description="Manage API keys used to authenticate with AI model endpoints."
+      kicker={kicker}
     >
       <AlertGroup isToast isLiveRegion hasAnimations id="api-keys-toast-v34">
         {toastAlerts}

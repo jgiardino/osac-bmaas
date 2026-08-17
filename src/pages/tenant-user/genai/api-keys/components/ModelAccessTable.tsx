@@ -28,6 +28,7 @@ import KeyIcon from '@patternfly/react-icons/dist/esm/icons/key-icon';
 import OutlinedQuestionCircleIcon from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
 import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 
+import { GenaiPageStack } from '../../GenaiPageStack';
 import { mockApiKeysEngineerV34 } from '../mockDataV34';
 import { mockMaaSModels, mockSubscriptions } from '../subscriptions/mockData';
 import type { Subscription, TokenRateLimit } from '../subscriptions/types';
@@ -324,9 +325,10 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
   const itemCount = groupBy === 'model' ? filteredModels.length : userSubscriptions.length;
 
   return (
-    <>
+    <GenaiPageStack>
       <Toolbar
         id="subs-access-toolbar"
+        hasNoPadding
         clearAllFilters={() => {
           setSearchValue('');
           setPage(1);
@@ -642,7 +644,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
         variant="bottom"
         id="subs-access-pagination-bottom"
       />
-    </>
+    </GenaiPageStack>
   );
 };
 

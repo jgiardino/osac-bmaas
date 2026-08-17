@@ -33,10 +33,14 @@ import {
 } from '@patternfly/react-core'
 import {
   PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS,
+  PROVIDER_ADMIN_AI_NAV_ITEMS,
+  PROVIDER_ADMIN_GENAI_NAV_ITEMS,
   PROVIDER_ADMIN_INFRASTRUCTURE_NAV_ITEMS,
   PROVIDER_ADMIN_NETWORKING_NAV_ITEMS,
   PROVIDER_ADMIN_SERVICES_NAV_ITEMS,
   isAdministrationNavId,
+  isAiSettingsNavId,
+  isGenaiStudioNavId,
   isInfrastructureNavId,
   isNetworkingNavId,
   isServicesNavId,
@@ -193,12 +197,48 @@ export function ProviderAdminShell({
               ))}
             </NavExpandable>
             <NavExpandable
+              id="provider-admin-genai-studio-nav"
+              title="GenAI studio"
+              isExpanded
+              isActive={isGenaiStudioNavId(activeNavId)}
+            >
+              {PROVIDER_ADMIN_GENAI_NAV_ITEMS.map((item) => (
+                <NavItem
+                  key={item.id}
+                  itemId={item.id}
+                  isActive={activeNavId === item.id}
+                  to="#"
+                  preventDefault
+                >
+                  {item.label}
+                </NavItem>
+              ))}
+            </NavExpandable>
+            <NavExpandable
               id="provider-admin-administration-nav"
               title="Administration"
               isExpanded
               isActive={isAdministrationNavId(activeNavId)}
             >
               {PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS.map((item) => (
+                <NavItem
+                  key={item.id}
+                  itemId={item.id}
+                  isActive={activeNavId === item.id}
+                  to="#"
+                  preventDefault
+                >
+                  {item.label}
+                </NavItem>
+              ))}
+            </NavExpandable>
+            <NavExpandable
+              id="provider-admin-ai-nav"
+              title="AI"
+              isExpanded
+              isActive={isAiSettingsNavId(activeNavId)}
+            >
+              {PROVIDER_ADMIN_AI_NAV_ITEMS.map((item) => (
                 <NavItem
                   key={item.id}
                   itemId={item.id}

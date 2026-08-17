@@ -608,6 +608,12 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
+    value === 'genai-asset-endpoints' ||
+    value === 'genai-playground' ||
+    value === 'genai-api-keys' ||
+    value === 'ai-maas-governance' ||
+    value === 'ai-model-catalog-settings' ||
+    value === 'ai-admin-api-keys' ||
     value === 'infrastructure-data-centers' ||
     value === 'infrastructure-hardware-inventory' ||
     value === 'infrastructure-bmaas-templates' ||

@@ -14,8 +14,14 @@ import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjects
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
-import { clearGenaiApiKeysDetailParams } from './tenant-user/genai/genaiNavParams'
+import {
+  clearGenaiApiKeysDetailParams,
+  clearMaasGovernanceDetailParams,
+  isGenaiApiKeysNavId,
+} from './tenant-user/genai/genaiNavParams'
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
+import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
+import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
@@ -58,6 +64,9 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'genai-asset-endpoints' ||
     value === 'genai-playground' ||
     value === 'genai-api-keys' ||
+    value === 'ai-maas-governance' ||
+    value === 'ai-model-catalog-settings' ||
+    value === 'ai-admin-api-keys' ||
     value === 'projects-teams' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-subnets' ||
@@ -184,16 +193,37 @@ export function TenantAdminWorkspacePage() {
     setTenantActiveNav(tenant, nextNavId)
     syncWorkspaceNavParam(setSearchParams, nextNavId)
 
-    // GenAI API keys drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
+    // GenAI / AI drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
-      if (nextNavId === 'genai-api-keys') {
-        next.set('nav', 'genai-api-keys')
+      if (isGenaiApiKeysNavId(nextNavId)) {
+        next.set('nav', nextNavId)
         clearGenaiApiKeysDetailParams(next)
+        clearMaasGovernanceDetailParams(next)
+        return next
+      }
+      if (nextNavId === 'ai-maas-governance') {
+        next.set('nav', 'ai-maas-governance')
+        clearGenaiApiKeysDetailParams(next)
+        clearMaasGovernanceDetailParams(next)
         return next
       }
       let changed = false
-      for (const key of ['keyId', 'subscriptionId', 'subTab', 'tab', 'modal'] as const) {
+      for (const key of [
+        'keyId',
+        'subscriptionId',
+        'subTab',
+        'tab',
+        'modal',
+        'maasWizard',
+        'maasSubId',
+        'maasPolId',
+        'edit',
+        'prefillModel',
+        'prefillGroup',
+        'from',
+        'view',
+      ] as const) {
         if (next.has(key)) {
           next.delete(key)
           changed = true
@@ -294,7 +324,13 @@ export function TenantAdminWorkspacePage() {
       case 'genai-playground':
         return <PlaygroundPage />
       case 'genai-api-keys':
-        return <GenaiApiKeysPage surface="tenant-admin" />
+        return <GenaiApiKeysPage />
+      case 'ai-maas-governance':
+        return <MaaSGovernancePage />
+      case 'ai-model-catalog-settings':
+        return <ModelCatalogSettingsPage />
+      case 'ai-admin-api-keys':
+        return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
       case 'catalog':
         return (
           <TenantAdminCatalogPage

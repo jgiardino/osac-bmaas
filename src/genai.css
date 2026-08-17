@@ -1,46 +1,67 @@
 /**
- * GenAI studio pages only — do not edit shared tenant-admin.css page chrome for Catalog / Services.
+ * Shared GenAI / AI page chrome — adopt via TenantUserPageChrome (adds `tenant-genai-page`).
+ * Stack spacing uses PatternFly Flex `gapMd` in chrome + GenaiPageStack (not per-page BEM).
  */
 
-.tenant-user-ai-asset-endpoints__title.pf-v6-c-title,
-.tenant-user-genai-playground__title.pf-v6-c-title,
-.tenant-user-genai-api-keys__title.pf-v6-c-title {
+.tenant-genai-page__page-header {
+  margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.tenant-genai-page__title.pf-v6-c-title {
   margin-block-end: var(--pf-t--global--spacer--sm);
 }
 
-.tenant-user-ai-asset-endpoints__lede.pf-v6-c-content--p,
-.tenant-user-genai-playground__lede.pf-v6-c-content--p,
-.tenant-user-genai-api-keys__lede.pf-v6-c-content--p {
+.tenant-genai-page__lede.pf-v6-c-content--p {
   --pf-v6-c-content--MarginBlockEnd: 0;
   margin-block-start: 0;
-  margin-block-end: var(--pf-t--global--spacer--lg);
+  margin-block-end: 0;
   max-width: 42rem;
   color: var(--pf-t--global--text--color--subtle);
 }
 
-.tenant-user-ai-asset-endpoints__page-header,
-.tenant-user-genai-api-keys__page-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--pf-t--global--spacer--md);
-  margin-block-end: var(--pf-t--global--spacer--md);
+.tenant-genai-page__kicker.pf-v6-c-label {
+  margin-block-end: var(--pf-t--global--spacer--sm);
+  --pf-v6-c-label--FontSize: var(--pf-t--global--font--size--body--sm);
+  --pf-v6-c-label--PaddingBlockStart: 0.25rem;
+  --pf-v6-c-label--PaddingBlockEnd: 0.25rem;
+  --pf-v6-c-label--PaddingInlineStart: 0.5rem;
+  --pf-v6-c-label--PaddingInlineEnd: 0.5rem;
+  font-weight: var(--pf-t--global--font--weight--body--default);
+  background-color: var(--pf-t--global--background--color--secondary--default);
+  border-color: transparent;
 }
 
-.tenant-user-ai-asset-endpoints__page-header .tenant-user-ai-asset-endpoints__lede.pf-v6-c-content--p,
-.tenant-user-genai-api-keys__page-header .tenant-user-genai-api-keys__lede.pf-v6-c-content--p {
-  margin-block-end: 0;
+.tenant-genai-page__kicker.pf-v6-c-label .pf-v6-c-label__content {
+  color: var(--pf-t--global--text--color--subtle);
 }
 
-.tenant-user-ai-asset-endpoints__body,
-.tenant-user-genai-api-keys__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pf-t--global--spacer--md);
+.tenant-genai-page__body,
+.tenant-genai-page__stack {
   min-width: 0;
+  width: 100%;
 }
 
+.tenant-genai-page__tab-help.pf-v6-c-button {
+  padding: 0;
+}
+
+.tenant-user-genai-api-keys__revoke-modal-note.pf-v6-c-content--p {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.tenant-user-genai-api-keys__revoke-modal-preview {
+  margin-block-start: var(--pf-t--global--spacer--md);
+}
+
+.tenant-user-genai-api-keys__revoke-modal-scroll {
+  overflow-y: auto;
+}
+
+.tenant-user-genai-api-keys__revoke-modal-show-all.pf-v6-c-button {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+/* Playground is a special full-height chat layout (not the list chrome stack). */
 .tenant-user-genai-playground {
   display: flex;
   flex-direction: column;

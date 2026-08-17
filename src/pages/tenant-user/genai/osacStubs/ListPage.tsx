@@ -8,11 +8,13 @@ export function ListPage({
   description,
   children,
   className,
+  kicker,
 }: {
   title: string
   description?: string
   children?: ReactNode
   className?: string
+  kicker?: string
 }) {
   return (
     <TenantUserPageChrome
@@ -20,6 +22,7 @@ export function ListPage({
       title={title}
       description={description}
       className={className}
+      kicker={kicker}
     >
       {children}
     </TenantUserPageChrome>

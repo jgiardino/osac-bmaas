@@ -25,17 +25,20 @@ import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import type { ApiKeyV34 } from '../typesV34';
 
 export type RevokePreviewMode = 'capped' | 'scrollable';
+export type RevokeAllTargetKind = 'user' | 'subscription';
 
 const PREVIEW_CAP = 10;
 
 interface RevokeAllAPIKeysModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (username: string) => void;
+  onConfirm: (target: string, kind: RevokeAllTargetKind) => void;
   allKeys: ApiKeyV34[];
   isAdmin: boolean;
   currentUsername: string;
   previewMode?: RevokePreviewMode;
+  /** Admin-only: revoke by user (default) or by subscription. */
+  targetKind?: RevokeAllTargetKind;
 }
 
 const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps> = ({
@@ -46,23 +49,36 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
   isAdmin,
   currentUsername,
   previewMode = 'capped',
+  targetKind = 'user',
 }) => {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [username, setUsername] = React.useState('');
-  const [searchedUsername, setSearchedUsername] = React.useState('');
+  const [query, setQuery] = React.useState('');
+  const [searchedTarget, setSearchedTarget] = React.useState('');
   const [showAll, setShowAll] = React.useState(false);
 
-  const targetUsername = isAdmin ? searchedUsername : currentUsername;
+  const isSubscriptionScope = isAdmin && targetKind === 'subscription';
+  const targetLabel = isSubscriptionScope ? searchedTarget : isAdmin ? searchedTarget : currentUsername;
 
   const matchingKeys = React.useMemo(() => {
-    if (!targetUsername) {
+    if (!isAdmin) {
+      return allKeys.filter((k) => k.username.toLowerCase() === currentUsername.toLowerCase());
+    }
+    if (!searchedTarget) {
       return [];
     }
-    return allKeys.filter((k) => k.username.toLowerCase() === targetUsername.toLowerCase());
-  }, [allKeys, targetUsername]);
+    const needle = searchedTarget.toLowerCase();
+    if (isSubscriptionScope) {
+      return allKeys.filter(
+        (k) =>
+          (k.subscriptionName ?? '').toLowerCase() === needle ||
+          (k.subscriptionId ?? '').toLowerCase() === needle,
+      );
+    }
+    return allKeys.filter((k) => k.username.toLowerCase() === needle);
+  }, [allKeys, currentUsername, isAdmin, isSubscriptionScope, searchedTarget]);
 
   const handleSearchKeys = () => {
-    setSearchedUsername(username.trim());
+    setSearchedTarget(query.trim());
     setShowAll(false);
   };
 
@@ -82,8 +98,8 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
   const remainingCount = activeKeys.length - (isCapped ? PREVIEW_CAP : activeKeys.length);
 
   const isConfirmEnabled = isAdmin
-    ? searchedUsername.length > 0 && activeKeys.length > 0
-    : username.trim().toLowerCase() === currentUsername.toLowerCase();
+    ? searchedTarget.length > 0 && activeKeys.length > 0
+    : query.trim().toLowerCase() === currentUsername.toLowerCase();
 
   const handleConfirm = async () => {
     if (!isConfirmEnabled) {
@@ -91,18 +107,26 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
     }
     setIsSubmitting(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
-    onConfirm(targetUsername);
+    onConfirm(isAdmin ? searchedTarget : currentUsername, isSubscriptionScope ? 'subscription' : 'user');
     setIsSubmitting(false);
-    setUsername('');
+    setQuery('');
     onClose();
   };
 
   const handleClose = () => {
-    setUsername('');
-    setSearchedUsername('');
+    setQuery('');
+    setSearchedTarget('');
     setShowAll(false);
     onClose();
   };
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setQuery('');
+      setSearchedTarget('');
+      setShowAll(false);
+    }
+  }, [isOpen, targetKind]);
 
   const formatDate = (date?: Date): string => {
     if (!date) {
@@ -126,7 +150,7 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
 
   const keysTable = (
     <Table
-      aria-label={`API keys for ${searchedUsername}`}
+      aria-label={`API keys for ${targetLabel}`}
       variant="compact"
       id="revoke-modal-keys-table"
     >
@@ -153,6 +177,36 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
     </Table>
   );
 
+  const title = !isAdmin
+    ? 'Revoke all your active keys?'
+    : isSubscriptionScope
+      ? 'Revoke all active keys for a single subscription?'
+      : 'Revoke all active keys for a single user?';
+
+  const intro = !isAdmin
+    ? 'All of your active API keys will be permanently invalidated. Applications or services using these keys will immediately lose access.'
+    : isSubscriptionScope
+      ? 'Enter a subscription name to view its API keys. All active keys for this subscription will be permanently invalidated. This action cannot be undone.'
+      : 'Enter a username to view their API keys. All active keys for this user will be permanently invalidated. This action cannot be undone.';
+
+  const fieldLabel = !isAdmin
+    ? `Type "${currentUsername}" to confirm`
+    : isSubscriptionScope
+      ? 'Enter subscription to revoke its keys'
+      : 'Enter username to revoke their keys';
+
+  const helperText = !isAdmin
+    ? query.trim().toLowerCase() === currentUsername.toLowerCase()
+      ? 'All your active keys will be permanently revoked'
+      : 'Type your username exactly to confirm'
+    : searchedTarget
+      ? activeKeys.length > 0
+        ? `${activeKeys.length} active key(s) found for ${searchedTarget}`
+        : `No active keys found for "${searchedTarget}"`
+      : isSubscriptionScope
+        ? 'Enter a subscription name and click search to view its keys'
+        : 'Enter a username and click search to view their keys';
+
   return (
     <Modal
       variant={ModalVariant.medium}
@@ -162,53 +216,39 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
       aria-labelledby="revoke-all-api-keys-modal-title"
     >
       <ModalHeader
-        title={
-          isAdmin ? 'Revoke all active keys for a single user?' : 'Revoke all your active keys?'
-        }
+        title={title}
         titleIconVariant="warning"
         labelId="revoke-all-api-keys-modal-title"
       />
       <ModalBody>
-        <Content component={ContentVariants.p}>
-          {isAdmin
-            ? 'Enter a username to view their API keys. All active keys for this user will be permanently invalidated. This action cannot be undone.'
-            : 'All of your active API keys will be permanently invalidated. Applications or services using these keys will immediately lose access.'}
-        </Content>
+        <Content component={ContentVariants.p}>{intro}</Content>
 
         <Content
           component={ContentVariants.p}
-          style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
+          className="tenant-user-genai-api-keys__revoke-modal-note"
         >
           Revoked keys will remain visible with a Revoked status but can no longer be used for
           authentication.
         </Content>
 
         <Form id="revoke-all-form">
-          <FormGroup
-            label={
-              isAdmin
-                ? 'Enter username to revoke their keys'
-                : `Type "${currentUsername}" to confirm`
-            }
-            isRequired
-            fieldId="revoke-all-username"
-          >
+          <FormGroup label={fieldLabel} isRequired fieldId="revoke-all-target">
             {isAdmin ? (
               <InputGroup>
                 <InputGroupItem isFill>
                   <TextInput
                     isRequired
                     type="text"
-                    id="revoke-all-username"
-                    value={username}
-                    onChange={(_event, value) => setUsername(value)}
+                    id="revoke-all-target"
+                    value={query}
+                    onChange={(_event, value) => setQuery(value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         handleSearchKeys();
                       }
                     }}
-                    placeholder="Enter username"
+                    placeholder={isSubscriptionScope ? 'Enter subscription name' : 'Enter username'}
                   />
                 </InputGroupItem>
                 <InputGroupItem>
@@ -216,7 +256,7 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
                     variant="control"
                     aria-label="Search keys"
                     onClick={handleSearchKeys}
-                    isDisabled={!username.trim()}
+                    isDisabled={!query.trim()}
                     id="revoke-modal-search-button"
                   >
                     <SearchIcon />
@@ -227,40 +267,30 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
               <TextInput
                 isRequired
                 type="text"
-                id="revoke-all-username"
-                value={username}
-                onChange={(_event, value) => setUsername(value)}
+                id="revoke-all-target"
+                value={query}
+                onChange={(_event, value) => setQuery(value)}
                 placeholder={currentUsername}
               />
             )}
             <FormHelperText>
               <HelperText>
-                <HelperTextItem>
-                  {isAdmin
-                    ? searchedUsername
-                      ? activeKeys.length > 0
-                        ? `${activeKeys.length} active key(s) found for ${searchedUsername}`
-                        : `No active keys found for "${searchedUsername}"`
-                      : 'Enter a username and click search to view their keys'
-                    : username.trim().toLowerCase() === currentUsername.toLowerCase()
-                      ? 'All your active keys will be permanently revoked'
-                      : 'Type your username exactly to confirm'}
-                </HelperTextItem>
+                <HelperTextItem>{helperText}</HelperTextItem>
               </HelperText>
             </FormHelperText>
           </FormGroup>
         </Form>
 
         {isAdmin && activeKeys.length > 0 && (
-          <div style={{ marginTop: 'var(--pf-t--global--spacer--md)' }}>
+          <div className="tenant-user-genai-api-keys__revoke-modal-preview">
             <Content component={ContentVariants.h4} id="revoke-modal-keys-heading">
               {isCapped
-                ? `Most recently used active keys for ${searchedUsername}`
-                : `All active keys for ${searchedUsername}`}
+                ? `Most recently used active keys for ${searchedTarget}`
+                : `All active keys for ${searchedTarget}`}
             </Content>
 
             {showAll || previewMode === 'scrollable' ? (
-              <div style={{ overflowY: 'auto' }}>{keysTable}</div>
+              <div className="tenant-user-genai-api-keys__revoke-modal-scroll">{keysTable}</div>
             ) : (
               keysTable
             )}
@@ -271,7 +301,7 @@ const RevokeAllAPIKeysModal: React.FunctionComponent<RevokeAllAPIKeysModalProps>
                 isInline
                 onClick={() => setShowAll(true)}
                 id="revoke-modal-show-all-button"
-                style={{ marginTop: 'var(--pf-t--global--spacer--sm)' }}
+                className="tenant-user-genai-api-keys__revoke-modal-show-all"
               >
                 Show all {activeKeys.length} active keys
               </Button>

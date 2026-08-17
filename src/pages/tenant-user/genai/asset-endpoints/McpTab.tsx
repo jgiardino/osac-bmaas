@@ -19,6 +19,8 @@ import FilterIcon from '@patternfly/react-icons/dist/esm/icons/filter-icon'
 import PlayIcon from '@patternfly/react-icons/dist/esm/icons/play-icon'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 
+import { GenaiPageStack } from '../GenaiPageStack'
+
 import { MOCK_MCP_SERVERS } from './mocks'
 import type { MCPServer } from './types'
 
@@ -109,8 +111,8 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
   }
 
   return (
-    <>
-      <Toolbar id="aae-prod-mcp-toolbar">
+    <GenaiPageStack>
+      <Toolbar id="aae-prod-mcp-toolbar" hasNoPadding>
         <ToolbarContent>
           <ToolbarGroup variant="filter-group">
             <ToolbarItem>
@@ -240,6 +242,6 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
           ))}
         </Tbody>
       </Table>
-    </>
+    </GenaiPageStack>
   )
 }

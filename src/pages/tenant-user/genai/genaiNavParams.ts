@@ -12,3 +12,26 @@ export function clearGenaiApiKeysDetailParams(params: URLSearchParams): void {
     params.delete(key)
   }
 }
+
+/** MaaS governance drill-in / wizard query params (Tenant Admin AI). */
+export const MAAS_GOVERNANCE_DETAIL_PARAMS = [
+  'maasWizard',
+  'maasSubId',
+  'maasPolId',
+  'edit',
+  'prefillModel',
+  'prefillGroup',
+  'from',
+  'view',
+  'tab',
+] as const
+
+export function clearMaasGovernanceDetailParams(params: URLSearchParams): void {
+  for (const key of MAAS_GOVERNANCE_DETAIL_PARAMS) {
+    params.delete(key)
+  }
+}
+
+export function isGenaiApiKeysNavId(navId: string): boolean {
+  return navId === 'genai-api-keys' || navId === 'ai-admin-api-keys'
+}
