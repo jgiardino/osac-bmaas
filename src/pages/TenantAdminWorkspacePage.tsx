@@ -12,6 +12,10 @@ import { TenantAdminCatalogPage } from './tenant-admin/TenantAdminCatalogPage'
 import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
+import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
+import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
+import { clearGenaiApiKeysDetailParams } from './tenant-user/genai/genaiNavParams'
+import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
@@ -51,6 +55,9 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
+    value === 'genai-asset-endpoints' ||
+    value === 'genai-playground' ||
+    value === 'genai-api-keys' ||
     value === 'projects-teams' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-subnets' ||
@@ -176,6 +183,25 @@ export function TenantAdminWorkspacePage() {
     setActiveNavId(nextNavId)
     setTenantActiveNav(tenant, nextNavId)
     syncWorkspaceNavParam(setSearchParams, nextNavId)
+
+    // GenAI API keys drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (nextNavId === 'genai-api-keys') {
+        next.set('nav', 'genai-api-keys')
+        clearGenaiApiKeysDetailParams(next)
+        return next
+      }
+      let changed = false
+      for (const key of ['keyId', 'subscriptionId', 'subTab', 'tab', 'modal'] as const) {
+        if (next.has(key)) {
+          next.delete(key)
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+
     if (isServicesNavId(nextNavId)) {
       setInstances(ensureTenantDemoInstances(tenant, organization.name))
     }
@@ -259,6 +285,16 @@ export function TenantAdminWorkspacePage() {
             activeNavId={activeNavId}
           />
         )
+      case 'genai-asset-endpoints':
+        return (
+          <AiAssetEndpointsPage
+            onNavigateToPlayground={() => handleNavChange('genai-playground')}
+          />
+        )
+      case 'genai-playground':
+        return <PlaygroundPage />
+      case 'genai-api-keys':
+        return <GenaiApiKeysPage surface="tenant-admin" />
       case 'catalog':
         return (
           <TenantAdminCatalogPage

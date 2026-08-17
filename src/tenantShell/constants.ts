@@ -1,7 +1,11 @@
-import { TENANT_ADMIN_NETWORKING_NAV_ITEMS } from '../tenantAdmin/constants'
+import {
+  TENANT_ADMIN_GENAI_NAV_ITEMS,
+  TENANT_ADMIN_NETWORKING_NAV_ITEMS,
+} from '../tenantAdmin/constants'
 
 export type { TenantAdminNavGroup, TenantAdminNavItem } from '../tenantAdmin/constants'
 export {
+  TENANT_ADMIN_GENAI_NAV_ITEMS,
   TENANT_ADMIN_NAV_GROUPS,
   TENANT_ADMIN_NAV_ITEMS,
   TENANT_ADMIN_NETWORKING_NAV_ITEMS,
@@ -34,12 +38,20 @@ export const TENANT_USER_SERVICES_NAV_ITEMS: ReadonlyArray<{ id: string; label: 
   { id: 'services-virtual-machines', label: 'Virtual machines' },
 ]
 
+export const TENANT_USER_GENAI_NAV_ITEMS: ReadonlyArray<{ id: string; label: string }> =
+  TENANT_ADMIN_GENAI_NAV_ITEMS
+
 export const TENANT_USER_NAV_ITEMS: TenantNavItem[] = [
   { id: 'catalog', label: 'Catalog' },
   {
     id: 'services',
     label: 'Services',
     children: TENANT_USER_SERVICES_NAV_ITEMS,
+  },
+  {
+    id: 'genai-studio',
+    label: 'GenAI studio',
+    children: TENANT_USER_GENAI_NAV_ITEMS,
   },
   {
     id: 'networking',

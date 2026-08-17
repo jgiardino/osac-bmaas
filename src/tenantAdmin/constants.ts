@@ -5,6 +5,9 @@ export type TenantAdminNavId =
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
+  | 'genai-asset-endpoints'
+  | 'genai-playground'
+  | 'genai-api-keys'
   | 'projects-teams'
   | 'networking-virtual-networks'
   | 'networking-subnets'
@@ -43,6 +46,15 @@ export const TENANT_ADMIN_NETWORKING_NAV_ITEMS: ReadonlyArray<{
   { id: 'networking-external-ip-pools', label: 'External IP pools' },
 ]
 
+export const TENANT_ADMIN_GENAI_NAV_ITEMS: ReadonlyArray<{
+  id: TenantAdminNavId
+  label: string
+}> = [
+  { id: 'genai-asset-endpoints', label: 'AI asset endpoints' },
+  { id: 'genai-playground', label: 'Playground' },
+  { id: 'genai-api-keys', label: 'API keys' },
+]
+
 export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'catalog', label: 'Catalog' },
@@ -50,6 +62,11 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
     id: 'services',
     label: 'Services',
     children: TENANT_ADMIN_SERVICES_NAV_ITEMS,
+  },
+  {
+    id: 'genai-studio',
+    label: 'GenAI studio',
+    children: TENANT_ADMIN_GENAI_NAV_ITEMS,
   },
   { id: 'projects-teams', label: 'Projects & teams' },
   {

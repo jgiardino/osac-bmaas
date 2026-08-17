@@ -32,6 +32,9 @@ export type TenantUserNavId =
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
+  | 'genai-asset-endpoints'
+  | 'genai-playground'
+  | 'genai-api-keys'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -44,6 +47,9 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'services-clusters',
   'services-models',
   'services-virtual-machines',
+  'genai-asset-endpoints',
+  'genai-playground',
+  'genai-api-keys',
   'networking-virtual-networks',
   'networking-subnets',
   'networking-security-groups',
