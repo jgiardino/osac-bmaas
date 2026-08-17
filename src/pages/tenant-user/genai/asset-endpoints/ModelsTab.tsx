@@ -407,7 +407,7 @@ function PlaygroundCell({ model }: { model: AIModel }) {
 
   if (model.capabilities?.includes('audio-transcription')) {
     return (
-      <span className="pf-v6-u-color-200 pf-v6-u-font-size-sm">Used in Playground settings</span>
+      <span className="pf-v6-u-text-color-subtle pf-v6-u-font-size-sm">Used in Playground settings</span>
     )
   }
 
@@ -480,12 +480,12 @@ function ModelRow({
           </Flex>
           <Truncate
             content={model.model_id}
-            className="pf-v6-u-font-family-monospace pf-v6-u-font-size-xs pf-v6-u-color-200"
+            className="pf-v6-u-font-family-monospace pf-v6-u-font-size-xs pf-v6-u-text-color-subtle"
           />
           {model.description ? (
             <Truncate
               content={model.description}
-              className="pf-v6-u-font-size-xs pf-v6-u-color-200"
+              className="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle"
             />
           ) : null}
         </Td>

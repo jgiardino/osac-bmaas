@@ -67,7 +67,7 @@ export function ResourceDetailHeader({
             {status ? <FlexItem>{status}</FlexItem> : null}
           </Flex>
           {description ? (
-            <Content component="p" className="pf-v6-u-mt-sm pf-v6-u-color-200">
+            <Content component="p" className="pf-v6-u-mt-sm pf-v6-u-text-color-subtle">
               {description}
             </Content>
           ) : null}

@@ -91,7 +91,7 @@ export const CodeEditor = ({
 }: StubCodeEditorProps) => (
   <div>
     {isLanguageLabelVisible && language ? (
-      <div className="pf-v6-u-mb-sm pf-v6-u-font-size-sm pf-v6-u-color-200">{language}</div>
+      <div className="pf-v6-u-mb-sm pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">{language}</div>
     ) : null}
     <textarea
       id={id}

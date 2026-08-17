@@ -19,7 +19,7 @@ const KnowledgeSettings = ({ ragEnabled, onRagEnabledChange }: KnowledgeSettings
         isChecked={ragEnabled}
         onChange={(_e, checked) => onRagEnabledChange(checked)}
       />
-      <Content component={ContentVariants.small} className="pf-v6-u-mt-md pf-v6-u-color-200">
+      <Content component={ContentVariants.small} className="pf-v6-u-mt-md pf-v6-u-text-color-subtle">
         {'Add knowledge sources to ground responses with your documents.'}
       </Content>
     </div>

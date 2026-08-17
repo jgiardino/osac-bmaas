@@ -15,7 +15,7 @@ const McpSettings = ({ selectedIds, onToggle }: McpSettingsProps) => {
       <Title headingLevel="h5" size="md" className="pf-v6-u-mb-md">
         {'MCP'}
       </Title>
-      <Content component={ContentVariants.small} className="pf-v6-u-mb-md pf-v6-u-color-200">
+      <Content component={ContentVariants.small} className="pf-v6-u-mb-md pf-v6-u-text-color-subtle">
         {'Select MCP servers to use as tools in this chat.'}
       </Content>
       <Stack hasGutter>

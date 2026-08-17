@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@patternfly/react-core/dist/styles/base.css'
+import '@patternfly/react-styles/css/utilities/_index.css'
 import './index.css'
 import './login.css'
 import './provider-admin.css'

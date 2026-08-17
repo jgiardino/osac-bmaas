@@ -221,7 +221,7 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
                     <Truncate content={server.name} />
                   </strong>
                 </div>
-                <div className="pf-v6-u-font-size-sm pf-v6-u-color-200">{server.description}</div>
+                <div className="pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">{server.description}</div>
               </Td>
               <Td dataLabel="Status">{statusLabel(server.status)}</Td>
               <Td dataLabel="Endpoint">
