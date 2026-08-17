@@ -146,7 +146,148 @@ export type CatalogDiskImageOption = {
 }
 
 /** Support lifecycle shown when choosing a cluster version in the publish wizard. */
-export type CatalogClusterVersionLifecycle = 'active' | 'deprecated' | 'obsolete'
+export type CatalogClusterVersionLifecycle = 'active' | 'deprecated'
+
+/**
+ * Whether tenants can change OpenShift version when provisioning from this catalog item.
+ * Defaults to locked when omitted (legacy catalog items).
+ */
+export type CatalogClusterVersionMode = 'locked' | 'editable'
+
+export function getCatalogClusterVersionModeLabel(mode: CatalogClusterVersionMode): string {
+  return mode === 'editable' ? 'Editable' : 'Locked'
+}
+
+export function resolveCatalogClusterVersionMode(
+  mode: CatalogClusterVersionMode | undefined | null,
+): CatalogClusterVersionMode {
+  return mode === 'editable' ? 'editable' : 'locked'
+}
+
+/**
+ * Whether tenants can change default node set / host type when provisioning.
+ * Defaults to locked when omitted (legacy catalog items).
+ */
+export type CatalogClusterNodeTopologyMode = 'locked' | 'editable'
+
+export function getCatalogClusterNodeTopologyModeLabel(
+  mode: CatalogClusterNodeTopologyMode,
+): string {
+  return mode === 'editable' ? 'Editable' : 'Locked'
+}
+
+export function resolveCatalogClusterNodeTopologyMode(
+  mode: CatalogClusterNodeTopologyMode | undefined | null,
+): CatalogClusterNodeTopologyMode {
+  return mode === 'editable' ? 'editable' : 'locked'
+}
+
+/** Default worker node set advertised on a Cluster catalog item. */
+export type CatalogClusterNodeSetOption = {
+  id: string
+  label: string
+  detail: string
+}
+
+/** Host type options for the default node set. */
+export type CatalogClusterHostTypeOption = {
+  id: string
+  label: string
+  detail: string
+}
+
+export const CATALOG_CLUSTER_NODE_SET_OPTIONS: ReadonlyArray<CatalogClusterNodeSetOption> = [
+  {
+    id: 'fc430-worker',
+    label: 'Worker pool',
+    detail: 'General-purpose workers · size 1–4',
+  },
+  {
+    id: 'fc430-infra',
+    label: 'Infra pool',
+    detail: 'Infrastructure workloads · routers, registry, monitoring',
+  },
+  {
+    id: 'fc430-gpu',
+    label: 'GPU pool',
+    detail: 'GPU workers · AI training and inference',
+  },
+]
+
+export const CATALOG_CLUSTER_HOST_TYPE_OPTIONS: ReadonlyArray<CatalogClusterHostTypeOption> = [
+  {
+    id: 'standard-host',
+    label: 'standard-host',
+    detail: 'CPU-balanced bare metal for general cluster nodes',
+  },
+  {
+    id: 'gpu-host',
+    label: 'gpu-host',
+    detail: 'GPU-capable hosts for accelerated workloads',
+  },
+  {
+    id: 'storage-host',
+    label: 'storage-host',
+    detail: 'High-capacity storage hosts for data-intensive nodes',
+  },
+]
+
+export const DEFAULT_CLUSTER_NODE_SET_ID = 'fc430-worker'
+export const DEFAULT_CLUSTER_HOST_TYPE_ID = 'standard-host'
+
+export function getCatalogClusterNodeSetOptions(): CatalogClusterNodeSetOption[] {
+  return [...CATALOG_CLUSTER_NODE_SET_OPTIONS]
+}
+
+export function getCatalogClusterHostTypeOptions(): CatalogClusterHostTypeOption[] {
+  return [...CATALOG_CLUSTER_HOST_TYPE_OPTIONS]
+}
+
+export function getCatalogClusterNodeSetOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterNodeSetOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  return CATALOG_CLUSTER_NODE_SET_OPTIONS.find(
+    (option) =>
+      option.id === needle ||
+      option.label === needle ||
+      option.label.toLowerCase() === needle.toLowerCase(),
+  )
+}
+
+export function getCatalogClusterHostTypeOption(
+  idOrLabel: string | undefined | null,
+): CatalogClusterHostTypeOption | undefined {
+  const needle = idOrLabel?.trim()
+  if (!needle) {
+    return undefined
+  }
+  return CATALOG_CLUSTER_HOST_TYPE_OPTIONS.find(
+    (option) =>
+      option.id === needle ||
+      option.label === needle ||
+      option.label.toLowerCase() === needle.toLowerCase(),
+  )
+}
+
+export function formatClusterNodeSetLabel(idOrLabel: string | undefined | null): string {
+  return (
+    getCatalogClusterNodeSetOption(idOrLabel)?.label ??
+    idOrLabel?.trim() ??
+    CATALOG_CLUSTER_NODE_SET_OPTIONS[0].label
+  )
+}
+
+export function formatClusterHostTypeLabel(idOrLabel: string | undefined | null): string {
+  return (
+    getCatalogClusterHostTypeOption(idOrLabel)?.label ??
+    idOrLabel?.trim() ??
+    CATALOG_CLUSTER_HOST_TYPE_OPTIONS[0].label
+  )
+}
 
 /** OpenShift version advertised on a Cluster as a Service catalog item. */
 export type CatalogClusterVersionOption = {
@@ -161,14 +302,12 @@ export type CatalogClusterVersionOption = {
 
 export function getCatalogClusterVersionLifecycleMeta(
   lifecycle: CatalogClusterVersionLifecycle,
-): { color: 'green' | 'orange' | 'grey'; text: string } {
+): { color: 'green' | 'orange'; text: string } {
   switch (lifecycle) {
     case 'active':
       return { color: 'green', text: 'Active' }
     case 'deprecated':
       return { color: 'orange', text: 'Deprecated' }
-    case 'obsolete':
-      return { color: 'grey', text: 'Obsolete' }
   }
 }
 
@@ -287,6 +426,14 @@ export function getProvisioningTemplatePresentation(
     return getBareMetalProvisioningPresentation(isGpu)
   }
   if (serviceId === 'cluster') {
+    if (template.templateRefId.startsWith('cl-') && template.templateName.trim()) {
+      return {
+        title: template.templateName,
+        description:
+          template.description.trim() || getClusterProvisioningPresentation(isGpu).description,
+        parameters: [],
+      }
+    }
     return getClusterProvisioningPresentation(isGpu)
   }
   if (serviceId === 'models') {
@@ -319,6 +466,94 @@ export const CATALOG_INSTANCE_TYPE_OPTIONS: ReadonlyArray<CatalogInstanceTypeOpt
     hourlyRate: '$15.12/hr',
   },
 ]
+
+export function formatBaremetalInstanceTypeLabel(instanceTypeId: string): string | undefined {
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find((item) => item.id === instanceTypeId)
+  if (!option) {
+    return undefined
+  }
+
+  return option.accelerator
+    ? `${option.label} (${option.detail} · ${option.accelerator})`
+    : `${option.label} (${option.detail})`
+}
+
+export type BaremetalInstanceTypeHardware = {
+  sizeLabel: string
+  cpu: string
+  ram: string
+  gpu: string
+}
+
+function parseBaremetalDetailParts(detail: string): { cpu: string; ram: string } {
+  const parts = detail
+    .split(' · ')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const cpu = parts.find((part) => /vCPU/i.test(part)) ?? '—'
+  const ram =
+    parts.find((part) => /\d+\s*GB\b/i.test(part) && !/vCPU/i.test(part)) ?? '—'
+
+  return { cpu, ram }
+}
+
+export function resolveBaremetalInstanceTypeId(
+  instanceTypeId?: string,
+  instanceTypeLabel?: string,
+): string | undefined {
+  if (instanceTypeId?.trim()) {
+    const id = instanceTypeId.trim().toLowerCase()
+    if (CATALOG_INSTANCE_TYPE_OPTIONS.some((option) => option.id === id)) {
+      return id
+    }
+  }
+
+  if (instanceTypeLabel?.trim()) {
+    const prefix = instanceTypeLabel.trim().match(/^([^(]+)/)?.[1]?.trim() ?? ''
+    const byLabel = CATALOG_INSTANCE_TYPE_OPTIONS.find((option) => option.label === prefix)
+    if (byLabel) {
+      return byLabel.id
+    }
+  }
+
+  return undefined
+}
+
+export function resolveBaremetalInstanceTypeHardware(
+  instanceTypeId?: string,
+  instanceTypeLabel?: string,
+): BaremetalInstanceTypeHardware | undefined {
+  const resolvedId = resolveBaremetalInstanceTypeId(instanceTypeId, instanceTypeLabel)
+  if (!resolvedId) {
+    return undefined
+  }
+
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find((item) => item.id === resolvedId)
+  if (!option) {
+    return undefined
+  }
+
+  const { cpu, ram } = parseBaremetalDetailParts(option.detail)
+  return {
+    sizeLabel: option.label,
+    cpu,
+    ram,
+    gpu: option.accelerator ?? 'None',
+  }
+}
+
+export function resolveBaremetalInstanceTypeHardwareFromSizeLabel(
+  sizeLabel: string,
+): BaremetalInstanceTypeHardware | undefined {
+  const option = CATALOG_INSTANCE_TYPE_OPTIONS.find(
+    (item) => item.label === sizeLabel.trim(),
+  )
+  if (!option) {
+    return undefined
+  }
+
+  return resolveBaremetalInstanceTypeHardware(option.id)
+}
 
 /** CPU/memory-only presets for virtual machine catalog items. */
 export const CATALOG_VM_INSTANCE_TYPE_OPTIONS: ReadonlyArray<CatalogInstanceTypeOption> = [
@@ -373,25 +608,93 @@ export function getCatalogInstanceTypeOptions(
       ? CATALOG_VM_INSTANCE_TYPE_OPTIONS
       : CATALOG_INSTANCE_TYPE_OPTIONS
 
-  return [
-    ...presets,
-    {
-      id: CUSTOM_INSTANCE_TYPE_ID,
-      label: 'Custom',
-      detail: 'Set CPUs, memory, NICs, and GPUs',
-    },
-  ]
+  // Bare metal and models-style presets only — Custom is VM-only.
+  if (serviceId === 'virtual-machine') {
+    return [
+      ...presets,
+      {
+        id: CUSTOM_INSTANCE_TYPE_ID,
+        label: 'Custom',
+        detail: 'Set CPUs, memory, NICs, and GPUs',
+      },
+    ]
+  }
+
+  return [...presets]
 }
 
 export function getCatalogDiskImageOptions(): CatalogDiskImageOption[] {
   return [...CATALOG_DISK_IMAGE_OPTIONS]
 }
 
+/** Tenant-facing disk image label (e.g. RHEL 9.4, not Red Hat Enterprise Linux 9.4). */
+export function normalizeCatalogDiskImageDisplayLabel(label: string): string {
+  const trimmed = label.trim()
+  if (!trimmed) {
+    return trimmed
+  }
+
+  const byOptionLabel = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.label === trimmed)
+  if (byOptionLabel) {
+    return byOptionLabel.label
+  }
+
+  const byOptionId = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.id === trimmed)
+  if (byOptionId) {
+    return byOptionId.label
+  }
+
+  const rhelMatch = trimmed.match(/^Red Hat Enterprise Linux\s+(.+)$/i)
+  if (rhelMatch) {
+    const version = rhelMatch[1].trim()
+    const byVersion = CATALOG_DISK_IMAGE_OPTIONS.find(
+      (option) => option.id === `rhel-${version}` || option.label === `RHEL ${version}`,
+    )
+    return byVersion?.label ?? `RHEL ${version}`
+  }
+
+  return trimmed
+}
+
+export function formatCatalogDiskImageLabel(
+  diskImageId?: string,
+  diskImageLabel?: string,
+): string | undefined {
+  if (diskImageId?.trim()) {
+    const byId = CATALOG_DISK_IMAGE_OPTIONS.find((option) => option.id === diskImageId.trim())
+    if (byId) {
+      return byId.label
+    }
+  }
+
+  if (diskImageLabel?.trim()) {
+    return normalizeCatalogDiskImageDisplayLabel(diskImageLabel)
+  }
+
+  return undefined
+}
+
+/** RHEL and other Red Hat OS images show the brand mark on catalog detail pages. */
+export function isRedHatBrandedDiskImageLabel(label: string): boolean {
+  const trimmed = label.trim()
+  if (!trimmed) {
+    return false
+  }
+
+  if (/^Red Hat\b/i.test(trimmed) || /^RHEL\b/i.test(trimmed)) {
+    return true
+  }
+
+  return CATALOG_DISK_IMAGE_OPTIONS.some(
+    (option) => option.id.startsWith('rhel-') && option.label === trimmed,
+  )
+}
+
 export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersionOption> = [
   {
     id: 'ocp-4.21',
-    label: 'Red Hat OpenShift 4.21',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.21',
+    detail: 'Newest stream · GPU scheduling and Node Sets defaults',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.21.0-multi',
     lifecycle: 'active',
     features: [
@@ -403,8 +706,8 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
   },
   {
     id: 'ocp-4.20',
-    label: 'Red Hat OpenShift 4.20',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.20',
+    detail: 'Current stable · improved bare-metal installer path',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.20.0-multi',
     lifecycle: 'active',
     features: [
@@ -416,8 +719,8 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
   },
   {
     id: 'ocp-4.19',
-    label: 'Red Hat OpenShift 4.19',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.19',
+    detail: 'Catalog default · validated Node Sets and Machine Config',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.19.0-multi',
     lifecycle: 'active',
     features: [
@@ -429,8 +732,8 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
   },
   {
     id: 'ocp-4.18',
-    label: 'Red Hat OpenShift 4.18',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.18',
+    detail: 'Long-lived production · mature operators and tenant flows',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.18.0-multi',
     lifecycle: 'active',
     features: [
@@ -442,8 +745,8 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
   },
   {
     id: 'ocp-4.17',
-    label: 'Red Hat OpenShift 4.17',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.17',
+    detail: 'Maintenance only · prefer upgrade to 4.18 or newer',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.17.0-multi',
     lifecycle: 'deprecated',
     features: [
@@ -455,8 +758,8 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
   },
   {
     id: 'ocp-4.16',
-    label: 'Red Hat OpenShift 4.16',
-    detail: 'OpenShift Container Platform · multi-arch',
+    label: 'OpenShift 4.16',
+    detail: 'Extended life ending · not recommended for new catalogs',
     releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.16.0-multi',
     lifecycle: 'deprecated',
     features: [
@@ -466,36 +769,15 @@ export const CATALOG_CLUSTER_VERSION_OPTIONS: ReadonlyArray<CatalogClusterVersio
       'Multi-arch release image',
     ],
   },
-  {
-    id: 'ocp-4.15',
-    label: 'Red Hat OpenShift 4.15',
-    detail: 'OpenShift Container Platform · multi-arch',
-    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.15.0-multi',
-    lifecycle: 'obsolete',
-    features: [
-      'End of standard support',
-      'Security fixes only where available',
-      'Not recommended for new catalogs',
-      'Migrate workloads to an active version',
-    ],
-  },
-  {
-    id: 'ocp-4.14',
-    label: 'Red Hat OpenShift 4.14',
-    detail: 'OpenShift Container Platform · multi-arch',
-    releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.14.0-multi',
-    lifecycle: 'obsolete',
-    features: [
-      'End of life',
-      'No new platform features',
-      'Not suitable for new production catalogs',
-      'Migrate to an active OpenShift version',
-    ],
-  },
 ]
 
 export function getCatalogClusterVersionOptions(): CatalogClusterVersionOption[] {
   return [...CATALOG_CLUSTER_VERSION_OPTIONS]
+}
+
+/** Newest cluster version in the publish wizard (options are ordered newest-first). */
+export function getLatestCatalogClusterVersionId(): string {
+  return CATALOG_CLUSTER_VERSION_OPTIONS[0]?.id ?? ''
 }
 
 /** Default cluster version for seeded Node Sets demo catalog item. */
@@ -508,12 +790,19 @@ export function getCatalogClusterVersionOption(
   if (!needle) {
     return undefined
   }
-  return CATALOG_CLUSTER_VERSION_OPTIONS.find(
-    (option) =>
+  const normalized = needle.replace(/^Red Hat\s+/i, '')
+  return CATALOG_CLUSTER_VERSION_OPTIONS.find((option) => {
+    const legacyLabel = `Red Hat ${option.label}`
+    return (
       option.id === needle ||
       option.label === needle ||
-      option.label.toLowerCase() === needle.toLowerCase(),
-  )
+      option.label === normalized ||
+      option.label.toLowerCase() === needle.toLowerCase() ||
+      option.label.toLowerCase() === normalized.toLowerCase() ||
+      legacyLabel === needle ||
+      legacyLabel.toLowerCase() === needle.toLowerCase()
+    )
+  })
 }
 
 export function getReleaseImageForClusterVersion(idOrLabel: string | undefined | null): string {
@@ -544,11 +833,18 @@ export function getReleaseImageForClusterVersion(idOrLabel: string | undefined |
 }
 
 export function formatClusterPlatformLabel(idOrLabel: string | undefined | null): string {
-  return (
-    getCatalogClusterVersionOption(idOrLabel)?.label ??
-    idOrLabel?.trim() ??
-    'Red Hat OpenShift'
-  )
+  const matched = getCatalogClusterVersionOption(idOrLabel)
+  if (matched) {
+    return matched.label
+  }
+
+  const trimmed = idOrLabel?.trim()
+  if (!trimmed) {
+    return 'OpenShift'
+  }
+
+  // Strip legacy "Red Hat OpenShift …" / "Red Hat …" prefixes from stored labels.
+  return trimmed.replace(/^Red Hat\s+/i, '') || 'OpenShift'
 }
 
 function formatTemplateParamLabel(key: string): string {

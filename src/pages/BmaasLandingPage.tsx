@@ -5,7 +5,6 @@ import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
 import type { ReactNode } from 'react'
 import { RouterButton } from '../components/RouterButton'
-import { ConceptualDesignSticker } from '../components/ConceptualDesignSticker'
 import { BMAAS_LANDING_LAST_UPDATED } from '../bmaasLandingLastUpdated'
 import {
   getIdpManagerSetupRoute,
@@ -237,11 +236,11 @@ export function BmaasLandingPage() {
               variant="link"
               component="a"
               isInline
-              href="https://redhat.atlassian.net/browse/HPUX-1790"
+              href="https://docs.google.com/spreadsheets/d/1Gw4zbnim9oCjHkvqREvoNyViHgLd4JBZcBmtaFrO0xE/edit?gid=1297446303#gid=1297446303"
               target="_blank"
               rel="noopener noreferrer"
             >
-              HPUX-1790
+              OSAC Delivery Overview
             </Button>
           </div>
           <Content component="p" className="bmaas-role-landing__footer-meta">
@@ -274,7 +273,6 @@ export function BmaasLandingPage() {
           </Content>
         </footer>
       </div>
-      <ConceptualDesignSticker />
     </div>
   )
 }

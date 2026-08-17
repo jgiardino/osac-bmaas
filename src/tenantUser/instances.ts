@@ -1,10 +1,28 @@
 import type { CatalogSpecRow } from '../catalog/catalogSpecs'
-import { resolveCatalogSpecRows } from '../catalog/catalogSpecs'
 import {
+  resolveCatalogSpecRows,
+  resolveClusterCatalogHighlightRows,
+} from '../catalog/catalogSpecs'
+import {
+  DEFAULT_CLUSTER_NODE_SET_ID,
+  formatClusterHostTypeLabel,
+  formatClusterNodeSetLabel,
   formatClusterPlatformLabel,
+  formatCatalogDiskImageLabel,
+  getCatalogClusterNodeSetOption,
   getReleaseImageForClusterVersion,
+  resolveBaremetalInstanceTypeHardware,
+  resolveBaremetalInstanceTypeHardwareFromSizeLabel,
+  normalizeCatalogDiskImageDisplayLabel,
 } from '../catalog/catalogPublishConfig'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
+import { getProviderCatalogItems } from '../providerSetup/storage'
+import {
+  DEMO_TENANT_PROJECT_ID,
+  DEMO_TENANT_PROJECT_ID_02,
+  DEMO_TENANT_PROJECT_NAME,
+  DEMO_TENANT_PROJECT_NAME_02,
+} from '../tenantAdmin/projects'
 import { parseVmLaunchInstanceTypeOption } from './launchInstanceWizard'
 
 export type TenantInstanceStatus =
@@ -29,12 +47,37 @@ export type TenantInstanceNetworking = {
   virtualNetwork: string
   subnet: string
   securityGroup: string
+  /** Optional external IP pool selected at launch. */
+  externalIpPool?: string
 }
+
+export type TenantClusterNodeSetStatus = 'ready' | 'updating' | 'behind' | 'pending'
 
 export type TenantClusterNodeSet = {
   id: string
+  /** Friendly pool name shown in the detail list (e.g. workers). */
+  name?: string
   hostType: string
   nodeCount: number
+  /** Platform version currently running on this node set. */
+  version?: string
+  status?: TenantClusterNodeSetStatus
+}
+
+export type TenantClusterUpgradeStatus = 'up-to-date' | 'upgrade-available' | 'upgrading'
+
+export type TenantClusterConfig = {
+  releaseImage: string
+  podCidr: string
+  serviceCidr: string
+  nodeSets: TenantClusterNodeSet[]
+  /** Per-node inventory once machines are allocated. */
+  nodes?: TenantClusterNodeInventory[]
+  catalogShortName?: string
+  creator?: string
+  /** Desired control-plane version when an upgrade is available or in progress. */
+  desiredVersion?: string
+  upgradeStatus?: TenantClusterUpgradeStatus
 }
 
 /** NIC identity discovered on a specific allocated machine (not the instance type). */
@@ -60,17 +103,6 @@ export type TenantClusterNodeInventory = {
   networkInterfaces: TenantNetworkInterfaceInventory[]
 }
 
-export type TenantClusterConfig = {
-  releaseImage: string
-  podCidr: string
-  serviceCidr: string
-  nodeSets: TenantClusterNodeSet[]
-  /** Per-node inventory once machines are allocated. */
-  nodes?: TenantClusterNodeInventory[]
-  catalogShortName?: string
-  creator?: string
-}
-
 export type TenantVmConfig = {
   instanceType: string
   containerDiskImage: string
@@ -84,6 +116,8 @@ export type TenantVmConfig = {
 export type TenantInstance = {
   id: string
   name: string
+  /** Optional free-text description captured at launch. */
+  description?: string
   catalogItemDisplayName: string
   /** Catalog service that produced this instance (drives icon and specs). */
   serviceId?: CatalogServiceId
@@ -101,9 +135,14 @@ export type TenantInstance = {
   vmConfig?: TenantVmConfig
   /** Bare metal machine inventory (MAC addresses, etc.) after provision. */
   inventory?: TenantMachineInventory
-  /** SSH public key captured at bare metal launch. */
+  /** SSH public key captured at launch (bare metal, VM, and cluster). */
   sshPublicKey?: string
-  /** Scope label: project name when project-scoped, organization name otherwise. */
+  /**
+   * Projects this service belongs to (multi-project). Empty = organization-scoped.
+   * Prefer this over `projectName` / `scopeKind` for membership checks.
+   */
+  projectIds: string[]
+  /** Scope label: primary project name when project-scoped, organization name otherwise. */
   projectName: string
   scopeKind: TenantInstanceScopeKind
   status: TenantInstanceStatus
@@ -127,13 +166,46 @@ export function getTenantInstanceServiceId(instance: TenantInstance): CatalogSer
   return 'baremetal'
 }
 
-/** Spec rows for cards and drawers; prefers rows captured at launch. */
-export function getTenantInstanceSpecRows(instance: TenantInstance): CatalogSpecRow[] {
-  if (instance.specRows?.length) {
-    return instance.specRows
+export const BARE_METAL_DISK_IMAGE_FILTER_OPTIONS = [
+  'RHEL 9.4',
+  'Fedora',
+  'Ubuntu 22.04',
+] as const
+
+export type BareMetalDiskImageFilterOption = (typeof BARE_METAL_DISK_IMAGE_FILTER_OPTIONS)[number]
+
+export function normalizeBareMetalDiskImageFilterLabel(
+  label: string,
+): BareMetalDiskImageFilterOption | null {
+  const trimmed = label.trim()
+  if (!trimmed || trimmed === '—' || trimmed === '-') {
+    return null
   }
 
+  const display = normalizeCatalogDiskImageDisplayLabel(trimmed)
+  if (display === 'RHEL 9.4') {
+    return 'RHEL 9.4'
+  }
+  if (display === 'Fedora' || /^fedora$/i.test(trimmed)) {
+    return 'Fedora'
+  }
+  if (display === 'Ubuntu 22.04 LTS' || display === 'Ubuntu 22.04' || /^ubuntu 22\.04/i.test(trimmed)) {
+    return 'Ubuntu 22.04'
+  }
+
+  return null
+}
+
+/** Spec rows for cards and drawers; prefers rows captured at launch. */
+export function getTenantInstanceSpecRows(instance: TenantInstance): CatalogSpecRow[] {
   const serviceId = getTenantInstanceServiceId(instance)
+
+  if (instance.specRows?.length) {
+    if (serviceId === 'baremetal') {
+      return ensureBaremetalInstanceSpecRows(instance, instance.specRows)
+    }
+    return instance.specRows
+  }
 
   if (serviceId === 'cluster' || serviceId === 'virtual-machine') {
     return resolveCatalogSpecRows(
@@ -142,9 +214,14 @@ export function getTenantInstanceSpecRows(instance: TenantInstance): CatalogSpec
     )
   }
 
+  return buildBareMetalFallbackSpecRows(instance)
+}
+
+function buildBareMetalFallbackSpecRows(instance: TenantInstance): CatalogSpecRow[] {
+  const diskImage = resolveBareMetalDiskImageValue(instance, [])
   return [
     { label: 'Hardware', value: instance.hardwareProfile },
-    { label: 'OS image', value: instance.osImage },
+    ...(diskImage ? [{ label: 'Disk image', value: diskImage }] : []),
     { label: 'GPU', value: instance.gpuLabel },
   ]
 }
@@ -204,6 +281,10 @@ export function getTenantInstanceActions(
   vmActions?: {
     onAttachPublicIp?: (instance: TenantInstance) => void
   },
+  bareMetalActions?: {
+    onConnectSsh?: (instance: TenantInstance) => void
+    onOpenSerialConsole?: (instance: TenantInstance) => void
+  },
 ): Array<{
   title: string
   isAriaDisabled?: boolean
@@ -258,6 +339,20 @@ export function getTenantInstanceActions(
         title: 'View details',
         onClick: () => {
           onViewDetails?.(instance)
+        },
+      },
+      {
+        title: 'Connect via SSH',
+        isAriaDisabled: !isRunning,
+        onClick: () => {
+          bareMetalActions?.onConnectSsh?.(instance)
+        },
+      },
+      {
+        title: 'Serial console',
+        isAriaDisabled: !isRunning,
+        onClick: () => {
+          bareMetalActions?.onOpenSerialConsole?.(instance)
         },
       },
       {
@@ -618,6 +713,26 @@ export function getClusterConsoleUrl(instance: TenantInstance): string {
   return `https://console.${getClusterDnsName(instance)}.mock.osac.dev`
 }
 
+/** Demo VNC/serial console URL for a virtual machine instance. */
+export function getVmConsoleUrl(instance: TenantInstance): string {
+  return `https://console-vm.${getClusterDnsName(instance)}.mock.osac.dev`
+}
+
+/** Demo management IP used for SSH after bare metal provision. */
+export function getBareMetalSshHost(instance: TenantInstance): string {
+  return createDemoPublicIp('IPv4', instance.id)
+}
+
+/** SSH connect command for a provisioned bare metal instance (RHEL cloud-user). */
+export function getBareMetalSshCommand(instance: TenantInstance): string {
+  return `ssh cloud-user@${getBareMetalSshHost(instance)}`
+}
+
+/** Demo BMC serial-over-LAN console URL for a bare metal instance. */
+export function getBareMetalSerialConsoleUrl(instance: TenantInstance): string {
+  return `https://console-sol.${getClusterDnsName(instance)}.mock.osac.dev`
+}
+
 export function getClusterWorkerNodeCount(instance: TenantInstance): number {
   const nodeSets = resolveClusterConfig(instance).nodeSets
   return nodeSets.reduce((total, nodeSet) => total + nodeSet.nodeCount, 0)
@@ -747,9 +862,6 @@ export function resolveClusterNodeInventories(
 }
 
 export function getClusterStatusLabel(status: TenantInstanceStatus): string {
-  if (status === 'running') {
-    return 'Ready'
-  }
   return getTenantInstanceStatusLabel(status)
 }
 
@@ -788,19 +900,118 @@ export function getClusterDemoPassword(instance: TenantInstance): string {
 export function getTenantInstanceScopeFieldLabel(
   instance: TenantInstance,
 ): 'Organization' | 'Project' {
-  return instance.scopeKind === 'organization' ? 'Organization' : 'Project'
+  return getTenantInstanceProjectIds(instance).length > 0 ? 'Project' : 'Organization'
+}
+
+/** Normalized project membership ids (supports legacy single-project instances). */
+export function getTenantInstanceProjectIds(instance: TenantInstance): string[] {
+  const resolved = resolveStoredTenantInstanceProjectIds(instance)
+  if (!isDemoMultiProjectShowcaseInstance(instance)) {
+    return resolved
+  }
+
+  return [...new Set([...resolved, ...getDemoMultiProjectShowcaseProjectIds()])]
+}
+
+export function instanceBelongsToProject(
+  instance: TenantInstance,
+  project: { id: string; name: string },
+): boolean {
+  const projectIds = getTenantInstanceProjectIds(instance)
+  if (projectIds.includes(project.id)) {
+    return true
+  }
+
+  return (
+    projectIds.length === 0 &&
+    instance.scopeKind === 'project' &&
+    instance.projectName === project.name
+  )
+}
+
+/** Project name for Services card/table; organization-scoped instances have no project. */
+export function getTenantInstanceProjectLabel(
+  instance: TenantInstance,
+  projects: readonly { id: string; name: string }[] = [],
+): string {
+  const projectIds = getTenantInstanceProjectIds(instance)
+  if (projectIds.length === 0) {
+    return instance.scopeKind === 'project' && instance.projectName.trim()
+      ? instance.projectName
+      : '—'
+  }
+
+  const names = projectIds.map((projectId) => {
+    const fromList = projects.find((project) => project.id === projectId)?.name
+    if (fromList) {
+      return fromList
+    }
+    if (projectId === DEMO_TENANT_PROJECT_ID) {
+      return DEMO_TENANT_PROJECT_NAME
+    }
+    if (projectId === DEMO_TENANT_PROJECT_ID_02) {
+      return DEMO_TENANT_PROJECT_NAME_02
+    }
+    return projectId
+  })
+  if (names.length === 1) {
+    return names[0]!
+  }
+
+  return `${names[0]} +${names.length - 1}`
+}
+
+/**
+ * Sync `projectIds` with legacy `projectName` / `scopeKind` fields used across the demo.
+ */
+export function withInstanceProjectIds(
+  instance: TenantInstance,
+  projectIds: string[],
+  projects: readonly { id: string; name: string }[],
+  organizationName: string,
+): TenantInstance {
+  const uniqueIds = [...new Set(projectIds.filter(Boolean))]
+  const resolvedNames = uniqueIds
+    .map((projectId) => projects.find((project) => project.id === projectId)?.name)
+    .filter((name): name is string => Boolean(name))
+
+  if (resolvedNames.length === 0) {
+    return {
+      ...instance,
+      projectIds: [],
+      scopeKind: 'organization',
+      projectName: organizationName,
+    }
+  }
+
+  return {
+    ...instance,
+    projectIds: uniqueIds.filter((projectId) =>
+      projects.some((project) => project.id === projectId),
+    ),
+    scopeKind: 'project',
+    projectName: resolvedNames[0]!,
+  }
 }
 
 /** Stable demo instance IDs so ensure can re-seed without duplicates. */
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID = 'instance-demo-bm-01'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_02 = 'instance-demo-bm-02'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_03 = 'instance-demo-bm-03'
+
+/** Services detail demo: two projects shown side by side. */
+export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME = 'bm-server-06'
+
+export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_IDS = [
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
+] as const
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID = 'instance-demo-vm-01'
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02 = 'instance-demo-vm-02'
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03 = 'instance-demo-vm-03'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID = 'instance-demo-cluster-01'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID_02 = 'instance-demo-cluster-02'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID_03 = 'instance-demo-cluster-03'
+export const DEMO_TENANT_CLUSTER_INSTANCE_ID_04 = 'instance-demo-cluster-04'
 
 /** Cluster demo row that stays Provisioning on Services for walkthroughs. */
 export const DEMO_TENANT_CLUSTER_PROVISIONING_INSTANCE_ID = DEMO_TENANT_CLUSTER_INSTANCE_ID_03
@@ -822,7 +1033,107 @@ export const DEMO_TENANT_CLUSTER_STATES: ReadonlyArray<{
     name: 'ocp-cluster-03',
     status: 'provisioning',
   },
+  { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_04, name: 'ocp-cluster-04', status: 'running' },
 ]
+
+/** Demo instances seeded under the default tenant project (`ml-project`). */
+export const DEMO_TENANT_PROJECT_INSTANCE_IDS = [
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_03,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
+] as const
+
+/** Demo instances that also belong to `ml-dev-team` (two projects). */
+export const DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS = [
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
+] as const
+
+export function getDemoInstanceProjectIds(instanceId: string): string[] {
+  const belongsToPrimary = DEMO_TENANT_PROJECT_INSTANCE_IDS.includes(
+    instanceId as (typeof DEMO_TENANT_PROJECT_INSTANCE_IDS)[number],
+  )
+  if (!belongsToPrimary) {
+    return []
+  }
+
+  const belongsToSecondary = DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS.includes(
+    instanceId as (typeof DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS)[number],
+  )
+
+  return belongsToSecondary
+    ? getDemoMultiProjectShowcaseProjectIds()
+    : [DEMO_TENANT_PROJECT_ID]
+}
+
+export function getDemoMultiProjectShowcaseProjectIds(): string[] {
+  return [DEMO_TENANT_PROJECT_ID, DEMO_TENANT_PROJECT_ID_02]
+}
+
+export function isDemoMultiProjectShowcaseInstance(
+  instance: Pick<TenantInstance, 'id' | 'name'>,
+): boolean {
+  return (
+    instance.name === DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME ||
+    DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_IDS.includes(
+      instance.id as (typeof DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_IDS)[number],
+    )
+  )
+}
+
+function resolveStoredTenantInstanceProjectIds(instance: TenantInstance): string[] {
+  if (Array.isArray(instance.projectIds)) {
+    return [...new Set(instance.projectIds.filter(Boolean))]
+  }
+
+  const demoProjectIds = getDemoInstanceProjectIds(instance.id)
+  if (demoProjectIds.length > 0) {
+    return demoProjectIds
+  }
+
+  if (instance.scopeKind === 'project' && instance.projectName === DEMO_TENANT_PROJECT_NAME) {
+    return [DEMO_TENANT_PROJECT_ID]
+  }
+
+  if (instance.scopeKind === 'project' && instance.projectName === DEMO_TENANT_PROJECT_NAME_02) {
+    return [DEMO_TENANT_PROJECT_ID_02]
+  }
+
+  return []
+}
+
+export function syncDemoMultiProjectShowcaseInstance(instance: TenantInstance): TenantInstance | null {
+  if (!isDemoMultiProjectShowcaseInstance(instance)) {
+    return null
+  }
+
+  const expectedName = DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME
+  const expectedProjectIds = getDemoMultiProjectShowcaseProjectIds()
+  const currentProjectIds = resolveStoredTenantInstanceProjectIds(instance)
+  const mergedProjectIds = [...new Set([...currentProjectIds, ...expectedProjectIds])]
+  const hasExpectedMembership = expectedProjectIds.every((projectId) =>
+    mergedProjectIds.includes(projectId),
+  )
+
+  if (instance.name === expectedName && hasExpectedMembership) {
+    return null
+  }
+
+  return {
+    ...instance,
+    name: expectedName,
+    projectIds: mergedProjectIds,
+    scopeKind: 'project',
+    projectName: DEMO_TENANT_PROJECT_NAME,
+  }
+}
 
 export function getTenantInstanceGpuLabel(instance: TenantInstance): string {
   const fromField = instance.gpuLabel.trim()
@@ -840,12 +1151,12 @@ export function getClusterPlatformLabel(instance: TenantInstance): string {
       (row) => row.label === 'Cluster version' || row.label === 'Platform',
     )?.value.trim() || ''
   if (fromSpec) {
-    return fromSpec
+    return formatClusterPlatformLabel(fromSpec)
   }
 
   const fromOsImage = instance.osImage.trim()
   if (fromOsImage && !fromOsImage.includes('/')) {
-    return fromOsImage
+    return formatClusterPlatformLabel(fromOsImage)
   }
 
   const fromRelease = formatClusterPlatformLabel(resolveClusterConfig(instance).releaseImage)
@@ -854,6 +1165,50 @@ export function getClusterPlatformLabel(instance: TenantInstance): string {
   }
 
   return '—'
+}
+
+/** Short version token for node-set rows (e.g. "4.16" from "OpenShift 4.16"). */
+export function getClusterVersionShortLabel(versionLabel: string): string {
+  const match = versionLabel.match(/(\d+\.\d+(?:\.\d+)?)/)
+  return match?.[1] ?? (versionLabel.trim() || '—')
+}
+
+export function getClusterUpgradeStatus(
+  instance: TenantInstance,
+): TenantClusterUpgradeStatus {
+  const configured = resolveClusterConfig(instance).upgradeStatus
+  if (configured) {
+    return configured
+  }
+  return 'up-to-date'
+}
+
+export function getClusterDesiredVersionLabel(instance: TenantInstance): string | null {
+  const desired = resolveClusterConfig(instance).desiredVersion?.trim()
+  return desired || null
+}
+
+export function getClusterNodeSetsWithDefaults(instance: TenantInstance): TenantClusterNodeSet[] {
+  const clusterVersion = getClusterPlatformLabel(instance)
+  const shortVersion = getClusterVersionShortLabel(clusterVersion)
+  const isProvisioning = instance.status === 'provisioning'
+
+  return resolveClusterConfig(instance).nodeSets.map((nodeSet, index) => ({
+    ...nodeSet,
+    name: nodeSet.name?.trim() || (index === 0 ? 'workers' : `node-set-${index + 1}`),
+    version: nodeSet.version?.trim() || shortVersion,
+    status:
+      nodeSet.status ??
+      (isProvisioning ? 'pending' : 'ready'),
+  }))
+}
+
+export function countClusterNodeSetsOffVersion(instance: TenantInstance): number {
+  const clusterShort = getClusterVersionShortLabel(getClusterPlatformLabel(instance))
+  return getClusterNodeSetsWithDefaults(instance).filter((nodeSet) => {
+    const nodeShort = getClusterVersionShortLabel(nodeSet.version ?? '')
+    return nodeShort !== clusterShort
+  }).length
 }
 
 export function getClusterNodeSetTypeLabel(instance: TenantInstance): string {
@@ -866,13 +1221,104 @@ export function getClusterNodeSetTypeLabel(instance: TenantInstance): string {
   return /\bgpu\b/i.test(nodeSet) ? 'gpu-host' : 'standard-host'
 }
 
+function isPopulatedSpecRowValue(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed.length > 0 && trimmed !== '—' && trimmed !== '-'
+}
+
+function findCatalogDraftForInstance(instance: TenantInstance) {
+  const needle = instance.catalogItemDisplayName.trim().toLowerCase()
+  if (!needle) {
+    return null
+  }
+
+  return (
+    getProviderCatalogItems().find(
+      (item) =>
+        item.displayName.trim().toLowerCase() === needle ||
+        item.catalogItemId.trim().toLowerCase() === needle,
+    ) ?? null
+  )
+}
+
+function resolveBareMetalDiskImageValue(
+  instance: TenantInstance,
+  rows: CatalogSpecRow[],
+): string | null {
+  const fromRow = rows.find((row) => row.label === 'Disk image' || row.label === 'OS image')?.value
+  const catalog = findCatalogDraftForInstance(instance)
+  const fromCatalog = catalog
+    ? formatCatalogDiskImageLabel(catalog.diskImageId, catalog.diskImageLabel)
+    : undefined
+
+  const candidate = [fromRow, instance.osImage, fromCatalog].find((value) =>
+    value ? isPopulatedSpecRowValue(value) : false,
+  )
+
+  if (!candidate) {
+    return null
+  }
+
+  return normalizeCatalogDiskImageDisplayLabel(candidate)
+}
+
+export function getBareMetalInstanceDiskImageFilterLabel(
+  instance: TenantInstance,
+): BareMetalDiskImageFilterOption | null {
+  const resolved = resolveBareMetalDiskImageValue(instance, instance.specRows ?? [])
+  return resolved ? normalizeBareMetalDiskImageFilterLabel(resolved) : null
+}
+
+/** Bare metal cards use Disk image; normalize legacy OS image rows from storage. */
+function normalizeBareMetalCardSpecRows(rows: CatalogSpecRow[]): CatalogSpecRow[] {
+  return rows.map((row) =>
+    row.label === 'OS image' ? { ...row, label: 'Disk image' } : row,
+  )
+}
+
+function ensureBaremetalInstanceSpecRows(
+  instance: TenantInstance,
+  rows: CatalogSpecRow[],
+): CatalogSpecRow[] {
+  const normalized = normalizeBareMetalCardSpecRows(rows)
+  const catalog = findCatalogDraftForInstance(instance)
+  const sizeFromRow = normalized.find((row) => row.label === 'Size')?.value
+  const diskImage = resolveBareMetalDiskImageValue(instance, normalized)
+  const otherTrailingRows = normalized.filter(
+    (row) =>
+      !['Size', 'CPU', 'RAM', 'GPU', 'Disk image', 'OS image'].includes(row.label),
+  )
+
+  const typeHardware =
+    resolveBaremetalInstanceTypeHardware(catalog?.instanceTypeId, catalog?.instanceTypeLabel) ??
+    (sizeFromRow
+      ? resolveBaremetalInstanceTypeHardwareFromSizeLabel(sizeFromRow)
+      : undefined)
+
+  if (!typeHardware) {
+    const baseRows = normalized.filter(
+      (row) => row.label !== 'Disk image' && row.label !== 'OS image',
+    )
+    return diskImage ? [...baseRows, { label: 'Disk image', value: diskImage }] : baseRows
+  }
+
+  return [
+    { label: 'Size', value: typeHardware.sizeLabel },
+    { label: 'CPU', value: typeHardware.cpu },
+    { label: 'RAM', value: typeHardware.ram },
+    { label: 'GPU', value: typeHardware.gpu },
+    ...otherTrailingRows,
+    ...(diskImage ? [{ label: 'Disk image', value: diskImage }] : []),
+  ]
+}
+
 /** Card highlights for Virtual machines — include OS so OS filters are scannable. */
 export function getTenantInstanceCardSpecRows(instance: TenantInstance): CatalogSpecRow[] {
   const serviceId = getTenantInstanceServiceId(instance)
   const allSpecRows = getTenantInstanceSpecRows(instance)
 
   if (serviceId === 'baremetal') {
-    return allSpecRows
+    return allSpecRows.filter((row) => row.label !== 'Size')
   }
 
   if (serviceId === 'virtual-machine') {
@@ -904,7 +1350,114 @@ export function getTenantInstanceCardSpecRows(instance: TenantInstance): Catalog
     return [instanceType, size, osImage]
   }
 
+  if (serviceId === 'cluster') {
+    return getClusterInstanceCardSpecRows(instance)
+  }
+
   return allSpecRows.slice(0, 3)
+}
+
+function resolveClusterNodeSetIdFromNodeSet(
+  nodeSet: TenantClusterNodeSet | undefined,
+): string {
+  if (!nodeSet) {
+    return DEFAULT_CLUSTER_NODE_SET_ID
+  }
+
+  if (nodeSet.hostType === 'gpu-host' || nodeSet.name === 'gpu-workers') {
+    return 'fc430-gpu'
+  }
+
+  if (nodeSet.name === 'infra' || nodeSet.name === 'infra-workers') {
+    return 'fc430-infra'
+  }
+
+  return DEFAULT_CLUSTER_NODE_SET_ID
+}
+
+function resolveClusterInstanceNodeSetId(instance: TenantInstance): string {
+  const fromSpecNodeSet = instance.specRows?.find((row) => row.label === 'Node set')?.value.trim()
+  if (fromSpecNodeSet && !/·\s*\d+\s+nodes?/i.test(fromSpecNodeSet)) {
+    return getCatalogClusterNodeSetOption(fromSpecNodeSet)?.id ?? fromSpecNodeSet
+  }
+
+  return resolveClusterNodeSetIdFromNodeSet(resolveClusterConfig(instance).nodeSets[0])
+}
+
+/** Same Cluster version / Node set / Host type rows as cluster catalog cards. */
+function getClusterInstanceCardSpecRows(instance: TenantInstance): CatalogSpecRow[] {
+  const catalog = findCatalogDraftForInstance(instance)
+  const catalogRows =
+    catalog?.serviceId === 'cluster' ? resolveClusterCatalogHighlightRows(catalog) : null
+  const primaryNodeSet = resolveClusterConfig(instance).nodeSets[0]
+  const fromSpecHostType = instance.specRows?.find((row) => row.label === 'Host type')?.value.trim()
+
+  const platform =
+    getClusterPlatformLabel(instance) ||
+    instance.specRows
+      ?.find((row) => row.label === 'Cluster version' || row.label === 'Platform')
+      ?.value?.trim() ||
+    catalogRows?.find((row) => row.label === 'Cluster version')?.value ||
+    '—'
+
+  const nodeSetValue = formatClusterNodeSetLabel(resolveClusterInstanceNodeSetId(instance))
+  const hostTypeValue = formatClusterHostTypeLabel(
+    fromSpecHostType ||
+      primaryNodeSet?.hostType ||
+      getClusterNodeSetTypeLabel(instance) ||
+      catalogRows?.find((row) => row.label === 'Host type')?.value,
+  )
+
+  return [
+    {
+      label: 'Cluster version',
+      value: platform,
+    },
+    {
+      label: 'Node set',
+      value: nodeSetValue,
+    },
+    {
+      label: 'Host type',
+      value: hostTypeValue,
+    },
+  ]
+}
+
+function resolveDemoInstanceProjectFields(options: {
+  id: string
+  projectName?: string
+  scopeKind?: TenantInstanceScopeKind
+  projectIds?: string[]
+  organizationName: string
+}): Pick<TenantInstance, 'projectIds' | 'projectName' | 'scopeKind'> {
+  const demoProjectIds = options.projectIds ?? getDemoInstanceProjectIds(options.id)
+  if (demoProjectIds.length > 0) {
+    return {
+      projectIds: demoProjectIds,
+      projectName:
+        demoProjectIds[0] === DEMO_TENANT_PROJECT_ID_02
+          ? DEMO_TENANT_PROJECT_NAME_02
+          : DEMO_TENANT_PROJECT_NAME,
+      scopeKind: 'project',
+    }
+  }
+
+  const scopeKind = options.scopeKind ?? 'organization'
+  const projectName = options.projectName ?? options.organizationName
+  if (scopeKind === 'project' && projectName === DEMO_TENANT_PROJECT_NAME) {
+    return {
+      projectIds: [DEMO_TENANT_PROJECT_ID],
+      projectName,
+      scopeKind,
+    }
+  }
+
+  return {
+    projectIds: [],
+    projectName,
+    scopeKind,
+  }
 }
 
 function createDemoTenantBareMetalInstanceVariant(
@@ -920,15 +1473,39 @@ function createDemoTenantBareMetalInstanceVariant(
     ram: string
     hoursAgo: number
     catalogItemDisplayName?: string
+    projectName?: string
+    scopeKind?: TenantInstanceScopeKind
   },
 ): TenantInstance {
   const createdAt = new Date(Date.now() - 1000 * 60 * 60 * options.hoursAgo).toISOString()
+  const catalogItemDisplayName =
+    options.catalogItemDisplayName ?? 'bare-metal-gpu-training-server'
+  const catalog = getProviderCatalogItems().find(
+    (item) => item.displayName.trim().toLowerCase() === catalogItemDisplayName.trim().toLowerCase(),
+  )
+  const typeHardware = resolveBaremetalInstanceTypeHardware(
+    catalog?.instanceTypeId,
+    catalog?.instanceTypeLabel,
+  )
+  const specRows: CatalogSpecRow[] = typeHardware
+    ? [
+        { label: 'Size', value: typeHardware.sizeLabel },
+        { label: 'CPU', value: typeHardware.cpu },
+        { label: 'RAM', value: typeHardware.ram },
+        { label: 'GPU', value: typeHardware.gpu },
+        { label: 'Disk image', value: options.osImage },
+      ]
+    : [
+        { label: 'CPU', value: options.cpu },
+        { label: 'RAM', value: options.ram },
+        { label: 'GPU', value: options.gpuLabel },
+        { label: 'Disk image', value: options.osImage },
+      ]
 
   return {
     id: options.id,
     name: options.name,
-    catalogItemDisplayName:
-      options.catalogItemDisplayName ?? 'bare-metal-gpu-training-server',
+    catalogItemDisplayName,
     serviceId: 'baremetal',
     hardwareProfile: options.hardwareProfile,
     osImage: options.osImage,
@@ -939,20 +1516,19 @@ function createDemoTenantBareMetalInstanceVariant(
       subnet: 'bm-compute-a',
       securityGroup: 'allow-ssh-https',
     },
-    gpuLabel: options.gpuLabel,
-    specRows: [
-      { label: 'CPU', value: options.cpu },
-      { label: 'RAM', value: options.ram },
-      { label: 'GPU', value: options.gpuLabel },
-      { label: 'OS image', value: options.osImage },
-    ],
+    gpuLabel: typeHardware?.gpu ?? options.gpuLabel,
+    specRows,
     inventory:
       options.status === 'provisioning'
         ? undefined
         : { networkInterfaces: createDemoNetworkInterfaces(options.id, 2) },
     sshPublicKey: DEFAULT_BARE_METAL_SSH_PUBLIC_KEY,
-    projectName: organizationName,
-    scopeKind: 'organization',
+    ...resolveDemoInstanceProjectFields({
+      id: options.id,
+      projectName: options.projectName,
+      scopeKind: options.scopeKind,
+      organizationName,
+    }),
     status: options.status,
     createdAt,
     provisionedAt: options.status === 'provisioning' ? null : createdAt,
@@ -991,7 +1567,7 @@ export function createDemoTenantBareMetalInstance02(organizationName: string): T
 export function createDemoTenantBareMetalInstance03(organizationName: string): TenantInstance {
   return createDemoTenantBareMetalInstanceVariant(organizationName, {
     id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
-    name: 'bm-server-03',
+    name: DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME,
     status: 'running',
     osImage: 'Fedora',
     gpuLabel: 'NVIDIA H100 × 4',
@@ -1013,6 +1589,11 @@ function createDemoTenantClusterInstanceVariant(
     hostType: 'standard-host' | 'gpu-host'
     nodeCount: number
     hoursAgo: number
+    desiredVersion?: string
+    upgradeStatus?: TenantClusterUpgradeStatus
+    nodeSets?: TenantClusterNodeSet[]
+    projectName?: string
+    scopeKind?: TenantInstanceScopeKind
   },
 ): TenantInstance {
   const createdAt = new Date(Date.now() - 1000 * 60 * 60 * options.hoursAgo).toISOString()
@@ -1020,16 +1601,38 @@ function createDemoTenantClusterInstanceVariant(
     { serviceId: 'cluster', templateRefId: '', templateName: '' },
     { includeDetails: true },
   )
-  const nodeSetValue =
+  const shortVersion = getClusterVersionShortLabel(options.platform)
+  const defaultNodeSets: TenantClusterNodeSet[] = [
+    {
+      id: 'node-set-1',
+      name: options.hostType === 'gpu-host' ? 'gpu-workers' : 'workers',
+      hostType: options.hostType,
+      nodeCount: options.nodeCount,
+      version: shortVersion,
+      status: options.status === 'provisioning' ? 'pending' : 'ready',
+    },
+  ]
+  const nodeSets = options.nodeSets ?? defaultNodeSets
+  const nodeSetId =
     options.hostType === 'gpu-host'
-      ? `gpu-workers · ${options.nodeCount} node${options.nodeCount === 1 ? '' : 's'}`
-      : `fc430 · worker × ${options.nodeCount}`
+      ? 'fc430-gpu'
+      : nodeSets[0]?.name === 'infra' || nodeSets[0]?.name === 'infra-workers'
+        ? 'fc430-infra'
+        : 'fc430-worker'
+  const nodeSetLabel = formatClusterNodeSetLabel(nodeSetId)
+  const hostTypeLabel = formatClusterHostTypeLabel(options.hostType)
   const specRows = baseSpecRows.map((row) => {
     if (row.label === 'Cluster version' || row.label === 'Platform') {
-      return { label: 'Cluster version', value: options.platform }
+      return {
+        label: 'Cluster version',
+        value: options.platform,
+      }
     }
     if (row.label === 'Node set') {
-      return { ...row, value: nodeSetValue }
+      return { ...row, value: nodeSetLabel, badge: undefined }
+    }
+    if (row.label === 'Host type') {
+      return { ...row, value: hostTypeLabel, badge: undefined }
     }
     return row
   })
@@ -1050,32 +1653,27 @@ function createDemoTenantClusterInstanceVariant(
     },
     gpuLabel: options.hostType,
     specRows,
+    sshPublicKey: DEFAULT_BARE_METAL_SSH_PUBLIC_KEY,
     clusterConfig: {
       releaseImage: getReleaseImageForClusterVersion(options.platform),
       podCidr: '10.128.0.0/14',
       serviceCidr: '172.30.0.0/16',
       catalogShortName: options.hostType === 'gpu-host' ? 'ocp-gpu' : 'ocp-small',
       creator: 'Alex Johnson',
-      nodeSets: [
-        {
-          id: 'node-set-1',
-          hostType: options.hostType,
-          nodeCount: options.nodeCount,
-        },
-      ],
+      desiredVersion: options.desiredVersion,
+      upgradeStatus: options.upgradeStatus,
+      nodeSets,
       nodes:
         options.status === 'provisioning'
           ? undefined
-          : buildClusterNodeInventories(options.id, [
-              {
-                id: 'node-set-1',
-                hostType: options.hostType,
-                nodeCount: options.nodeCount,
-              },
-            ]),
+          : buildClusterNodeInventories(options.id, nodeSets),
     },
-    projectName: organizationName,
-    scopeKind: 'organization',
+    ...resolveDemoInstanceProjectFields({
+      id: options.id,
+      projectName: options.projectName,
+      scopeKind: options.scopeKind,
+      organizationName,
+    }),
     status: options.status,
     createdAt,
     provisionedAt: options.status === 'provisioning' ? null : createdAt,
@@ -1087,10 +1685,30 @@ export function createDemoTenantClusterInstance(organizationName: string): Tenan
     id: DEMO_TENANT_CLUSTER_INSTANCE_ID,
     name: 'ocp-cluster-01',
     status: 'running',
-    platform: 'Red Hat OpenShift 4.16',
+    platform: 'OpenShift 4.19',
     hostType: 'standard-host',
     nodeCount: 3,
     hoursAgo: 18,
+    desiredVersion: 'OpenShift 4.20',
+    upgradeStatus: 'upgrade-available',
+    nodeSets: [
+      {
+        id: 'node-set-1',
+        name: 'workers',
+        hostType: 'standard-host',
+        nodeCount: 3,
+        version: '4.19',
+        status: 'ready',
+      },
+      {
+        id: 'node-set-2',
+        name: 'gpu-workers',
+        hostType: 'gpu-host',
+        nodeCount: 2,
+        version: '4.18',
+        status: 'behind',
+      },
+    ],
   })
 }
 
@@ -1099,7 +1717,7 @@ export function createDemoTenantClusterInstance02(organizationName: string): Ten
     id: DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
     name: 'ocp-cluster-02',
     status: 'failed',
-    platform: 'Red Hat OpenShift 4.15',
+    platform: 'OpenShift 4.15',
     hostType: 'gpu-host',
     nodeCount: 2,
     hoursAgo: 6,
@@ -1111,10 +1729,49 @@ export function createDemoTenantClusterInstance03(organizationName: string): Ten
     id: DEMO_TENANT_CLUSTER_PROVISIONING_INSTANCE_ID,
     name: 'ocp-cluster-03',
     status: 'provisioning',
-    platform: 'Red Hat OpenShift 4.16',
+    platform: 'OpenShift 4.16',
     hostType: 'gpu-host',
     nodeCount: 4,
     hoursAgo: 1,
+  })
+}
+
+export function createDemoTenantClusterInstance04(organizationName: string): TenantInstance {
+  return createDemoTenantClusterInstanceVariant(organizationName, {
+    id: DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
+    name: 'ocp-cluster-04',
+    status: 'running',
+    platform: 'OpenShift 4.21',
+    hostType: 'standard-host',
+    nodeCount: 3,
+    hoursAgo: 8,
+    upgradeStatus: 'up-to-date',
+    nodeSets: [
+      {
+        id: 'node-set-1',
+        name: 'infra',
+        hostType: 'standard-host',
+        nodeCount: 3,
+        version: '4.21',
+        status: 'ready',
+      },
+      {
+        id: 'node-set-2',
+        name: 'compute',
+        hostType: 'standard-host',
+        nodeCount: 6,
+        version: '4.21',
+        status: 'ready',
+      },
+      {
+        id: 'node-set-3',
+        name: 'gpu-workers',
+        hostType: 'gpu-host',
+        nodeCount: 2,
+        version: '4.21',
+        status: 'ready',
+      },
+    ],
   })
 }
 
@@ -1134,6 +1791,8 @@ function createDemoTenantVirtualMachineInstanceVariant(
     sizeLabel: string
     internalIp: string
     hoursAgo: number
+    projectName?: string
+    scopeKind?: TenantInstanceScopeKind
   },
 ): TenantInstance {
   const createdAt = new Date(Date.now() - 1000 * 60 * 60 * options.hoursAgo).toISOString()
@@ -1176,8 +1835,12 @@ function createDemoTenantVirtualMachineInstanceVariant(
       publicIp: null,
       publicIpFamily: null,
     },
-    projectName: organizationName,
-    scopeKind: 'organization',
+    ...resolveDemoInstanceProjectFields({
+      id: options.id,
+      projectName: options.projectName,
+      scopeKind: options.scopeKind,
+      organizationName,
+    }),
     status: options.status,
     createdAt,
     provisionedAt: options.status === 'provisioning' ? null : createdAt,

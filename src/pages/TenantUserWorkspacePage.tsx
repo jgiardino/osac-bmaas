@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
+import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { TenantShell } from '../components/tenant/TenantShell'
 import { DEMO_TENANT_DISPLAY_USER, isDemoTenantId } from '../demoTenant'
 import {
@@ -11,8 +11,8 @@ import { getProviderRegisteredOrganizations, activateProviderRegisteredOrganizat
 import { getProviderCatalogDraft, getProviderCatalogItems } from '../providerSetup/storage'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 import { getRegisteredOrganizationBySlug } from '../tenantAdmin/organizations'
-import { getTenantUserProjectInvitation } from '../tenantUser/invitation'
 import {
+  getTenantInstanceServiceId,
   isStickyDemoProvisioningInstance,
   type TenantInstance,
 } from '../tenantUser/instances'
@@ -39,6 +39,15 @@ import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAsse
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
 import { clearGenaiApiKeysDetailParams } from './tenant-user/genai/genaiNavParams'
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
+import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
+import { ensureTenantDemoProjects } from '../tenantAdmin/storage'
+import type { TenantProject } from '../tenantAdmin/projects'
+import {
+  getProjectScopeId,
+  isAllProjectsScope,
+  setProjectScopeId,
+  type ProjectScopeId,
+} from '../tenantUser/projectScope'
 
 function isTenantUserNavId(value: string | null): value is TenantUserNavId {
   return (
@@ -50,6 +59,7 @@ function isTenantUserNavId(value: string | null): value is TenantUserNavId {
     value === 'genai-asset-endpoints' ||
     value === 'genai-playground' ||
     value === 'genai-api-keys' ||
+    value === 'projects-teams' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-subnets' ||
     value === 'networking-security-groups' ||
@@ -135,9 +145,19 @@ export function TenantUserWorkspacePage() {
   const [instances, setInstances] = useState<TenantInstance[]>(() =>
     isValidTenant ? ensureTenantDemoInstances(tenantSlug) : [],
   )
+  const [projects, setProjects] = useState<TenantProject[]>(() =>
+    isValidTenant ? ensureTenantDemoProjects(tenantSlug) : [],
+  )
+  const [projectScopeId, setProjectScopeIdState] = useState<ProjectScopeId>(() =>
+    isValidTenant ? getProjectScopeId(tenantSlug) : 'all',
+  )
   const [openVirtualNetworkId, setOpenVirtualNetworkId] = useState<string | null>(null)
   const [openSubnetId, setOpenSubnetId] = useState<string | null>(null)
   const [openSecurityGroupId, setOpenSecurityGroupId] = useState<string | null>(null)
+  const [openCatalogItemKey, setOpenCatalogItemKey] = useState<string | null>(null)
+  const [openInstanceId, setOpenInstanceId] = useState<string | null>(null)
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
+  const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
 
   const clearProvisioningTimer = useCallback((instanceId: string) => {
@@ -216,6 +236,8 @@ export function TenantUserWorkspacePage() {
     setTenantUserOnboardingComplete(tenantSlug)
     activateProviderRegisteredOrganizationBySlug(tenantSlug)
     setInstances(ensureTenantDemoInstances(tenantSlug))
+    setProjects(ensureTenantDemoProjects(tenantSlug))
+    setProjectScopeIdState(getProjectScopeId(tenantSlug))
 
     const requestedNav = normalizeTenantUserNavParam(searchParams.get('nav'))
     if (requestedNav) {
@@ -228,12 +250,21 @@ export function TenantUserWorkspacePage() {
     syncWorkspaceNavParam(setSearchParams, getTenantUserActiveNav(tenantSlug), { replace: true })
   }, [isValidTenant, searchParams, setSearchParams, tenantSlug])
 
+  const handleProjectScopeChange = useCallback(
+    (scopeId: ProjectScopeId) => {
+      setProjectScopeIdState(scopeId)
+      setProjectScopeId(tenantSlug, scopeId)
+    },
+    [tenantSlug],
+  )
+
   const handleNavChange = useCallback(
     (navId: string) => {
       const nextNavId = navId as TenantUserNavId
       setActiveNavId(nextNavId)
       setTenantUserActiveNav(tenantSlug, nextNavId)
-      syncWorkspaceNavParam(setSearchParams, nextNavId)
+      setNavContentKey((current) => current + 1)
+      syncWorkspaceNavParam(setSearchParams, nextNavId, { showLanding: true })
 
       // GenAI API keys drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
       setSearchParams((current) => {
@@ -259,6 +290,18 @@ export function TenantUserWorkspacePage() {
     },
     [setSearchParams, tenantSlug],
   )
+
+  const handleNavigateToCatalogItem = useCallback(
+    (catalogItemDisplayName: string) => {
+      handleNavChange('catalog')
+      syncWorkspaceCatalogItemParam(setSearchParams, catalogItemDisplayName)
+    },
+    [handleNavChange, setSearchParams],
+  )
+
+  const handleOpenCatalogItemConsumed = useCallback(() => {
+    setOpenCatalogItemKey(null)
+  }, [])
 
   const handleNavigateToInstances = useCallback(
     (options?: { serviceId?: CatalogServiceId }) => {
@@ -347,7 +390,6 @@ export function TenantUserWorkspacePage() {
         ) ?? defaultCatalogDraft)
       : defaultCatalogDraft
   const catalogDraft = focusedCatalogDraft
-  const invitation = getTenantUserProjectInvitation(tenantSlug, organization)
   const displayName = DEMO_TENANT_DISPLAY_USER[tenantSlug]
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
@@ -362,9 +404,20 @@ export function TenantUserWorkspacePage() {
             tenantSlug={tenantSlug}
             instances={instances}
             onInstancesChange={setInstances}
-            defaultScopeFieldLabel={invitation.scopeFieldLabel}
+            projects={projects}
+            projectScopeId={projectScopeId}
+            onProjectScopeChange={handleProjectScopeChange}
+            onProjectsChange={setProjects}
+            organization={organization}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
             activeNavId={activeNavId}
+            onNavigateToCatalogItem={handleNavigateToCatalogItem}
+            openInstanceId={openInstanceId}
+            onOpenInstanceConsumed={() => setOpenInstanceId(null)}
+            onNavigateToProject={(project) => {
+              setOpenProjectId(project.id)
+              handleNavChange('projects-teams')
+            }}
           />
         )
       case 'genai-asset-endpoints':
@@ -377,9 +430,32 @@ export function TenantUserWorkspacePage() {
         return <PlaygroundPage />
       case 'genai-api-keys':
         return <GenaiApiKeysPage surface="tenant-user" />
+      case 'projects-teams':
+        return organization ? (
+          <TenantAdminProjectsTeamsPage
+            tenantSlug={tenantSlug}
+            organization={organization}
+            projects={projects}
+            instances={instances}
+            onProjectsChange={setProjects}
+            onInstancesChange={(updater) => setInstances((current) => [...updater(current)])}
+            openProjectId={openProjectId}
+            onOpenProjectConsumed={() => setOpenProjectId(null)}
+            onNavigateToInstance={(instance) => {
+              const project = projects.find((entry) => entry.name === instance.projectName)
+              if (project) {
+                handleProjectScopeChange(project.id)
+              }
+              setOpenInstanceId(instance.id)
+              handleNavChange(getServicesNavId(getTenantInstanceServiceId(instance)))
+            }}
+          />
+        ) : null
       case 'networking-virtual-networks':
         return (
           <ProviderAdminVirtualNetworksPage
+            tenantSlug={tenantSlug}
+            readOnly
             openVirtualNetworkId={openVirtualNetworkId}
             onOpenVirtualNetworkConsumed={() => setOpenVirtualNetworkId(null)}
             onNavigateToSubnet={(subnetId) => {
@@ -395,6 +471,8 @@ export function TenantUserWorkspacePage() {
       case 'networking-subnets':
         return (
           <ProviderAdminSubnetsPage
+            tenantSlug={tenantSlug}
+            readOnly
             openSubnetId={openSubnetId}
             onOpenSubnetConsumed={() => setOpenSubnetId(null)}
             onNavigateToVirtualNetwork={(virtualNetworkId) => {
@@ -406,6 +484,8 @@ export function TenantUserWorkspacePage() {
       case 'networking-security-groups':
         return (
           <ProviderAdminSecurityGroupsPage
+            tenantSlug={tenantSlug}
+            readOnly
             openSecurityGroupId={openSecurityGroupId}
             onOpenSecurityGroupConsumed={() => setOpenSecurityGroupId(null)}
             onNavigateToVirtualNetwork={(virtualNetworkId) => {
@@ -415,7 +495,13 @@ export function TenantUserWorkspacePage() {
           />
         )
       case 'networking-external-ip-pools':
-        return <ProviderAdminExternalIpPoolsPage />
+        return (
+          <ProviderAdminExternalIpPoolsPage
+            tenantSlug={tenantSlug}
+            readOnly
+            scopeOrganization={organization}
+          />
+        )
       case 'activity-log':
         return <TenantUserActivityLogPage />
       case 'catalog':
@@ -424,11 +510,15 @@ export function TenantUserWorkspacePage() {
           <TenantUserCatalogPage
             organization={organization}
             catalogDraft={catalogDraft}
-            scopeKind={invitation.scopeKind}
-            scopeLabel={invitation.scopeLabel}
-            scopeFieldLabel={invitation.scopeFieldLabel}
+            tenantSlug={tenantSlug}
+            projects={projects}
+            initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
+            onProjectScopeChange={handleProjectScopeChange}
+            onProjectsChange={setProjects}
             preferCatalogDraft={Boolean(previewSession?.catalogItemId)}
             autoOpenLaunchWizard={Boolean(previewSession?.autoLaunch && previewSession.catalogItemId)}
+            openCatalogItemKey={openCatalogItemKey}
+            onOpenCatalogItemConsumed={handleOpenCatalogItemConsumed}
             existingInstanceNames={instances.map((instance) => instance.name)}
             onProvisioningStarted={handleProvisioningStarted}
             onDismissDuringProvisioning={handleDismissDuringProvisioning}
@@ -447,7 +537,7 @@ export function TenantUserWorkspacePage() {
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
     >
-      {renderWorkspaceContent()}
+      <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>
   )
 }

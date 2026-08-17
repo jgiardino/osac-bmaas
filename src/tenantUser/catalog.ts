@@ -1,6 +1,12 @@
 import type { CatalogSpecRow } from '../catalog/catalogSpecs'
-import { resolveCatalogOsImage, resolveCatalogSpecRows } from '../catalog/catalogSpecs'
+import {
+  getCatalogSpecRowValue,
+  resolveBaremetalCatalogCardSpecRows,
+  resolveCatalogOsImage,
+  resolveCatalogSpecRows,
+} from '../catalog/catalogSpecs'
 import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import {
@@ -16,6 +22,7 @@ import {
   CATALOG_SERVICE_LABELS,
   resolveRateCard,
   type CatalogServiceId,
+  type PublishCatalogScope,
   type RateCard,
 } from '../providerSetup/templateDemo'
 
@@ -38,23 +45,32 @@ export type TenantUserCatalogCard = {
   templateRefId: string
   templateName: string
   instanceTypeLabel?: string
+  instanceTypeId?: string
   diskImageId?: string
   diskImageLabel?: string
+  clusterVersionMode?: 'locked' | 'editable'
+  nodeSetId?: string
+  nodeSetLabel?: string
+  hostTypeId?: string
+  hostTypeLabel?: string
+  clusterNodeTopologyMode?: 'locked' | 'editable'
   fieldPolicies?: CatalogFieldPolicy[]
   rateCard: RateCard
+  scope: PublishCatalogScope
+  createdAt: string
 }
 
 export const TENANT_USER_CATALOG_SPECS = {
   categoryLabel: 'Compute · Standard',
   hardwareProfile: 'Dell PowerEdge R750',
-  cpu: 'Intel Xeon Gold 6338 × 2',
-  ram: '512 GB DDR4',
-  gpu: 'CPU-only',
+  cpu: '64 vCPU',
+  ram: '512 GB',
+  gpu: 'NVIDIA A100 80 GB',
   osImage: 'RHEL 9.4',
   footerNote: 'Hardware pre-configured · Admin-managed',
 } as const
 
-const CLUSTER_FOOTER_NOTE = 'Cluster profile pre-configured · Admin-managed'
+const CLUSTER_FOOTER_NOTE = 'Cluster pre-configured · Admin-managed'
 const VM_FOOTER_NOTE = 'Instance profile pre-configured · Admin-managed'
 
 function getFooterNote(serviceId: CatalogServiceId): string {
@@ -105,6 +121,10 @@ export const TENANT_USER_CATALOG_FALLBACK: TenantUserCatalogCard = {
   catalogItemId: 'cat-bm-gpu-training',
   templateRefId: 'bm-dell-r750',
   templateName: 'gpu-a100-training-standard',
+  instanceTypeId: 'large',
+  instanceTypeLabel: formatBaremetalInstanceTypeLabel('large'),
+  scope: 'global-public',
+  createdAt: new Date().toISOString(),
   rateCard: {
     hourlyRate: 4.25,
     monthlyRate: 2850,
@@ -154,7 +174,10 @@ export function getTenantUserCatalogCardFromDraft(
 ): TenantUserCatalogCard {
   const rateCard = resolveRateCard(catalog)
   const serviceId = catalog.serviceId ?? 'baremetal'
-  const specRows = resolveCatalogSpecRows(catalog)
+  const specRows =
+    serviceId === 'baremetal'
+      ? resolveBaremetalCatalogCardSpecRows(catalog)
+      : resolveCatalogSpecRows(catalog)
 
   return {
     serviceId,
@@ -165,19 +188,28 @@ export function getTenantUserCatalogCardFromDraft(
     categoryLabel: specRows.map((row) => row.value).join(' · '),
     hardwareProfile: getHardwareProfileLabel(serviceId, specRows),
     specRows,
-    cpu: specRows[0]?.value ?? '—',
-    ram: specRows[1]?.value ?? '—',
-    gpu: specRows[2]?.value ?? '—',
+    cpu: getCatalogSpecRowValue(specRows, 'CPU'),
+    ram: getCatalogSpecRowValue(specRows, 'RAM'),
+    gpu: getCatalogSpecRowValue(specRows, 'GPU'),
     osImage: resolveCatalogOsImage(catalog),
     footerNote: getFooterNote(serviceId),
     catalogItemId: catalog.catalogItemId,
     templateRefId: catalog.templateRefId,
     templateName: catalog.templateName,
     instanceTypeLabel: catalog.instanceTypeLabel,
+    instanceTypeId: catalog.instanceTypeId,
     diskImageId: catalog.diskImageId,
     diskImageLabel: catalog.diskImageLabel,
+    clusterVersionMode: catalog.clusterVersionMode,
+    nodeSetId: catalog.nodeSetId,
+    nodeSetLabel: catalog.nodeSetLabel,
+    hostTypeId: catalog.hostTypeId,
+    hostTypeLabel: catalog.hostTypeLabel,
+    clusterNodeTopologyMode: catalog.clusterNodeTopologyMode,
     fieldPolicies: catalog.fieldPolicies,
     rateCard,
+    scope: catalog.scope,
+    createdAt: catalog.createdAt,
   }
 }
 

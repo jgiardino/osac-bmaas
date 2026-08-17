@@ -2,7 +2,10 @@ import type { ProviderServiceId } from './constants'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import {
+  createDemoHarborlineCapitalOrganization,
   createDemoNorthSummitBankOrganization,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_SLUG,
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
   DEFAULT_REGISTER_ORGANIZATION_FORM,
   hasPendingIdpInvite,
@@ -24,14 +27,21 @@ import {
   toCatalogNetworkOption,
 } from '../providerAdmin/networkInventory'
 import type { CatalogNetworkPolicy, CatalogNetworkResourceOption } from '../providerAdmin/catalogNetworkPolicy'
+import { replaceInventoryItemById } from '../networking/networkInventoryStorageUtils'
 import {
   normalizeCatalogNetworkPolicy,
   resolveCatalogNetworkPolicy,
+  toExternalIpPoolCatalogOption,
 } from '../providerAdmin/catalogNetworkPolicy'
-import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import type {
+  CatalogClusterNodeTopologyMode,
+  CatalogClusterVersionMode,
+  CatalogFieldPolicy,
+} from '../catalog/catalogPublishConfig'
 import type {
   CatalogServiceId,
   PublishCatalogScope,
+  PublishedTemplatePayload,
   RateCard,
   SavedMasterTemplate,
 } from './templateDemo'
@@ -134,6 +144,7 @@ export function getProviderActiveNav(): ProviderAdminNavId {
       value === 'ai-maas-governance' ||
       value === 'ai-model-catalog-settings' ||
       value === 'ai-admin-api-keys' ||
+      value === 'projects-teams' ||
       value === 'infrastructure-data-centers' ||
       value === 'infrastructure-hardware-inventory' ||
       value === 'infrastructure-bmaas-templates' ||
@@ -231,6 +242,22 @@ export type ProviderCatalogDraft = {
   /** Disk / OS image for BM/VM, or cluster version id/label for Cluster as a Service. */
   diskImageId?: string
   diskImageLabel?: string
+  /**
+   * Cluster as a Service only. When `editable`, tenants may change version at launch.
+   * Defaults to locked when omitted.
+   */
+  clusterVersionMode?: CatalogClusterVersionMode
+  /** Cluster default worker node set. */
+  nodeSetId?: string
+  nodeSetLabel?: string
+  /** Cluster default host type for the node set. */
+  hostTypeId?: string
+  hostTypeLabel?: string
+  /**
+   * Cluster as a Service only. When `editable`, tenants may change node set / host type at launch.
+   * Defaults to locked when omitted.
+   */
+  clusterNodeTopologyMode?: CatalogClusterNodeTopologyMode
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
 }
@@ -447,6 +474,37 @@ function catalogItemIdentityChanged(
   )
 }
 
+function dedupeProviderCatalogItems(items: ProviderCatalogDraft[]): ProviderCatalogDraft[] {
+  const byId = new Map<string, ProviderCatalogDraft>()
+
+  for (const item of items) {
+    const existing = byId.get(item.catalogItemId)
+    if (!existing) {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+
+    const existingLive = existing.status !== 'unpublished'
+    const nextLive = item.status !== 'unpublished'
+
+    // Prefer the live row when duplicates share an id.
+    if (!existingLive && nextLive) {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+    if (existingLive && !nextLive) {
+      continue
+    }
+
+    // Same publish state: keep the newer row.
+    if ((item.createdAt ?? '') >= (existing.createdAt ?? '')) {
+      byId.set(item.catalogItemId, item)
+    }
+  }
+
+  return Array.from(byId.values())
+}
+
 export function getProviderCatalogItems(): ProviderCatalogDraft[] {
   try {
     const raw = sessionStorage.getItem(PROVIDER_CATALOG_ITEMS_KEY)
@@ -455,8 +513,14 @@ export function getProviderCatalogItems(): ProviderCatalogDraft[] {
       if (Array.isArray(parsed)) {
         const items = parsed.filter(isProviderCatalogDraft)
         const migrated = items.map(migrateCatalogItemDns1123Identity)
-        if (migrated.some((item, index) => catalogItemIdentityChanged(items[index]!, item))) {
-          persistProviderCatalogItems(migrated)
+        const deduped = dedupeProviderCatalogItems(migrated)
+        const identityChanged = migrated.some((item, index) =>
+          catalogItemIdentityChanged(items[index]!, item),
+        )
+        const duplicatesRemoved = deduped.length !== migrated.length
+
+        if (identityChanged || duplicatesRemoved) {
+          persistProviderCatalogItems(deduped)
 
           try {
             const organizations = getProviderRegisteredOrganizations()
@@ -466,7 +530,7 @@ export function getProviderCatalogItems(): ProviderCatalogDraft[] {
                 .filter(([from, to]) => from !== to),
             )
             if (idRemap.size > 0 || organizations.some((org) =>
-              migrated.some(
+              deduped.some(
                 (item) =>
                   org.catalogItemId === item.catalogItemId &&
                   org.catalogDisplayName !== item.displayName,
@@ -477,7 +541,7 @@ export function getProviderCatalogItems(): ProviderCatalogDraft[] {
                   const remappedId = org.catalogItemId
                     ? idRemap.get(org.catalogItemId) ?? org.catalogItemId
                     : null
-                  const catalog = migrated.find((item) => item.catalogItemId === remappedId)
+                  const catalog = deduped.find((item) => item.catalogItemId === remappedId)
                   if (!catalog) {
                     return org.catalogItemId && idRemap.has(org.catalogItemId)
                       ? {
@@ -499,7 +563,7 @@ export function getProviderCatalogItems(): ProviderCatalogDraft[] {
             /* demo storage unavailable */
           }
         }
-        return migrated
+        return deduped
       }
     }
   } catch {
@@ -566,6 +630,14 @@ export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCat
     ...(source.instanceTypeLabel ? { instanceTypeLabel: source.instanceTypeLabel } : {}),
     ...(source.diskImageId ? { diskImageId: source.diskImageId } : {}),
     ...(source.diskImageLabel ? { diskImageLabel: source.diskImageLabel } : {}),
+    ...(source.clusterVersionMode ? { clusterVersionMode: source.clusterVersionMode } : {}),
+    ...(source.nodeSetId ? { nodeSetId: source.nodeSetId } : {}),
+    ...(source.nodeSetLabel ? { nodeSetLabel: source.nodeSetLabel } : {}),
+    ...(source.hostTypeId ? { hostTypeId: source.hostTypeId } : {}),
+    ...(source.hostTypeLabel ? { hostTypeLabel: source.hostTypeLabel } : {}),
+    ...(source.clusterNodeTopologyMode
+      ? { clusterNodeTopologyMode: source.clusterNodeTopologyMode }
+      : {}),
     ...(source.fieldPolicies?.length
       ? { fieldPolicies: source.fieldPolicies.map((policy) => ({ ...policy })) }
       : {}),
@@ -669,6 +741,102 @@ export function updateProviderCatalogItem(
   return updated
 }
 
+/** Applies a full publish wizard payload to an existing catalog item. */
+export function updateProviderCatalogItemFromPayload(
+  catalogItemId: string,
+  payload: PublishedTemplatePayload,
+): ProviderCatalogDraft | null {
+  const items = getProviderCatalogItems()
+  const index = items.findIndex((item) => item.catalogItemId === catalogItemId)
+  if (index < 0) {
+    return null
+  }
+
+  const current = items[index]!
+  const enterpriseTenantIds = [
+    ...new Set(
+      (payload.enterpriseTenantIds?.length
+        ? payload.enterpriseTenantIds
+        : payload.enterpriseTenantId
+          ? [payload.enterpriseTenantId]
+          : []
+      )
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ]
+
+  const updated: ProviderCatalogDraft = {
+    ...current,
+    templateRefId: payload.templateRefId,
+    templateName: payload.templateName,
+    displayName: payload.displayName.trim(),
+    description: payload.description.trim(),
+    scope: payload.scope,
+    rateCard: payload.rateCard,
+    serviceId: payload.serviceId,
+    networkPolicy: payload.networkPolicy
+      ? normalizeCatalogNetworkPolicy(payload.networkPolicy)
+      : current.networkPolicy,
+    ...(payload.instanceTypeId ? { instanceTypeId: payload.instanceTypeId } : {}),
+    ...(payload.instanceTypeLabel ? { instanceTypeLabel: payload.instanceTypeLabel } : {}),
+    ...(payload.diskImageId ? { diskImageId: payload.diskImageId } : {}),
+    ...(payload.diskImageLabel ? { diskImageLabel: payload.diskImageLabel } : {}),
+    ...(payload.clusterVersionMode
+      ? { clusterVersionMode: payload.clusterVersionMode }
+      : {}),
+    ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
+    ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
+    ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
+    ...(payload.hostTypeLabel ? { hostTypeLabel: payload.hostTypeLabel } : {}),
+    ...(payload.clusterNodeTopologyMode
+      ? { clusterNodeTopologyMode: payload.clusterNodeTopologyMode }
+      : {}),
+    ...(payload.fieldPolicies?.length ? { fieldPolicies: payload.fieldPolicies } : {}),
+  }
+
+  if (payload.scope === 'vip-enterprise' && enterpriseTenantIds.length > 0) {
+    updated.enterpriseTenantId = enterpriseTenantIds[0]
+    updated.enterpriseTenantIds = enterpriseTenantIds
+  } else {
+    delete updated.enterpriseTenantId
+    delete updated.enterpriseTenantIds
+  }
+
+  const next = [...items]
+  next[index] = updated
+  persistProviderCatalogItems(next)
+
+  try {
+    const organizations = getProviderRegisteredOrganizations()
+    const hasAssigned = organizations.some((org) => org.catalogItemId === catalogItemId)
+    if (hasAssigned) {
+      setProviderRegisteredOrganizations(
+        organizations.map((org) =>
+          org.catalogItemId === catalogItemId
+            ? { ...org, catalogDisplayName: updated.displayName }
+            : org,
+        ),
+      )
+    }
+
+    const vipOrganizationIds =
+      payload.vipOrganizationIds?.length
+        ? payload.vipOrganizationIds
+        : payload.vipOrganizationId
+          ? [payload.vipOrganizationId]
+          : []
+
+    for (const organizationId of vipOrganizationIds) {
+      assignCatalogToRegisteredOrganization(organizationId, updated)
+    }
+  } catch {
+    /* demo storage unavailable */
+  }
+
+  return updated
+}
+
 export function updateProviderCatalogNetworkPolicy(
   catalogItemId: string,
   networkPolicy: CatalogNetworkPolicy,
@@ -715,7 +883,16 @@ export function patchProviderCatalogItem(
   patch: Partial<
     Pick<
       ProviderCatalogDraft,
-      'instanceTypeId' | 'instanceTypeLabel' | 'diskImageId' | 'diskImageLabel'
+      | 'description'
+      | 'instanceTypeId'
+      | 'instanceTypeLabel'
+      | 'diskImageId'
+      | 'diskImageLabel'
+      | 'nodeSetId'
+      | 'nodeSetLabel'
+      | 'hostTypeId'
+      | 'hostTypeLabel'
+      | 'clusterNodeTopologyMode'
     >
   >,
 ): ProviderCatalogDraft | null {
@@ -744,6 +921,7 @@ export function rewriteProviderCatalogItemIdentity(
   identity: {
     catalogItemId: string
     templateRefId?: string
+    templateName?: string
     displayName?: string
     description?: string
     scope?: PublishCatalogScope
@@ -761,6 +939,7 @@ export function rewriteProviderCatalogItemIdentity(
     ...current,
     catalogItemId: identity.catalogItemId,
     ...(identity.templateRefId ? { templateRefId: identity.templateRefId } : {}),
+    ...(identity.templateName ? { templateName: identity.templateName } : {}),
     ...(identity.displayName ? { displayName: identity.displayName } : {}),
     ...(identity.description !== undefined ? { description: identity.description } : {}),
   }
@@ -1331,8 +1510,8 @@ function removeRegisteredOrganizationsRaw(): void {
 }
 
 /**
- * Seeds North Summit Bank as the Organizations page baseline:
- * Active, IdP connected, roles defined with multiple admins and users.
+ * Seeds North Summit Bank + Harborline Capital as Organizations page baselines:
+ * Active, IdP connected, roles defined — two enterprises for VIP multi-select demos.
  */
 export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
   try {
@@ -1346,35 +1525,53 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       null
     const catalogDraft = denseGpu ?? getProviderCatalogDraft()
     const pools = getProviderExternalIpPools()
-    const pool =
+    const northSummitPool =
       getExternalIpPoolById(pools, DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId) ??
       pools.find((item) => item.assignedOrganizationId === DEMO_NORTH_SUMMIT_BANK_ORG_ID) ??
       pools[0] ??
       null
+    const harborlinePool =
+      getExternalIpPoolById(pools, 'eipool-standby-a') ??
+      pools.find((item) => item.assignedOrganizationId === DEMO_HARBORLINE_CAPITAL_ORG_ID) ??
+      null
 
-    const demoBase = createDemoNorthSummitBankOrganization({
+    const northSummitBase = createDemoNorthSummitBankOrganization({
       catalogItemId: catalogDraft?.catalogItemId ?? null,
       catalogDisplayName: catalogDraft?.displayName ?? null,
-      externalIpPoolId: pool?.id ?? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId,
-      externalIpPoolName: pool?.name ?? null,
-      externalIpPoolCidr: pool?.cidr ?? null,
+      externalIpPoolId:
+        northSummitPool?.id ?? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId,
+      externalIpPoolName: northSummitPool?.name ?? null,
+      externalIpPoolCidr: northSummitPool?.cidr ?? null,
+    })
+
+    const harborlineBase = createDemoHarborlineCapitalOrganization({
+      catalogItemId: null,
+      catalogDisplayName: null,
+      externalIpPoolId: harborlinePool?.id ?? 'eipool-standby-a',
+      externalIpPoolName: harborlinePool?.name ?? null,
+      externalIpPoolCidr: harborlinePool?.cidr ?? null,
     })
 
     const replacedOrganizations = current.filter(
       (organization) =>
-        organization.id === demoBase.id || organization.slug === demoBase.slug,
+        organization.id === northSummitBase.id ||
+        organization.slug === northSummitBase.slug ||
+        organization.id === harborlineBase.id ||
+        organization.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
     )
     const replacedIds = new Set(replacedOrganizations.map((organization) => organization.id))
-    const withoutNorthSummit = current.filter(
+    const remainingOrganizations = current.filter(
       (organization) => !replacedIds.has(organization.id),
     )
 
-    const pendingInviteSource = replacedOrganizations.find((organization) =>
-      hasPendingIdpInvite(organization),
+    const pendingInviteSource = replacedOrganizations.find(
+      (organization) =>
+        (organization.id === northSummitBase.id || organization.slug === northSummitBase.slug) &&
+        hasPendingIdpInvite(organization),
     )
-    const demo = pendingInviteSource
+    const northSummit = pendingInviteSource
       ? {
-          ...demoBase,
+          ...northSummitBase,
           idpManagerEmail: pendingInviteSource.idpManagerEmail,
           idpInviteToken: pendingInviteSource.idpInviteToken,
           idpInviteStatus: pendingInviteSource.idpInviteStatus,
@@ -1387,7 +1584,7 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
           identityProviderIssuerUrl: pendingInviteSource.identityProviderIssuerUrl,
           identityProviderClientId: pendingInviteSource.identityProviderClientId,
         }
-      : demoBase
+      : northSummitBase
 
     if (replacedIds.size > 0) {
       setProviderExternalIpPools(
@@ -1403,10 +1600,17 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       )
     }
 
-    setProviderRegisteredOrganizations([demo, ...withoutNorthSummit])
+    setProviderRegisteredOrganizations([
+      northSummit,
+      harborlineBase,
+      ...remainingOrganizations,
+    ])
 
-    if (pool) {
-      assignExternalIpPoolToRegisteredOrganization(pool.id, demo.id)
+    if (northSummitPool) {
+      assignExternalIpPoolToRegisteredOrganization(northSummitPool.id, northSummit.id)
+    }
+    if (harborlinePool) {
+      assignExternalIpPoolToRegisteredOrganization(harborlinePool.id, harborlineBase.id)
     }
 
     return getProviderRegisteredOrganizations()
@@ -1655,6 +1859,10 @@ export function addProviderExternalIpPool(pool: ExternalIpPool): void {
   setProviderExternalIpPools([...current, pool])
 }
 
+export function updateProviderExternalIpPool(pool: ExternalIpPool): void {
+  setProviderExternalIpPools(replaceInventoryItemById(getProviderExternalIpPools(), pool))
+}
+
 export function assignExternalIpPoolToOrganization(
   poolId: string,
   organizationId: string,
@@ -1699,10 +1907,6 @@ export function assignExternalIpPoolToRegisteredOrganization(
       return false
     }
 
-    if (organization.externalIpPoolId && organization.externalIpPoolId !== poolId) {
-      return false
-    }
-
     if (
       pool.assignedOrganizationId !== null &&
       pool.assignedOrganizationId !== organizationId
@@ -1710,10 +1914,7 @@ export function assignExternalIpPoolToRegisteredOrganization(
       return false
     }
 
-    if (
-      pool.assignedOrganizationId === organizationId &&
-      organization.externalIpPoolId === poolId
-    ) {
+    if (pool.assignedOrganizationId === organizationId) {
       return true
     }
 
@@ -1721,12 +1922,14 @@ export function assignExternalIpPoolToRegisteredOrganization(
     setProviderRegisteredOrganizations(
       organizations.map((item) =>
         item.id === organizationId
-          ? {
-              ...item,
-              externalIpPoolId: pool.id,
-              externalIpPoolName: pool.name,
-              externalIpPoolCidr: pool.cidr,
-            }
+          ? organization.externalIpPoolId
+            ? item
+            : {
+                ...item,
+                externalIpPoolId: pool.id,
+                externalIpPoolName: pool.name,
+                externalIpPoolCidr: pool.cidr,
+              }
           : item,
       ),
     )
@@ -1895,6 +2098,10 @@ export function addProviderVirtualNetwork(network: ProviderVirtualNetwork): void
   setProviderVirtualNetworks([...getProviderVirtualNetworks(), network])
 }
 
+export function updateProviderVirtualNetwork(network: ProviderVirtualNetwork): void {
+  setProviderVirtualNetworks(replaceInventoryItemById(getProviderVirtualNetworks(), network))
+}
+
 export function getProviderSubnets(): ProviderSubnet[] {
   try {
     const raw = sessionStorage.getItem(PROVIDER_SUBNETS_KEY)
@@ -1925,6 +2132,10 @@ export function setProviderSubnets(subnets: ProviderSubnet[]): void {
 
 export function addProviderSubnet(subnet: ProviderSubnet): void {
   setProviderSubnets([...getProviderSubnets(), subnet])
+}
+
+export function updateProviderSubnet(subnet: ProviderSubnet): void {
+  setProviderSubnets(replaceInventoryItemById(getProviderSubnets(), subnet))
 }
 
 export function getProviderSecurityGroups(): ProviderSecurityGroup[] {
@@ -1986,6 +2197,10 @@ export function addProviderSecurityGroup(group: ProviderSecurityGroup): void {
   setProviderSecurityGroups([...getProviderSecurityGroups(), group])
 }
 
+export function updateProviderSecurityGroup(group: ProviderSecurityGroup): void {
+  setProviderSecurityGroups(replaceInventoryItemById(getProviderSecurityGroups(), group))
+}
+
 export function getCatalogVirtualNetworkOptions(): CatalogNetworkResourceOption[] {
   return getProviderVirtualNetworks().map(toCatalogNetworkOption)
 }
@@ -2001,6 +2216,10 @@ export function getCatalogSubnetOptions(virtualNetworkId?: string): CatalogNetwo
 
 export function getCatalogSecurityGroupOptions(): CatalogNetworkResourceOption[] {
   return getProviderSecurityGroups().map(toCatalogNetworkOption)
+}
+
+export function getCatalogExternalIpPoolOptions(): CatalogNetworkResourceOption[] {
+  return getProviderExternalIpPools().map(toExternalIpPoolCatalogOption)
 }
 
 function isComputeImage(value: unknown): value is ComputeImage {

@@ -1,6 +1,11 @@
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
-import { getExternalIpPoolById } from '../providerAdmin/externalIpPools'
+import {
+  getExternalIpPoolById,
+  getExternalIpPoolsAssignedToOrganization,
+} from '../providerAdmin/externalIpPools'
 import { getProviderExternalIpPools } from '../providerSetup/storage'
+import type { TenantInstance } from '../tenantUser/instances'
+import { instanceBelongsToProject } from '../tenantUser/instances'
 
 export type TenantProjectCatalogItem = {
   id: string
@@ -8,6 +13,8 @@ export type TenantProjectCatalogItem = {
 }
 
 export type TenantProjectMemberRole = 'developer' | 'project-admin' | 'viewer'
+
+export type TenantProjectEnvironment = 'development' | 'staging' | 'production' | 'research'
 
 export type TenantProjectMember = {
   id: string
@@ -20,6 +27,7 @@ export type TenantProject = {
   id: string
   name: string
   description: string
+  environmentType: TenantProjectEnvironment
   instanceQuota: number
   externalIpPoolId: string | null
   externalIpPoolName: string | null
@@ -28,6 +36,42 @@ export type TenantProject = {
   members: TenantProjectMember[]
   createdAt: string
 }
+
+export const TENANT_PROJECT_ENVIRONMENT_LABELS: Record<TenantProjectEnvironment, string> = {
+  development: 'Development',
+  staging: 'Staging',
+  production: 'Production',
+  research: 'Research',
+}
+
+export function getTenantProjectEnvironmentLabel(
+  environmentType: TenantProjectEnvironment,
+): string {
+  return TENANT_PROJECT_ENVIRONMENT_LABELS[environmentType]
+}
+
+export function isTenantProjectEnvironment(value: unknown): value is TenantProjectEnvironment {
+  return (
+    value === 'development' ||
+    value === 'staging' ||
+    value === 'production' ||
+    value === 'research'
+  )
+}
+
+/** Stable demo project for Catalog/Services project-scope switcher. */
+export const DEMO_TENANT_PROJECT_ID = 'project_ml-project'
+export const DEMO_TENANT_PROJECT_NAME = 'ml-project'
+export const DEMO_TENANT_PROJECT_DESCRIPTION =
+  'Shared home for model training, experiment tracking, and inference at North Summit Bank. GPU bare metal, OpenShift clusters, and virtual machines are reserved here so data science and ML platform teams can iterate quickly and promote proven workloads toward production.'
+export const DEMO_TENANT_PROJECT_ENVIRONMENT: TenantProjectEnvironment = 'research'
+
+/** Secondary demo project so services can show multi-project associations. */
+export const DEMO_TENANT_PROJECT_ID_02 = 'project_ml-dev-team'
+export const DEMO_TENANT_PROJECT_NAME_02 = 'ml-dev-team'
+export const DEMO_TENANT_PROJECT_DESCRIPTION_02 =
+  'Day-to-day development workspace for feature experiments, notebook jobs, and pre-production model validation before promoting into ml-project.'
+export const DEMO_TENANT_PROJECT_ENVIRONMENT_02: TenantProjectEnvironment = 'development'
 
 export type OrganizationExternalIpPool = {
   id: string
@@ -40,7 +84,27 @@ export function generateTenantProjectId(): string {
   return `project_${suffix}`
 }
 
-export function resolveOrganizationExternalIpPool(
+export function resolveOrganizationExternalIpPools(
+  organization: RegisteredOrganization,
+): OrganizationExternalIpPool[] {
+  const assignedPools = getExternalIpPoolsAssignedToOrganization(
+    getProviderExternalIpPools(),
+    organization.id,
+  ).map((pool) => ({
+    id: pool.id,
+    name: pool.name,
+    cidr: pool.cidr,
+  }))
+
+  if (assignedPools.length > 0) {
+    return assignedPools
+  }
+
+  const legacyPool = resolveOrganizationExternalIpPoolFromOrgFields(organization)
+  return legacyPool ? [legacyPool] : []
+}
+
+function resolveOrganizationExternalIpPoolFromOrgFields(
   organization: RegisteredOrganization,
 ): OrganizationExternalIpPool | null {
   if (organization.externalIpPoolId && organization.externalIpPoolName && organization.externalIpPoolCidr) {
@@ -67,6 +131,35 @@ export function resolveOrganizationExternalIpPool(
   }
 }
 
+export function resolveOrganizationExternalIpPool(
+  organization: RegisteredOrganization,
+): OrganizationExternalIpPool | null {
+  const pools = resolveOrganizationExternalIpPools(organization)
+  if (pools.length === 0) {
+    return null
+  }
+
+  return (
+    pools.find((pool) => pool.id === organization.externalIpPoolId) ??
+    pools[0] ??
+    null
+  )
+}
+
+export function formatOrganizationExternalIpPoolsLabel(
+  pools: readonly OrganizationExternalIpPool[],
+): string {
+  if (pools.length === 0) {
+    return 'Not assigned'
+  }
+
+  if (pools.length === 1) {
+    return formatOrganizationExternalIpPoolLabel(pools[0])
+  }
+
+  return `${pools.length} pools assigned`
+}
+
 export function formatOrganizationExternalIpPoolLabel(
   pool: OrganizationExternalIpPool | null,
 ): string {
@@ -87,7 +180,7 @@ export function getTenantProjectPoolLabel(project: TenantProject): string {
     : project.externalIpPoolName
 }
 
-export function getTotalAllocatedInstanceQuota(projects: TenantProject[]): number {
+export function getTotalAllocatedInstanceQuota(projects: readonly TenantProject[]): number {
   return projects.reduce((total, project) => total + project.instanceQuota, 0)
 }
 
@@ -101,6 +194,23 @@ export function getTenantProjectCatalogLabel(project: TenantProject): string {
   }
 
   return project.catalogItems.map((item) => item.displayName).join(', ')
+}
+
+export function getTenantProjectServicesLabel(
+  instances: readonly TenantInstance[],
+  project: TenantProject,
+): string {
+  const count = getInstancesForTenantProject(instances, project).length
+
+  if (count === 0) {
+    return 'No services'
+  }
+
+  if (count === 1) {
+    return '1 service'
+  }
+
+  return `${count} services`
 }
 
 export function getTenantProjectMemberCountLabel(project: TenantProject): string {
@@ -117,48 +227,104 @@ export function getTenantProjectMemberCountLabel(project: TenantProject): string
   return `${count} members`
 }
 
+export function getInstancesForTenantProject(
+  instances: readonly TenantInstance[],
+  project: TenantProject,
+): TenantInstance[] {
+  return instances.filter((instance) => instanceBelongsToProject(instance, project))
+}
+
+export function getInstancesAvailableForTenantProject(
+  instances: readonly TenantInstance[],
+  project: TenantProject,
+): TenantInstance[] {
+  return instances
+    .filter((instance) => !instanceBelongsToProject(instance, project))
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export function getTenantProjectActions(
   project: TenantProject,
   handlers: {
-    onAttachCatalog: (project: TenantProject) => void
+    onViewDetails: (project: TenantProject) => void
     onDelete: (projectId: string) => void
   },
 ): Array<{
   title: string
   onClick: () => void
+  isDanger?: boolean
 }> {
   return [
     {
-      title: 'View project',
+      title: 'View details',
       onClick: () => {
-        /* demo */
-      },
-    },
-    {
-      title: 'Manage team members',
-      onClick: () => {
-        /* demo */
-      },
-    },
-    {
-      title: 'Edit quotas',
-      onClick: () => {
-        /* demo */
-      },
-    },
-    {
-      title: project.catalogItems.length > 0 ? 'Manage catalog items' : 'Attach catalog items',
-      onClick: () => {
-        handlers.onAttachCatalog(project)
+        handlers.onViewDetails(project)
       },
     },
     {
       title: 'Delete project',
+      isDanger: true,
       onClick: () => {
         handlers.onDelete(project.id)
       },
     },
   ]
+}
+
+export type ProjectEnvironmentFilter = 'all' | TenantProjectEnvironment
+
+export const PROJECT_ENVIRONMENT_FILTER_OPTIONS: ReadonlyArray<{
+  value: ProjectEnvironmentFilter
+  label: string
+}> = [
+  { value: 'all', label: 'All environments' },
+  { value: 'development', label: TENANT_PROJECT_ENVIRONMENT_LABELS.development },
+  { value: 'staging', label: TENANT_PROJECT_ENVIRONMENT_LABELS.staging },
+  { value: 'production', label: TENANT_PROJECT_ENVIRONMENT_LABELS.production },
+  { value: 'research', label: TENANT_PROJECT_ENVIRONMENT_LABELS.research },
+]
+
+export function projectMatchesSearch(project: TenantProject, searchValue: string): boolean {
+  const query = searchValue.trim().toLowerCase()
+  if (!query) {
+    return true
+  }
+
+  return (
+    project.name.toLowerCase().includes(query) ||
+    project.id.toLowerCase().includes(query) ||
+    project.description.toLowerCase().includes(query) ||
+    getTenantProjectEnvironmentLabel(project.environmentType).toLowerCase().includes(query) ||
+    getTenantProjectPoolLabel(project).toLowerCase().includes(query)
+  )
+}
+
+export function matchesProjectEnvironmentFilter(
+  project: TenantProject,
+  selectedEnvironment: ProjectEnvironmentFilter,
+): boolean {
+  if (selectedEnvironment === 'all') {
+    return true
+  }
+
+  return project.environmentType === selectedEnvironment
+}
+
+export function buildProjectFilterParts(
+  searchValue: string,
+  selectedEnvironment: ProjectEnvironmentFilter,
+): string[] {
+  const parts: string[] = []
+
+  if (selectedEnvironment !== 'all') {
+    parts.push(`environment: ${getTenantProjectEnvironmentLabel(selectedEnvironment)}`)
+  }
+
+  if (searchValue.trim()) {
+    parts.push(`search: "${searchValue.trim()}"`)
+  }
+
+  return parts
 }
 
 export const TENANT_PROJECTS_TEAMS_DEMO = {
@@ -167,6 +333,14 @@ export const TENANT_PROJECTS_TEAMS_DEMO = {
   emptyBody: 'Create your first project to carve quota slices and invite developers.',
   createFirstProjectLabel: 'Create first project',
   createProjectLabel: 'Create project',
+  detailsFallbackDescription: 'Project workspace for scoped catalog access and team collaboration.',
+  servicesEmpty: 'No services in this project yet.',
+  membersEmpty: 'No project members yet. Add someone to grant project access.',
+  addMemberLabel: 'Add',
+  addServiceLabel: 'Add',
+  addServiceModalDescription:
+    'Associate an existing service with this project. Project members will see it in Services.',
+  removeMemberLabel: 'Remove',
 } as const
 
 const ORG_VCPU_TOTAL = 240

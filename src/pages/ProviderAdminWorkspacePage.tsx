@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
+import { useSearchParams } from 'react-router-dom'
+import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { ProviderAdminShell } from '../components/provider-admin/ProviderAdminShell'
 import { ProviderSetupWizardPanel } from '../components/provider-setup/ProviderSetupWizardPanel'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
@@ -29,6 +29,7 @@ import {
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
+import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
@@ -39,8 +40,6 @@ import {
   isProviderAdminNavId,
 } from '../providerSetup/prototypeEntry'
 import {
-  clearProviderServicesSelected,
-  clearProviderSetupComplete,
   getProviderActiveNav,
   getProviderCatalogItems,
   getProviderSelectedServices,
@@ -59,12 +58,22 @@ import {
   updateTenantUserInstance,
 } from '../tenantUser/storage'
 import {
+  getTenantInstanceServiceId,
   isStickyDemoProvisioningInstance,
   type TenantInstance,
 } from '../tenantUser/instances'
 import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROVISIONING_MS } from '../tenantUser/launchInstanceWizard'
 import type { WorkspaceTransition } from '../providerAdmin/workspace'
 import type { BmaasTemplateLookup } from '../providerAdmin/bmaasTemplates'
+import { ensureTenantDemoProjects } from '../tenantAdmin/storage'
+import type { TenantProject } from '../tenantAdmin/projects'
+import { getWorkspaceOrganization } from '../tenantAdmin/organizations'
+import {
+  getProjectScopeId,
+  isAllProjectsScope,
+  setProjectScopeId,
+  type ProjectScopeId,
+} from '../tenantUser/projectScope'
 
 function getServicesNavId(serviceId: CatalogServiceId): ProviderAdminNavId {
   switch (serviceId) {
@@ -111,97 +120,84 @@ function getLockedServiceIdFromNav(navId: ProviderAdminNavId): CatalogServiceId 
 function readInitialProviderNav(searchParams: URLSearchParams): ProviderAdminNavId {
   const requestedNav = normalizeProviderNavParam(searchParams.get('nav'))
   if (requestedNav) {
+    ensureProviderPostSetupPrototype(requestedNav)
     return requestedNav
   }
 
   return getProviderActiveNav()
 }
 
-type ProviderAdminWorkspacePageProps = {
-  /** Enter → login lands here so first-time welcome always shows, ignoring leftover session/?nav=. */
-  forceOnboarding?: boolean
-}
-
-export function ProviderAdminWorkspacePage({
-  forceOnboarding = false,
-}: ProviderAdminWorkspacePageProps) {
-  const navigate = useNavigate()
+export function ProviderAdminWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [setupComplete, setSetupComplete] = useState(() =>
-    forceOnboarding ? false : isProviderSetupComplete(),
-  )
-  const [servicesSelected, setServicesSelected] = useState(() =>
-    forceOnboarding ? false : isProviderServicesSelected(),
-  )
+  const [setupComplete, setSetupComplete] = useState(() => isProviderSetupComplete())
+  const [servicesSelected, setServicesSelected] = useState(() => isProviderServicesSelected())
   const [selectedServices, setSelectedServices] = useState<ProviderServiceId[]>(() =>
-    forceOnboarding ? [] : getProviderSelectedServices(),
+    getProviderSelectedServices(),
   )
   const [activeNavId, setActiveNavId] = useState<ProviderAdminNavId>(() =>
-    forceOnboarding ? 'overview' : readInitialProviderNav(searchParams),
+    readInitialProviderNav(searchParams),
   )
   const [catalogItems, setCatalogItems] = useState(() =>
-    !forceOnboarding && isProviderSetupComplete()
-      ? ensureProviderCatalogDemoItems()
-      : getProviderCatalogItems(),
+    isProviderSetupComplete() ? ensureProviderCatalogDemoItems() : getProviderCatalogItems(),
   )
   const [workspaceTransition, setWorkspaceTransition] = useState<WorkspaceTransition>('idle')
   const [openTemplateLookup, setOpenTemplateLookup] = useState<BmaasTemplateLookup | null>(null)
   const [openVirtualNetworkId, setOpenVirtualNetworkId] = useState<string | null>(null)
   const [openSubnetId, setOpenSubnetId] = useState<string | null>(null)
   const [openSecurityGroupId, setOpenSecurityGroupId] = useState<string | null>(null)
+  const [openCatalogItemKey, setOpenCatalogItemKey] = useState<string | null>(null)
+  const [openInstanceId, setOpenInstanceId] = useState<string | null>(null)
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
   const [instances, setInstances] = useState(() =>
     ensureTenantDemoInstances(PROVIDER_SERVICES_DEMO_TENANT),
   )
+  const [projects, setProjects] = useState<TenantProject[]>(() =>
+    ensureTenantDemoProjects(PROVIDER_SERVICES_DEMO_TENANT),
+  )
+  const [projectScopeId, setProjectScopeIdState] = useState<ProjectScopeId>(() =>
+    getProjectScopeId(PROVIDER_SERVICES_DEMO_TENANT),
+  )
+  const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
+  const catalogEditLeaveAttemptRef = useRef<((onConfirmed: () => void) => void) | null>(null)
+
+  const navParam = searchParams.get('nav')
 
   useLayoutEffect(() => {
-    if (forceOnboarding) {
-      clearProviderSetupComplete()
-      clearProviderServicesSelected()
-      setSetupComplete(false)
-      setServicesSelected(false)
-      setSelectedServices([])
-      return
-    }
-
-    const requestedNav = normalizeProviderNavParam(searchParams.get('nav'))
+    const requestedNav = normalizeProviderNavParam(navParam)
     if (requestedNav) {
-      // Landing-page Catalog shortcuts deep-link with ?nav= to skip first-time setup.
-      ensureProviderPostSetupPrototype(requestedNav)
+      // Do not re-run full demo seed/sync on every left-nav click — that rewrote
+      // catalog identities and could drop unpublished drafts when returning to Catalog.
+      const storedItems = getProviderCatalogItems()
+      if (storedItems.length === 0) {
+        ensureProviderPostSetupPrototype(requestedNav)
+      } else {
+        setProviderActiveNav(requestedNav)
+      }
       setCatalogItems(getProviderCatalogItems())
       setSelectedServices(getProviderSelectedServices())
       setServicesSelected(true)
       setSetupComplete(true)
       setActiveNavId(requestedNav)
-      setProviderActiveNav(requestedNav)
       setInstances(ensureTenantDemoInstances(PROVIDER_SERVICES_DEMO_TENANT))
-      return
-    }
-
-    // Do not write ?nav= during first-time setup — that would re-enter the deep-link
-    // branch above and skip the welcome / service-selection screen.
-    if (!isProviderSetupComplete()) {
+      setProjects(ensureTenantDemoProjects(PROVIDER_SERVICES_DEMO_TENANT))
+      setProjectScopeIdState(getProjectScopeId(PROVIDER_SERVICES_DEMO_TENANT))
       return
     }
 
     const fallbackNav = getProviderActiveNav()
     syncWorkspaceNavParam(setSearchParams, fallbackNav, { replace: true })
-    setCatalogItems(ensureProviderCatalogDemoItems())
-  }, [forceOnboarding, searchParams, setSearchParams])
+
+    if (isProviderSetupComplete()) {
+      const storedItems = getProviderCatalogItems()
+      setCatalogItems(
+        storedItems.length > 0 ? storedItems : ensureProviderCatalogDemoItems(),
+      )
+    }
+    // Only react when `nav` changes — not when `item=` opens catalog details.
+  }, [navParam, setSearchParams])
 
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
-
-  const finishSetupToWorkspace = (navId: ProviderAdminNavId) => {
-    setProviderActiveNav(navId)
-    setProviderSetupComplete()
-    setActiveNavId(navId)
-    setSetupComplete(true)
-    if (forceOnboarding) {
-      navigate(`/provider/workspace?nav=${navId}`, { replace: true })
-      return
-    }
-    syncWorkspaceNavParam(setSearchParams, navId, { replace: true })
-  }
 
   const handleServicesContinue = (nextSelectedServices: ProviderServiceId[]) => {
     setProviderSelectedServices(nextSelectedServices)
@@ -235,6 +231,16 @@ export function ProviderAdminWorkspacePage({
       ...(payload.instanceTypeLabel ? { instanceTypeLabel: payload.instanceTypeLabel } : {}),
       ...(payload.diskImageId ? { diskImageId: payload.diskImageId } : {}),
       ...(payload.diskImageLabel ? { diskImageLabel: payload.diskImageLabel } : {}),
+      ...(payload.clusterVersionMode
+        ? { clusterVersionMode: payload.clusterVersionMode }
+        : {}),
+      ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
+      ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
+      ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
+      ...(payload.hostTypeLabel ? { hostTypeLabel: payload.hostTypeLabel } : {}),
+      ...(payload.clusterNodeTopologyMode
+        ? { clusterNodeTopologyMode: payload.clusterNodeTopologyMode }
+        : {}),
       ...(payload.fieldPolicies?.length ? { fieldPolicies: payload.fieldPolicies } : {}),
       status,
       createdAt: new Date().toISOString(),
@@ -256,7 +262,11 @@ export function ProviderAdminWorkspacePage({
     setCatalogItems(getProviderCatalogItems())
 
     if (status === 'unpublished') {
-      finishSetupToWorkspace('catalog')
+      setProviderActiveNav('catalog')
+      setProviderSetupComplete()
+      setActiveNavId('catalog')
+      syncWorkspaceNavParam(setSearchParams, 'catalog', { replace: true })
+      setSetupComplete(true)
       setWorkspaceTransition('idle')
       return draft
     }
@@ -264,7 +274,11 @@ export function ProviderAdminWorkspacePage({
     setWorkspaceTransition('publishing')
 
     window.setTimeout(() => {
-      finishSetupToWorkspace('catalog')
+      setProviderActiveNav('catalog')
+      setProviderSetupComplete()
+      setActiveNavId('catalog')
+      syncWorkspaceNavParam(setSearchParams, 'catalog', { replace: true })
+      setSetupComplete(true)
       setWorkspaceTransition('entering')
     }, PUBLISH_PHASE_MS)
 
@@ -280,10 +294,16 @@ export function ProviderAdminWorkspacePage({
     handleNavChange('administration-organizations')
   }
 
-  const handleNavChange = (navId: ProviderAdminNavId) => {
+  const handleProjectScopeChange = (scopeId: ProjectScopeId) => {
+    setProjectScopeIdState(scopeId)
+    setProjectScopeId(PROVIDER_SERVICES_DEMO_TENANT, scopeId)
+  }
+
+  const performNavChange = (navId: ProviderAdminNavId) => {
     setActiveNavId(navId)
     setProviderActiveNav(navId)
-    syncWorkspaceNavParam(setSearchParams, navId)
+    setNavContentKey((current) => current + 1)
+    syncWorkspaceNavParam(setSearchParams, navId, { showLanding: true })
 
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
@@ -331,6 +351,17 @@ export function ProviderAdminWorkspacePage({
     ) {
       setInstances(ensureTenantDemoInstances(PROVIDER_SERVICES_DEMO_TENANT))
     }
+  }
+
+  const handleNavChange = (navId: ProviderAdminNavId) => {
+    if (catalogEditLeaveAttemptRef.current) {
+      catalogEditLeaveAttemptRef.current(() => {
+        performNavChange(navId)
+      })
+      return
+    }
+
+    performNavChange(navId)
   }
 
   const clearProvisioningTimer = (instanceId: string) => {
@@ -404,9 +435,45 @@ export function ProviderAdminWorkspacePage({
             tenantSlug={PROVIDER_SERVICES_DEMO_TENANT}
             instances={instances}
             onInstancesChange={setInstances}
-            defaultScopeFieldLabel="Organization"
+            projects={projects}
+            projectScopeId={projectScopeId}
+            onProjectScopeChange={handleProjectScopeChange}
+            onProjectsChange={setProjects}
+            organization={getWorkspaceOrganization(PROVIDER_SERVICES_DEMO_TENANT)}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
             activeNavId={activeNavId}
+            instanceNetworkingVariant="summary"
+            onNavigateToCatalogItem={(catalogItemDisplayName) => {
+              handleNavChange('catalog')
+              syncWorkspaceCatalogItemParam(setSearchParams, catalogItemDisplayName)
+            }}
+            openInstanceId={openInstanceId}
+            onOpenInstanceConsumed={() => setOpenInstanceId(null)}
+            onNavigateToProject={(project) => {
+              setOpenProjectId(project.id)
+              handleNavChange('projects-teams')
+            }}
+          />
+        )
+      case 'projects-teams':
+        return (
+          <TenantAdminProjectsTeamsPage
+            tenantSlug={PROVIDER_SERVICES_DEMO_TENANT}
+            organization={getWorkspaceOrganization(PROVIDER_SERVICES_DEMO_TENANT)}
+            projects={projects}
+            instances={instances}
+            onProjectsChange={setProjects}
+            onInstancesChange={(updater) => setInstances((current) => [...updater(current)])}
+            openProjectId={openProjectId}
+            onOpenProjectConsumed={() => setOpenProjectId(null)}
+            onNavigateToInstance={(instance) => {
+              const project = projects.find((entry) => entry.name === instance.projectName)
+              if (project) {
+                handleProjectScopeChange(project.id)
+              }
+              setOpenInstanceId(instance.id)
+              handleNavChange(getServicesNavId(getTenantInstanceServiceId(instance)))
+            }}
           />
         )
       case 'catalog':
@@ -415,16 +482,22 @@ export function ProviderAdminWorkspacePage({
             catalogItems={catalogItems}
             isEntering={workspaceTransition === 'entering'}
             onCreateCatalogItem={handleCreateCatalogItem}
-            onCatalogItemsChange={() => setCatalogItems(getProviderCatalogItems())}
+            onCatalogItemsChange={(items) => setCatalogItems(items ?? getProviderCatalogItems())}
             isPublishing={workspaceTransition !== 'idle'}
             onRegisterOrganization={handleRegisterOrganization}
-            onNavigateToLinkedTemplate={(template) => {
-              setOpenTemplateLookup(template)
-              handleNavChange('infrastructure-bmaas-templates')
-            }}
+            openCatalogItemKey={openCatalogItemKey}
+            onOpenCatalogItemConsumed={() => setOpenCatalogItemKey(null)}
             onProvisioningStarted={handleProvisioningStarted}
             onDismissDuringProvisioning={handleNavigateToServices}
             onWizardFinished={handleNavigateToServices}
+            tenantSlug={PROVIDER_SERVICES_DEMO_TENANT}
+            projects={projects}
+            initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
+            onProjectScopeChange={handleProjectScopeChange}
+            onProjectsChange={setProjects}
+            onEditLeaveAttemptChange={(attemptLeave) => {
+              catalogEditLeaveAttemptRef.current = attemptLeave
+            }}
           />
         )
       case 'genai-asset-endpoints':
@@ -537,7 +610,9 @@ export function ProviderAdminWorkspacePage({
       )
     }
 
-    return renderPostSetupContent()
+    return (
+      <div key={navContentKey}>{renderPostSetupContent()}</div>
+    )
   }
 
   return (

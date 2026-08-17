@@ -6,21 +6,29 @@ import {
   createDemoTenantClusterInstance,
   createDemoTenantClusterInstance02,
   createDemoTenantClusterInstance03,
-  createDemoTenantVirtualMachineInstance,
-  createDemoTenantVirtualMachineInstance02,
-  createDemoTenantVirtualMachineInstance03,
+  createDemoTenantClusterInstance04,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
   DEMO_TENANT_CLUSTER_INSTANCE_ID,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_03,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
   DEMO_TENANT_CLUSTER_STATES,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03,
+  getDemoInstanceProjectIds,
+  getTenantInstanceProjectIds,
+  syncDemoMultiProjectShowcaseInstance,
   type TenantInstance,
 } from './instances'
+import {
+  DEMO_TENANT_PROJECT_ID,
+  DEMO_TENANT_PROJECT_ID_02,
+  DEMO_TENANT_PROJECT_NAME,
+  DEMO_TENANT_PROJECT_NAME_02,
+} from '../tenantAdmin/storage'
 
 const TENANT_USER_ONBOARDING_COMPLETE_KEY_PREFIX = 'bmaas-tenant-user-onboarding-complete-'
 const TENANT_USER_ACTIVE_NAV_KEY_PREFIX = 'bmaas-tenant-user-active-nav-'
@@ -35,6 +43,7 @@ export type TenantUserNavId =
   | 'genai-asset-endpoints'
   | 'genai-playground'
   | 'genai-api-keys'
+  | 'projects-teams'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -50,6 +59,7 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'genai-asset-endpoints',
   'genai-playground',
   'genai-api-keys',
+  'projects-teams',
   'networking-virtual-networks',
   'networking-subnets',
   'networking-security-groups',
@@ -116,6 +126,7 @@ function isTenantInstance(value: unknown): value is TenantInstance {
   return (
     typeof instance.id === 'string' &&
     typeof instance.name === 'string' &&
+    (instance.description === undefined || typeof instance.description === 'string') &&
     typeof instance.catalogItemDisplayName === 'string' &&
     validServiceId &&
     typeof instance.hardwareProfile === 'string' &&
@@ -125,6 +136,9 @@ function isTenantInstance(value: unknown): value is TenantInstance {
     typeof instance.gpuLabel === 'string' &&
     validSpecRows &&
     typeof instance.projectName === 'string' &&
+    (instance.projectIds === undefined ||
+      (Array.isArray(instance.projectIds) &&
+        instance.projectIds.every((projectId) => typeof projectId === 'string'))) &&
     (instance.scopeKind === undefined ||
       instance.scopeKind === 'organization' ||
       instance.scopeKind === 'project') &&
@@ -196,10 +210,22 @@ export function getTenantUserInstances(slug: string): TenantInstance[] {
       return []
     }
 
-    return parsed.filter(isTenantInstance).map((instance) => ({
-      ...instance,
-      scopeKind: instance.scopeKind ?? 'project',
-    }))
+    return parsed.filter(isTenantInstance).map((instance) => {
+      const projectIds = getTenantInstanceProjectIds(instance)
+      const primaryProjectName =
+        projectIds[0] === DEMO_TENANT_PROJECT_ID_02
+          ? DEMO_TENANT_PROJECT_NAME_02
+          : projectIds.includes(DEMO_TENANT_PROJECT_ID)
+            ? DEMO_TENANT_PROJECT_NAME
+            : instance.projectName
+
+      return {
+        ...instance,
+        projectIds,
+        scopeKind: projectIds.length > 0 ? 'project' : (instance.scopeKind ?? 'organization'),
+        projectName: projectIds.length > 0 ? primaryProjectName : instance.projectName,
+      }
+    })
   } catch {
     return []
   }
@@ -213,33 +239,38 @@ function getDemoOrganizationName(slug: string): string {
 }
 
 /**
- * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal,
- * Virtual machine, and Cluster instances. Stable IDs avoid duplicates across reloads.
+ * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal
+ * and Cluster instances. Virtual machines and Models stay empty (catalog-launch only).
+ * Stable IDs avoid duplicates across reloads.
  */
 export function ensureTenantDemoInstances(
   slug: string,
   organizationName: string = getDemoOrganizationName(slug),
 ): TenantInstance[] {
   const existing = getTenantUserInstances(slug)
-  const next = [...existing]
+  let next = [...existing]
   let changed = false
+
+  // Drop legacy seeded VMs so Virtual machines matches Models (empty until launch).
+  const retiredDemoVmIds = new Set([
+    DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID,
+    DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
+    DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03,
+  ])
+  const withoutRetiredVms = next.filter((instance) => !retiredDemoVmIds.has(instance.id))
+  if (withoutRetiredVms.length !== next.length) {
+    next = withoutRetiredVms
+    changed = true
+  }
 
   const demos: Array<{ id: string; create: (org: string) => TenantInstance }> = [
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID, create: createDemoTenantBareMetalInstance },
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_02, create: createDemoTenantBareMetalInstance02 },
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_03, create: createDemoTenantBareMetalInstance03 },
-    { id: DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID, create: createDemoTenantVirtualMachineInstance },
-    {
-      id: DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
-      create: createDemoTenantVirtualMachineInstance02,
-    },
-    {
-      id: DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03,
-      create: createDemoTenantVirtualMachineInstance03,
-    },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID, create: createDemoTenantClusterInstance },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_02, create: createDemoTenantClusterInstance02 },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_03, create: createDemoTenantClusterInstance03 },
+    { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_04, create: createDemoTenantClusterInstance04 },
   ]
 
   for (const demo of demos) {
@@ -250,22 +281,108 @@ export function ensureTenantDemoInstances(
       continue
     }
 
+    const current = next[existingIndex]!
+    const desiredProjectIds = getDemoInstanceProjectIds(demo.id)
+    const hasStoredProjectIds = Array.isArray(current.projectIds)
+    const currentProjectIds = hasStoredProjectIds
+      ? [...new Set(current.projectIds.filter(Boolean))]
+      : []
+    const desiredKey = desiredProjectIds.slice().sort().join(',')
+    const currentKey = currentProjectIds.slice().sort().join(',')
+    const needsProjectSync =
+      !hasStoredProjectIds &&
+      desiredProjectIds.length > 0 &&
+      (desiredKey !== currentKey ||
+        current.scopeKind !== 'project' ||
+        current.projectName === 'ml-platform' ||
+        !current.projectName.trim() ||
+        current.projectName === organizationName)
+
+    if (needsProjectSync) {
+      next[existingIndex] = {
+        ...current,
+        scopeKind: 'project',
+        projectName: DEMO_TENANT_PROJECT_NAME,
+        projectIds: desiredProjectIds,
+      }
+      changed = true
+    } else if (
+      !hasStoredProjectIds &&
+      current.scopeKind === 'project' &&
+      current.projectName === 'ml-platform'
+    ) {
+      next[existingIndex] = {
+        ...current,
+        projectName: DEMO_TENANT_PROJECT_NAME,
+        projectIds:
+          desiredProjectIds.length > 0
+            ? desiredProjectIds
+            : [...new Set([...currentProjectIds, DEMO_TENANT_PROJECT_ID])],
+      }
+      changed = true
+    } else if (!hasStoredProjectIds) {
+      next[existingIndex] = {
+        ...current,
+        projectIds: getTenantInstanceProjectIds(current),
+      }
+      changed = true
+    }
+
+    if (demo.id === DEMO_TENANT_BARE_METAL_INSTANCE_ID_03) {
+      const synced = syncDemoMultiProjectShowcaseInstance(next[existingIndex]!)
+      if (synced) {
+        next[existingIndex] = synced
+        changed = true
+      }
+    }
+
     const clusterState = DEMO_TENANT_CLUSTER_STATES.find((entry) => entry.id === demo.id)
     if (!clusterState) {
       continue
     }
 
-    const current = next[existingIndex]!
-    if (current.name !== clusterState.name || current.status !== clusterState.status) {
+    const refreshed = next[existingIndex]!
+    const fresh = demo.create(organizationName)
+    const needsClusterConfigRefresh =
+      demo.id === DEMO_TENANT_CLUSTER_INSTANCE_ID &&
+      (refreshed.clusterConfig?.upgradeStatus !== fresh.clusterConfig?.upgradeStatus ||
+        refreshed.clusterConfig?.desiredVersion !== fresh.clusterConfig?.desiredVersion ||
+        refreshed.osImage !== fresh.osImage ||
+        (refreshed.clusterConfig?.nodeSets?.length ?? 0) < 2 ||
+        refreshed.clusterConfig?.nodeSets?.some(
+          (nodeSet, index) =>
+            !nodeSet.version ||
+            !nodeSet.name ||
+            nodeSet.version !== fresh.clusterConfig?.nodeSets?.[index]?.version,
+        ))
+
+    if (
+      refreshed.name !== clusterState.name ||
+      refreshed.status !== clusterState.status ||
+      needsClusterConfigRefresh
+    ) {
       next[existingIndex] = {
-        ...current,
-        name: clusterState.name,
-        status: clusterState.status,
+        ...fresh,
+        projectIds: refreshed.projectIds,
+        projectName: refreshed.projectName,
+        scopeKind: refreshed.scopeKind,
+        // Keep user-driven lifecycle timestamps when only refreshing config shape.
+        createdAt: refreshed.createdAt,
         provisionedAt:
           clusterState.status === 'provisioning'
             ? null
-            : (current.provisionedAt ?? current.createdAt),
+            : (refreshed.provisionedAt ?? refreshed.createdAt),
+        name: clusterState.name,
+        status: clusterState.status,
       }
+      changed = true
+    }
+  }
+
+  for (let index = 0; index < next.length; index += 1) {
+    const synced = syncDemoMultiProjectShowcaseInstance(next[index]!)
+    if (synced) {
+      next[index] = synced
       changed = true
     }
   }
@@ -277,7 +394,7 @@ export function ensureTenantDemoInstances(
   return next
 }
 
-/** Read instances and seed Bare metal / VM demos when missing (shared by Admin + User). */
+/** Read instances and seed Bare metal / Cluster demos when missing (shared by Admin + User). */
 export function getOrEnsureTenantUserInstances(
   slug: string,
   organizationName?: string,

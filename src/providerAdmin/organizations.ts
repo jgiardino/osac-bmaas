@@ -259,6 +259,13 @@ export function buildDemoIdentityProviderName(
 export const DEMO_NORTH_SUMMIT_BANK_ORG_ID = 'org-northstar-bank'
 export const DEMO_NORTH_SUMMIT_BANK_TENANT_ID = 'tenant-northstar'
 
+/** Second demo enterprise for VIP visibility multi-select (not BlueSolace). */
+export const DEMO_HARBORLINE_CAPITAL_ORG_ID = 'org-harborline-capital'
+export const DEMO_HARBORLINE_CAPITAL_TENANT_ID = 'tenant-harborline'
+export const DEMO_HARBORLINE_CAPITAL_SLUG = 'harborline'
+export const DEMO_HARBORLINE_CAPITAL_NAME = 'harborline-capital'
+export const DEMO_HARBORLINE_CAPITAL_DOMAIN = 'harborlinecapital.com'
+
 export const REGISTER_ORGANIZATION_STEPS = [
   { id: 'organization', label: 'Organization' },
   { id: 'review', label: 'Review' },
@@ -338,6 +345,62 @@ export function createDemoNorthSummitBankOrganization(
     rbacConfigured: true,
     status: 'Active',
     createdAt: '2026-06-12T14:30:00.000Z',
+  }
+}
+
+/** Fully activated Harborline Capital — IdP connected, roles defined, Active. */
+export function createDemoHarborlineCapitalOrganization(
+  options: {
+    catalogItemId?: string | null
+    catalogDisplayName?: string | null
+    externalIpPoolId?: string | null
+    externalIpPoolName?: string | null
+    externalIpPoolCidr?: string | null
+  } = {},
+): RegisteredOrganization {
+  const primaryDomain = DEMO_HARBORLINE_CAPITAL_DOMAIN
+
+  return {
+    id: DEMO_HARBORLINE_CAPITAL_ORG_ID,
+    name: DEMO_HARBORLINE_CAPITAL_NAME,
+    tenantId: DEMO_HARBORLINE_CAPITAL_TENANT_ID,
+    slug: DEMO_HARBORLINE_CAPITAL_SLUG,
+    primaryDomain,
+    billingAccountId: 'ACCT-HLC-3910',
+    billingAccountName: 'harborline-capital-enterprise-billing',
+    catalogItemId: options.catalogItemId ?? null,
+    catalogDisplayName: options.catalogDisplayName ?? null,
+    externalIpPoolId: options.externalIpPoolId ?? 'eipool-standby-a',
+    externalIpPoolName: options.externalIpPoolName ?? null,
+    externalIpPoolCidr: options.externalIpPoolCidr ?? null,
+    maxInstances: 16,
+    tenantAdminName: 'Avery Quinn',
+    tenantAdminEmail: `aquinn@${primaryDomain}`,
+    additionalTenantAdmins: [
+      { name: 'Noah Patel', email: `npatel@${primaryDomain}` },
+      { name: 'Riley Soto', email: `rsoto@${primaryDomain}` },
+    ],
+    invitedTenantUserEmails: [
+      `mlee@${primaryDomain}`,
+      `kdavis@${primaryDomain}`,
+      `jwu@${primaryDomain}`,
+    ],
+    identityProviderConnected: true,
+    identityProviderName: buildDemoIdentityProviderName('SAML', primaryDomain),
+    identityProviderDisplayName: 'harborline-capital-idp',
+    identityProviderProtocol: 'SAML',
+    identityProviderIssuerUrl: `https://idp.${primaryDomain}/saml`,
+    identityProviderClientId: 'bmaas-harborline',
+    idpManagerEmail: null,
+    idpInviteToken: null,
+    idpInviteStatus: 'none',
+    idpInviteSentAt: null,
+    idpInviteExpiresAt: null,
+    breakGlassName: 'Break-glass admin',
+    breakGlassEmail: `breakglass@${primaryDomain}`,
+    rbacConfigured: true,
+    status: 'Active',
+    createdAt: '2026-06-18T11:00:00.000Z',
   }
 }
 
@@ -546,6 +609,100 @@ export function buildNextRegisterOrganizationForm(
     billingAccountName: `vertexa-tenant-${unique}-enterprise-billing`,
     billingAccountId: generateBillingAccountId(),
   }
+}
+
+export type OrganizationSetupFilter =
+  | 'all'
+  | 'ready'
+  | 'needs-idp'
+  | 'waiting-idp'
+  | 'expired-idp'
+  | 'needs-roles'
+
+export const ORGANIZATION_SETUP_FILTER_OPTIONS: ReadonlyArray<{
+  value: OrganizationSetupFilter
+  label: string
+}> = [
+  { value: 'all', label: 'All setup states' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'needs-idp', label: 'Needs identity provider' },
+  { value: 'waiting-idp', label: 'Waiting on IdP Manager' },
+  { value: 'expired-idp', label: 'IdP invitation expired' },
+  { value: 'needs-roles', label: 'Needs roles' },
+]
+
+export function getOrganizationSetupFilterKey(
+  organization: RegisteredOrganization,
+): Exclude<OrganizationSetupFilter, 'all'> {
+  const signal = getOrganizationSetupSignal(organization)
+  if (signal === null) {
+    return 'ready'
+  }
+  if (signal === 'Waiting on IdP Manager') {
+    return 'waiting-idp'
+  }
+  if (signal === 'IdP invitation expired') {
+    return 'expired-idp'
+  }
+  if (signal === 'Needs roles') {
+    return 'needs-roles'
+  }
+  return 'needs-idp'
+}
+
+export function matchesOrganizationSetupFilter(
+  organization: RegisteredOrganization,
+  filter: OrganizationSetupFilter,
+): boolean {
+  if (filter === 'all') {
+    return true
+  }
+
+  return getOrganizationSetupFilterKey(organization) === filter
+}
+
+export function organizationMatchesSearch(
+  organization: RegisteredOrganization,
+  query: string,
+): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return true
+  }
+
+  return (
+    organization.name.toLowerCase().includes(normalizedQuery) ||
+    organization.tenantId.toLowerCase().includes(normalizedQuery) ||
+    organization.slug.toLowerCase().includes(normalizedQuery) ||
+    organization.primaryDomain.toLowerCase().includes(normalizedQuery) ||
+    organization.billingAccountName.toLowerCase().includes(normalizedQuery) ||
+    organization.billingAccountId.toLowerCase().includes(normalizedQuery)
+  )
+}
+
+export function buildOrganizationFilterParts(
+  searchValue: string,
+  selectedStatus: 'all' | RegisteredOrganization['status'],
+  selectedSetup: OrganizationSetupFilter,
+): string[] {
+  const parts: string[] = []
+
+  if (selectedStatus !== 'all') {
+    parts.push(`status: ${selectedStatus}`)
+  }
+
+  if (selectedSetup !== 'all') {
+    const setupLabel =
+      ORGANIZATION_SETUP_FILTER_OPTIONS.find((option) => option.value === selectedSetup)?.label ??
+      selectedSetup
+    parts.push(`setup: ${setupLabel}`)
+  }
+
+  if (searchValue.trim()) {
+    parts.push(`search: "${searchValue.trim()}"`)
+  }
+
+  return parts
 }
 
 export const PROVIDER_ORGANIZATIONS_DEMO = {

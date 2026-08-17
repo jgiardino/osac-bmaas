@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
-import { useLayoutEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoonIcon } from '@patternfly/react-icons/dist/esm/icons/moon-icon'
+import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
+import { CogIcon } from '@patternfly/react-icons/dist/esm/icons/cog-icon'
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon'
-import { SunIcon } from '@patternfly/react-icons/dist/esm/icons/sun-icon'
 import { UserIcon } from '@patternfly/react-icons/dist/esm/icons/user-icon'
 import {
   Button,
+  Divider,
   Dropdown,
   DropdownItem,
   DropdownList,
@@ -16,6 +17,7 @@ import {
   MastheadContent,
   MastheadLogo,
   MastheadMain,
+  MastheadToggle,
   MenuToggle,
   Nav,
   NavExpandable,
@@ -25,6 +27,7 @@ import {
   PageSection,
   PageSidebar,
   PageSidebarBody,
+  PageToggleButton,
   Spinner,
   Toolbar,
   ToolbarContent,
@@ -35,21 +38,19 @@ import {
   PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS,
   PROVIDER_ADMIN_AI_NAV_ITEMS,
   PROVIDER_ADMIN_GENAI_NAV_ITEMS,
-  PROVIDER_ADMIN_INFRASTRUCTURE_NAV_ITEMS,
   PROVIDER_ADMIN_NETWORKING_NAV_ITEMS,
   PROVIDER_ADMIN_SERVICES_NAV_ITEMS,
   isAdministrationNavId,
   isAiSettingsNavId,
   isGenaiStudioNavId,
-  isInfrastructureNavId,
   isNetworkingNavId,
   isServicesNavId,
   type ProviderAdminNavId,
 } from '../../providerAdmin/constants'
 import { clearProviderOnboardingState } from '../../providerSetup/storage'
 import type { WorkspaceTransition } from '../../providerAdmin/workspace'
+import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { VertexaCloudMastheadLogo } from './VertexaCloudMastheadLogo'
-import { ConceptualDesignSticker } from '../ConceptualDesignSticker'
 
 type ProviderAdminShellProps = {
   children: ReactNode
@@ -68,19 +69,16 @@ export function ProviderAdminShell({
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
-  const [isDarkTheme, setIsDarkTheme] = useState(false)
-
-  useLayoutEffect(() => {
-    const root = document.documentElement
-    root.classList.toggle('pf-v6-theme-dark', isDarkTheme)
-    return () => {
-      root.classList.remove('pf-v6-theme-dark')
-    }
-  }, [isDarkTheme])
+  const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
 
   const header = (
     <Masthead>
       <MastheadMain>
+        <MastheadToggle>
+          <PageToggleButton variant="plain" aria-label="Global navigation">
+            <BarsIcon />
+          </PageToggleButton>
+        </MastheadToggle>
         <MastheadLogo className="vertexa-masthead-logo">
           <MastheadBrand>
             <VertexaCloudMastheadLogo />
@@ -98,15 +96,6 @@ export function ProviderAdminShell({
               variant="action-group-plain"
               gap={{ default: 'gapSm' }}
             >
-              <ToolbarItem>
-                <Button
-                  variant="plain"
-                  aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
-                  onClick={() => setIsDarkTheme((dark) => !dark)}
-                >
-                  {isDarkTheme ? <SunIcon /> : <MoonIcon />}
-                </Button>
-              </ToolbarItem>
               <ToolbarItem>
                 <Button variant="plain" aria-label="Help">
                   <OutlinedQuestionCircleIcon />
@@ -137,6 +126,17 @@ export function ProviderAdminShell({
                   )}
                 >
                   <DropdownList>
+                    <DropdownItem
+                      value="user-preferences"
+                      icon={<CogIcon />}
+                      onClick={() => {
+                        setIsUserMenuOpen(false)
+                        setIsPreferencesModalOpen(true)
+                      }}
+                    >
+                      User preferences
+                    </DropdownItem>
+                    <Divider />
                     <DropdownItem
                       value="logout"
                       onClick={() => {
@@ -196,6 +196,14 @@ export function ProviderAdminShell({
                 </NavItem>
               ))}
             </NavExpandable>
+            <NavItem
+              itemId="projects-teams"
+              isActive={activeNavId === 'projects-teams'}
+              to="#"
+              preventDefault
+            >
+              Projects & teams
+            </NavItem>
             <NavExpandable
               id="provider-admin-genai-studio-nav"
               title="GenAI studio"
@@ -268,24 +276,6 @@ export function ProviderAdminShell({
                 </NavItem>
               ))}
             </NavExpandable>
-            <NavExpandable
-              id="provider-admin-infrastructure-nav"
-              title="Infrastructure"
-              isExpanded
-              isActive={isInfrastructureNavId(activeNavId)}
-            >
-              {PROVIDER_ADMIN_INFRASTRUCTURE_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
             <NavItem
               itemId="billing-metering"
               isActive={activeNavId === 'billing-metering'}
@@ -301,34 +291,39 @@ export function ProviderAdminShell({
   ) : undefined
 
   return (
-    <Page
-      masthead={header}
-      sidebar={sidebar}
-      isManagedSidebar={showNavigation}
-      className={[
-        showNavigation ? 'provider-admin-shell-page' : undefined,
-        workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      <PageSection
-        isWidthLimited={!showNavigation}
-        isCenterAligned={!showNavigation}
-        className="provider-admin-shell__main"
+    <>
+      <Page
+        masthead={header}
+        sidebar={sidebar}
+        isManagedSidebar={showNavigation}
+        className={[
+          showNavigation ? 'provider-admin-shell-page' : undefined,
+          workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
+        ]
+          .filter(Boolean)
+          .join(' ')}
       >
-        {workspaceTransition !== 'idle' ? (
-          <div
-            className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <Spinner size="xl" aria-label="Publishing catalog item" />
-          </div>
-        ) : null}
-        <div className="provider-admin-shell__content">{children}</div>
-      </PageSection>
-      <ConceptualDesignSticker />
-    </Page>
+        <PageSection
+          isWidthLimited={!showNavigation}
+          isCenterAligned={!showNavigation}
+          className="provider-admin-shell__main"
+        >
+          {workspaceTransition !== 'idle' ? (
+            <div
+              className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Spinner size="xl" aria-label="Publishing catalog item" />
+            </div>
+          ) : null}
+          <div className="provider-admin-shell__content">{children}</div>
+        </PageSection>
+      </Page>
+      <UserPreferencesModal
+        isOpen={isPreferencesModalOpen}
+        onClose={() => setIsPreferencesModalOpen(false)}
+      />
+    </>
   )
 }

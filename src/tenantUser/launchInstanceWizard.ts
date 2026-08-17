@@ -1,5 +1,9 @@
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
-import { getReleaseImageForClusterVersion } from '../catalog/catalogPublishConfig'
+import {
+  getCatalogClusterVersionOption,
+  getLatestCatalogClusterVersionId,
+  getReleaseImageForClusterVersion,
+} from '../catalog/catalogPublishConfig'
 import {
   KUBERNETES_RESOURCE_NAME_HELPER,
   isValidKubernetesResourceName,
@@ -47,14 +51,13 @@ export const LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
   },
 ]
 
-/** Bare metal launch flow: General → Configure → Networking → Review → Provisioning. */
+/** Bare metal launch flow: General → Networking → Review → Provisioning. */
 export const BAREMETAL_LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
   id: LaunchInstanceWizardStepId
   label: string
   description: string
 }> = [
   { id: 'general', label: 'General', description: '' },
-  { id: 'configure', label: 'Configure', description: '' },
   { id: 'networking', label: 'Networking', description: '' },
   { id: 'review', label: 'Review', description: '' },
   { id: 'provisioning', label: 'Provisioning', description: '' },
@@ -120,11 +123,11 @@ export const LAUNCH_INSTANCE_WIZARD_DEMO = {
   osImage: 'RHEL 9.4',
   networkingTitle: 'Networking',
   networkingLede:
-    'Choose the virtual network, subnet, and security group for this instance.',
+    'Choose the virtual network, subnet, security group, and external IP pool for this instance.',
   networkingAssignedHelper: 'Set by your organization',
   reviewTitle: 'Review',
   reviewHardware: 'Dell PowerEdge R750',
-  reviewGpu: 'CPU-only',
+  reviewGpu: 'NVIDIA A100 80 GB',
   reviewOsImage: 'RHEL 9.4',
   reviewProvisioningNote:
     'Provisioning takes 10–20 minutes — live progress tracks setup in your environment.',
@@ -142,6 +145,17 @@ export const LAUNCH_INSTANCE_WIZARD_DEMO = {
   backgroundProvisioningAlertBody:
     'Your instance stays in Provisioning on Services until setup finishes.',
 } as const
+
+export const LAUNCH_INSTANCE_DEFAULT_DESCRIPTIONS: Record<CatalogServiceId, string> = {
+  baremetal: 'Development server for the payments team.',
+  cluster: 'Staging environment for our application team.',
+  'virtual-machine': 'Test machine for QA checks.',
+  models: 'Demo deployment for the data science team.',
+}
+
+export function getLaunchInstanceDefaultDescription(serviceId: CatalogServiceId): string {
+  return LAUNCH_INSTANCE_DEFAULT_DESCRIPTIONS[serviceId]
+}
 
 export const CLUSTER_LAUNCH_INSTANCE_DEMO = {
   defaultName: 'ocp-cluster-01',
@@ -178,11 +192,17 @@ export const CLUSTER_LAUNCH_INSTANCE_DEMO = {
   hostTypeOptions: ['standard-host', 'gpu-host', 'storage-host'] as const,
   defaultHostType: 'standard-host',
   defaultNodeCount: 1,
+  infrastructureNetworkingTitle: 'Infrastructure networking',
+  infrastructureNetworkingLede:
+    'Attach this cluster to your organization network objects.',
+  clusterNetworkTitle: 'Cluster network',
+  clusterNetworkLede: 'Address ranges used inside the cluster for pods and services.',
   podCidr: '10.128.0.0/24',
   podCidrHelper: 'Use CIDR notation (for example 10.128.0.0/14 or fd01::/48).',
   serviceCidr: '10.1.0.0/24',
   serviceCidrHelper: 'Use CIDR notation (for example 172.30.0.0/16 or fd02::/112).',
   addNodeSetLabel: 'Add node set',
+  removeNodeSetLabel: 'Remove',
 } as const
 
 export const VM_LAUNCH_INSTANCE_DEMO = {
@@ -236,8 +256,6 @@ export const BAREMETAL_LAUNCH_INSTANCE_DEMO = {
   nameHelper: CLUSTER_LAUNCH_INSTANCE_DEMO.nameHelper,
   sshPublicKey: CLUSTER_LAUNCH_INSTANCE_DEMO.sshPublicKey,
   sshHelper: CLUSTER_LAUNCH_INSTANCE_DEMO.sshHelper,
-  userDataHelper: 'Optional cloud-init user data (max 64 KB).',
-  defaultUserData: '',
 } as const
 
 export const PROVISIONING_BOOT_LOG_STEPS: ProvisioningBootLogStep[] = [
@@ -261,14 +279,20 @@ export const LAUNCH_INSTANCE_BOOT_LOG_STEP_MS = Math.floor(
 
 export type ClusterNodeSetForm = {
   id: string
+  /** Catalog node-set kind (e.g. fc430-worker). */
+  nodeSetId: string
   hostType: string
   nodeCount: number
 }
 
 export type LaunchInstanceWizardForm = {
   instanceName: string
+  /** Optional free-text description (same pattern as catalog item creation). */
+  description: string
   sshPublicKey: string
   pullSecret: string
+  /** Selected OpenShift version id when provisioning a cluster. */
+  clusterVersionId: string
   releaseImage: string
   nodeSets: ClusterNodeSetForm[]
   podCidr: string
@@ -282,6 +306,7 @@ export type LaunchInstanceWizardForm = {
   virtualNetworkId: string
   subnetId: string
   securityGroupId: string
+  externalIpPoolId: string
 }
 
 export const LAUNCH_INSTANCE_NAME_PREFIX_BY_SERVICE: Record<CatalogServiceId, string> = {
@@ -331,18 +356,25 @@ export function getNextLaunchInstanceName(
   return `${prefix}-${nextNumber}`
 }
 
-export function createDefaultClusterNodeSet(index = 1): ClusterNodeSetForm {
+export function createDefaultClusterNodeSet(
+  index = 1,
+  hostType: string = CLUSTER_LAUNCH_INSTANCE_DEMO.defaultHostType,
+  nodeSetId: string = 'fc430-worker',
+): ClusterNodeSetForm {
   return {
     id: `node-set-${index}`,
-    hostType: CLUSTER_LAUNCH_INSTANCE_DEMO.defaultHostType,
+    nodeSetId,
+    hostType,
     nodeCount: CLUSTER_LAUNCH_INSTANCE_DEMO.defaultNodeCount,
   }
 }
 
 export const DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM: LaunchInstanceWizardForm = {
   instanceName: LAUNCH_INSTANCE_WIZARD_DEMO.defaultInstanceName,
+  description: '',
   sshPublicKey: LAUNCH_INSTANCE_WIZARD_DEMO.defaultSshPublicKey,
   pullSecret: '',
+  clusterVersionId: '',
   releaseImage: '',
   nodeSets: [createDefaultClusterNodeSet()],
   podCidr: '',
@@ -356,24 +388,40 @@ export const DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM: LaunchInstanceWizardForm = {
   virtualNetworkId: '',
   subnetId: '',
   securityGroupId: '',
+  externalIpPoolId: '',
 }
 
 export function createLaunchInstanceWizardForm(options: {
   virtualNetworkId: string
   subnetId: string
   securityGroupId: string
+  externalIpPoolId: string
   instanceName?: string
   serviceId?: CatalogServiceId
   /** Catalog cluster version id or Platform label; maps to release image. */
   clusterVersion?: string
+  /** Catalog default host type for the first node set. */
+  hostType?: string
+  /** Catalog default node-set kind for the first node set. */
+  nodeSetId?: string
 }): LaunchInstanceWizardForm {
   const serviceId = options.serviceId ?? 'baremetal'
   const isCluster = serviceId === 'cluster'
   const isVm = serviceId === 'virtual-machine'
   const isBaremetal = serviceId === 'baremetal'
+  const matchedClusterVersion = isCluster
+    ? getCatalogClusterVersionOption(options.clusterVersion)
+    : undefined
+  const clusterVersionId = isCluster
+    ? (matchedClusterVersion?.id ?? getLatestCatalogClusterVersionId())
+    : ''
+  const defaultHostType =
+    options.hostType?.trim() || CLUSTER_LAUNCH_INSTANCE_DEMO.defaultHostType
+  const defaultNodeSetId = options.nodeSetId?.trim() || 'fc430-worker'
 
   return {
     ...DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM,
+    description: getLaunchInstanceDefaultDescription(serviceId),
     instanceName:
       options.instanceName ??
       (isCluster || isVm || isBaremetal
@@ -384,12 +432,13 @@ export function createLaunchInstanceWizardForm(options: {
         ? CLUSTER_LAUNCH_INSTANCE_DEMO.sshPublicKey
         : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.sshPublicKey,
     pullSecret: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.pullSecret : '',
+    clusterVersionId,
     releaseImage: isCluster
       ? getReleaseImageForClusterVersion(
-          options.clusterVersion || CLUSTER_LAUNCH_INSTANCE_DEMO.releaseImage,
+          clusterVersionId || options.clusterVersion || CLUSTER_LAUNCH_INSTANCE_DEMO.releaseImage,
         )
       : '',
-    nodeSets: [createDefaultClusterNodeSet()],
+    nodeSets: [createDefaultClusterNodeSet(1, defaultHostType, defaultNodeSetId)],
     podCidr: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.podCidr : '',
     serviceCidr: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.serviceCidr : '',
     containerDiskImage: isVm ? VM_LAUNCH_INSTANCE_DEMO.containerDiskImage : '',
@@ -403,14 +452,11 @@ export function createLaunchInstanceWizardForm(options: {
     runStrategy: isVm
       ? VM_LAUNCH_INSTANCE_DEMO.defaultRunStrategy
       : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.runStrategy,
-    cloudInitUserData: isVm
-      ? VM_LAUNCH_INSTANCE_DEMO.cloudInitUserData
-      : isBaremetal
-        ? BAREMETAL_LAUNCH_INSTANCE_DEMO.defaultUserData
-        : '',
+    cloudInitUserData: isVm ? VM_LAUNCH_INSTANCE_DEMO.cloudInitUserData : '',
     virtualNetworkId: options.virtualNetworkId,
     subnetId: options.subnetId,
     securityGroupId: options.securityGroupId,
+    externalIpPoolId: options.externalIpPoolId,
   }
 }
 
@@ -433,10 +479,14 @@ export function isClusterGeneralStepValid(form: LaunchInstanceWizardForm): boole
 
 export function isClusterConfigureStepValid(form: LaunchInstanceWizardForm): boolean {
   return (
+    form.clusterVersionId.trim().length > 0 &&
     form.releaseImage.trim().length > 0 &&
     form.nodeSets.length > 0 &&
     form.nodeSets.every(
-      (nodeSet) => nodeSet.hostType.trim().length > 0 && nodeSet.nodeCount >= 1,
+      (nodeSet) =>
+        nodeSet.nodeSetId.trim().length > 0 &&
+        nodeSet.hostType.trim().length > 0 &&
+        nodeSet.nodeCount >= 1,
     )
   )
 }
@@ -467,7 +517,8 @@ export function isVmNetworkingStepValid(form: LaunchInstanceWizardForm): boolean
   return (
     form.virtualNetworkId.trim().length > 0 &&
     form.subnetId.trim().length > 0 &&
-    form.securityGroupId.trim().length > 0
+    form.securityGroupId.trim().length > 0 &&
+    form.externalIpPoolId.trim().length > 0
   )
 }
 

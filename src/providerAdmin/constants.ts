@@ -11,6 +11,7 @@ export type ProviderAdminNavId =
   | 'ai-maas-governance'
   | 'ai-model-catalog-settings'
   | 'ai-admin-api-keys'
+  | 'projects-teams'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -31,6 +32,7 @@ export type ProviderAdminNavItem = {
 export const PROVIDER_ADMIN_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'catalog', label: 'Catalog' },
+  { id: 'projects-teams', label: 'Projects & teams' },
   { id: 'billing-metering', label: 'Billing & metering' },
 ]
 

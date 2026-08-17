@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Button,
   Card,
@@ -6,6 +7,8 @@ import {
   Content,
   EmptyState,
   EmptyStateBody,
+  Flex,
+  FlexItem,
   Label,
   SearchInput,
   Title,
@@ -18,113 +21,55 @@ import {
   countCatalogServices,
   toggleCatalogServiceFilter,
 } from '../../components/catalog/CatalogServiceFilterToggle'
+import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
+import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
 import { CatalogViewToggle } from '../../components/catalog/CatalogViewToggle'
-import { TenantUserCatalogItemDetailsDrawer } from '../../components/tenant-user/TenantUserCatalogItemDetailsDrawer'
+import {
+  createCatalogServiceFilterSet,
+  describeCatalogServiceFilter,
+} from '../../catalog/catalogFilterSummary'
+import { TenantUserCatalogItemDetailsPage } from '../../components/tenant-user/TenantUserCatalogItemDetailsPage'
 import { TenantUserLaunchInstanceWizard } from '../../components/tenant-user/TenantUserLaunchInstanceWizard'
 import { formatCatalogConfigurationSummary } from '../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
-import { formatCatalogTableResultCount } from '../../catalog/tableResultCount'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../../catalog/viewMode'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import { CATALOG_SERVICE_FILTER_LABELS, type CatalogServiceId } from '../../providerSetup/templateDemo'
-import { getCatalogNetworkLockSummary } from '../../providerAdmin/catalogNetworkPolicy'
 import {
   getTenantUserCatalogCards,
   type TenantUserCatalogCard,
 } from '../../tenantUser/catalog'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
-import { resolveLaunchNetworkContext } from '../../tenantUser/launchNetworking'
 import { TENANT_USER_CATALOG_PAGE } from '../../tenantUser/constants'
 import type { TenantInstance } from '../../tenantUser/instances'
-import type { TenantUserScopeKind } from '../../tenantUser/scope'
+import type { TenantProject } from '../../tenantAdmin/projects'
+import {
+  findCatalogItemByWorkspaceParam,
+  getWorkspaceCatalogItemParam,
+  syncWorkspaceCatalogItemParam,
+} from '../../shared/workspaceNavUrl'
 
 type TenantUserCatalogPageProps = {
   organization: RegisteredOrganization | null
   catalogDraft: ProviderCatalogDraft | null
-  scopeKind: TenantUserScopeKind
-  scopeLabel: string
-  scopeFieldLabel: 'Organization' | 'Project'
+  tenantSlug: string
+  projects: readonly TenantProject[]
+  initialProjectId?: string | null
+  onProjectScopeChange?: (projectId: string) => void
+  onProjectsChange: (projects: TenantProject[]) => void
   /** When true, open the launch wizard immediately (provider preview). */
   autoOpenLaunchWizard?: boolean
   /** Prefer the provided catalog draft even if org assignment differs. */
   preferCatalogDraft?: boolean
+  /** When set, open this catalog item's detail page (id or display name). */
+  openCatalogItemKey?: string | null
+  onOpenCatalogItemConsumed?: () => void
   existingInstanceNames?: readonly string[]
   onProvisioningStarted: (instance: TenantInstance) => void
   onDismissDuringProvisioning: (instanceId: string, serviceId: CatalogServiceId) => void
   onWizardFinished: (instanceId: string, serviceId: CatalogServiceId) => void
-}
-
-function NetworkingSummary({
-  item,
-  organization,
-  catalogDraft,
-  preferCatalogDraft,
-  compact = false,
-  onViewDetails,
-}: {
-  item: TenantUserCatalogCard
-  organization: RegisteredOrganization | null
-  catalogDraft: ProviderCatalogDraft | null
-  preferCatalogDraft: boolean
-  compact?: boolean
-  onViewDetails?: () => void
-}) {
-  const networkContext = resolveLaunchNetworkContext(
-    organization,
-    catalogDraft,
-    preferCatalogDraft,
-    item.catalogItemId,
-  )
-  const lockSummary = getCatalogNetworkLockSummary(networkContext.policy)
-
-  const statusContent = lockSummary ? (
-    <span className="tenant-user-catalog__networking-status">
-      <Label
-        color={
-          lockSummary.kind === 'all-locked'
-            ? 'grey'
-            : lockSummary.kind === 'all-editable'
-              ? 'blue'
-              : 'orange'
-        }
-        isCompact
-        icon={lockSummary.kind === 'all-locked' ? <LockIcon /> : undefined}
-        className="tenant-user-catalog__networking-status-label"
-      >
-        {lockSummary.label}
-      </Label>
-      {onViewDetails ? (
-        <Button
-          variant="link"
-          isInline
-          className="tenant-user-catalog__inline-link"
-          onClick={onViewDetails}
-        >
-          Details
-        </Button>
-      ) : null}
-    </span>
-  ) : (
-    <Content
-      component="p"
-      className={compact ? 'tenant-user-catalog__networking-table-summary' : undefined}
-    >
-      Not configured
-    </Content>
-  )
-
-  if (compact) {
-    return statusContent
-  }
-
-  return (
-    <div className="tenant-user-catalog__spec-row">
-      <dt className="tenant-user-catalog__spec-label">Networking</dt>
-      <dd className="tenant-user-catalog__spec-value">{statusContent}</dd>
-    </div>
-  )
 }
 
 function getCatalogItemActions(
@@ -146,16 +91,21 @@ function getCatalogItemActions(
 export function TenantUserCatalogPage({
   organization,
   catalogDraft,
-  scopeKind,
-  scopeLabel,
-  scopeFieldLabel,
+  tenantSlug,
+  projects,
+  initialProjectId = null,
+  onProjectScopeChange,
+  onProjectsChange,
   autoOpenLaunchWizard = false,
   preferCatalogDraft = false,
+  openCatalogItemKey = null,
+  onOpenCatalogItemConsumed,
   existingInstanceNames = [],
   onProvisioningStarted,
   onDismissDuringProvisioning,
   onWizardFinished,
 }: TenantUserCatalogPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [viewMode, setViewMode] = useState<CatalogViewMode>(() => getCatalogViewMode('grid'))
   const [isWizardOpen, setIsWizardOpen] = useState(false)
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false)
@@ -175,6 +125,7 @@ export function TenantUserCatalogPage({
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
   const knownServiceFiltersRef = useRef(new Set(initialServiceFilters))
+  const itemParam = getWorkspaceCatalogItemParam(searchParams)
 
   useEffect(() => {
     setSelectedFilters((current) => {
@@ -220,6 +171,37 @@ export function TenantUserCatalogPage({
     setIsWizardOpen(true)
   }, [autoOpenLaunchWizard, catalogDraft, catalogItems, preferCatalogDraft])
 
+  useEffect(() => {
+    if (!openCatalogItemKey) {
+      return
+    }
+
+    const match = findCatalogItemByWorkspaceParam(catalogItems, openCatalogItemKey)
+    if (match) {
+      setSelectedCatalogItem(match)
+      setIsDetailsDrawerOpen(true)
+      setIsWizardOpen(false)
+      syncWorkspaceCatalogItemParam(setSearchParams, match.displayName, { replace: true })
+    }
+
+    onOpenCatalogItemConsumed?.()
+  }, [openCatalogItemKey, catalogItems, onOpenCatalogItemConsumed, setSearchParams])
+
+  useEffect(() => {
+    const match = findCatalogItemByWorkspaceParam(catalogItems, itemParam)
+    if (match) {
+      setSelectedCatalogItem(match)
+      if (!isWizardOpen) {
+        setIsDetailsDrawerOpen(true)
+      }
+      return
+    }
+
+    if (!itemParam) {
+      setIsDetailsDrawerOpen(false)
+    }
+  }, [itemParam, catalogItems, isWizardOpen])
+
   const serviceCounts = useMemo(
     () => countCatalogServices(catalogItems.map((item) => item.serviceId)),
     [catalogItems],
@@ -259,6 +241,28 @@ export function TenantUserCatalogPage({
     setSelectedFilters((current) => toggleCatalogServiceFilter(current, serviceId, isSelected))
   }
 
+  const catalogServiceIds = useMemo(
+    () => catalogItems.map((item) => item.serviceId),
+    [catalogItems],
+  )
+
+  const filterDescriptionParts = useMemo(() => {
+    const parts: string[] = []
+    const serviceDescription = describeCatalogServiceFilter(selectedFilters, catalogServiceIds)
+    if (serviceDescription) {
+      parts.push(`service: ${serviceDescription}`)
+    }
+    if (searchValue.trim()) {
+      parts.push(`search: "${searchValue.trim()}"`)
+    }
+    return parts
+  }, [catalogServiceIds, searchValue, selectedFilters])
+
+  const clearAllFilters = () => {
+    setSearchValue('')
+    setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
+  }
+
   const emptyStateTitle = (() => {
     if (selectedFilters.size === 0) {
       return 'Select a service to view catalog items'
@@ -275,44 +279,80 @@ export function TenantUserCatalogPage({
 
   const openDetails = (item: TenantUserCatalogCard) => {
     setSelectedCatalogItem(item)
+    setIsWizardOpen(false)
     setIsDetailsDrawerOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, item.displayName)
   }
 
   const closeDetails = () => {
     setIsDetailsDrawerOpen(false)
+    syncWorkspaceCatalogItemParam(setSearchParams, null)
+  }
+
+  const closeLaunchWizard = () => {
+    setIsWizardOpen(false)
   }
 
   const openLaunchWizard = (item: TenantUserCatalogCard) => {
     setSelectedCatalogItem(item)
     setIsDetailsDrawerOpen(false)
     setIsWizardOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
   }
 
   const activeCatalogItem = selectedCatalogItem ?? catalogItems[0] ?? null
+  const detailsItem = isDetailsDrawerOpen ? selectedCatalogItem : null
 
   return (
-    <TenantUserCatalogItemDetailsDrawer
-      isExpanded={isDetailsDrawerOpen && selectedCatalogItem !== null}
-      onClose={closeDetails}
-      catalogItem={isDetailsDrawerOpen ? selectedCatalogItem : null}
-      organization={organization}
-      catalogDraft={catalogDraft}
-      preferCatalogDraft={preferCatalogDraft}
-      onLaunch={() => {
-        if (selectedCatalogItem) {
-          openLaunchWizard(selectedCatalogItem)
-        }
-      }}
-    >
+    <>
+      {isWizardOpen && activeCatalogItem ? (
+        <TenantUserLaunchInstanceWizard
+          presentation="page"
+          isOpen={isWizardOpen}
+          catalogItem={activeCatalogItem}
+          organization={organization}
+          catalogDraft={catalogDraft}
+          preferCatalogDraft={preferCatalogDraft}
+          tenantSlug={tenantSlug}
+          projects={projects}
+          initialProjectId={initialProjectId}
+          onProjectScopeChange={onProjectScopeChange}
+          onProjectsChange={onProjectsChange}
+          existingInstanceNames={existingInstanceNames}
+          onClose={closeLaunchWizard}
+          onProvisioningStarted={onProvisioningStarted}
+          onDismissDuringProvisioning={(instanceId, serviceId) => {
+            onDismissDuringProvisioning(instanceId, serviceId)
+            closeLaunchWizard()
+          }}
+          onWizardFinished={(instanceId, serviceId) => {
+            onWizardFinished(instanceId, serviceId)
+            closeLaunchWizard()
+          }}
+        />
+      ) : detailsItem ? (
+        <TenantUserCatalogItemDetailsPage
+          catalogItem={detailsItem}
+          onBack={closeDetails}
+          onLaunch={() => openLaunchWizard(detailsItem)}
+        />
+      ) : (
       <div className="tenant-user-workspace-page tenant-user-catalog">
-        <Title headingLevel="h1" size="3xl" className="tenant-user-catalog__title">
-          Catalog
-        </Title>
-        <Content component="p" className="tenant-user-catalog__lede">
-          {scopeKind === 'organization'
-            ? TENANT_USER_CATALOG_PAGE.organizationLede
-            : TENANT_USER_CATALOG_PAGE.projectLede}
-        </Content>
+        <Flex
+          className="tenant-user-catalog__page-header"
+          justifyContent={{ default: 'justifyContentSpaceBetween' }}
+          alignItems={{ default: 'alignItemsFlexStart' }}
+          gap={{ default: 'gapMd' }}
+        >
+          <FlexItem>
+            <Title headingLevel="h1" size="3xl" className="tenant-user-catalog__title">
+              Catalog
+            </Title>
+            <Content component="p" className="tenant-user-catalog__lede">
+              {TENANT_USER_CATALOG_PAGE.organizationLede}
+            </Content>
+          </FlexItem>
+        </Flex>
 
         <div className="catalog-view-toolbar tenant-user-catalog__toolbar">
           <div className="catalog-view-toolbar__start">
@@ -334,6 +374,13 @@ export function TenantUserCatalogPage({
         </div>
 
         {filteredItems.length === 0 ? (
+          filterDescriptionParts.length > 0 ? (
+            <CatalogFilterEmptyState
+              title="No catalog items match your filters"
+              description="Try a different service or search term."
+              onClearFilters={clearAllFilters}
+            />
+          ) : (
           <EmptyState className="tenant-user-catalog__empty">
             <Title headingLevel="h2" size="lg">
               {emptyStateTitle}
@@ -346,7 +393,16 @@ export function TenantUserCatalogPage({
                   : 'No catalog items match the selected services.'}
             </EmptyStateBody>
           </EmptyState>
+          )
         ) : viewMode === 'grid' ? (
+          <>
+            <CatalogFilterResultsSummary
+              filteredCount={filteredItems.length}
+              totalCount={catalogItems.length}
+              singular="catalog item"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
           <div className="catalog-card-grid tenant-user-catalog__grid">
             {filteredItems.map((item) => {
               const catalogItemActions = getCatalogItemActions(
@@ -391,16 +447,6 @@ export function TenantUserCatalogPage({
                       valueClassName="tenant-user-catalog__spec-value"
                     />
 
-                    <dl className="tenant-user-catalog__networking-list">
-                      <NetworkingSummary
-                        item={item}
-                        organization={organization}
-                        catalogDraft={catalogDraft}
-                        preferCatalogDraft={preferCatalogDraft}
-                        onViewDetails={() => openDetails(item)}
-                      />
-                    </dl>
-
                     <div className="tenant-user-catalog__footer-note">
                       <LockIcon aria-hidden />
                       <span>{item.footerNote}</span>
@@ -419,11 +465,16 @@ export function TenantUserCatalogPage({
               )
             })}
           </div>
+          </>
         ) : (
           <div className="catalog-table-panel">
-            <Content component="p" className="catalog-table-result-count">
-              {formatCatalogTableResultCount(filteredItems.length, 'catalog item')}
-            </Content>
+            <CatalogFilterResultsSummary
+              filteredCount={filteredItems.length}
+              totalCount={catalogItems.length}
+              singular="catalog item"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
             <Table
               aria-label="Catalog items"
               className="catalog-data-table tenant-user-catalog__table"
@@ -433,7 +484,6 @@ export function TenantUserCatalogPage({
                   <Th>Name</Th>
                   <Th>Status</Th>
                   <Th>Configuration</Th>
-                  <Th>Networking</Th>
                   <Th>Action</Th>
                 </Tr>
               </Thead>
@@ -465,17 +515,11 @@ export function TenantUserCatalogPage({
                         serviceId: item.serviceId,
                         templateRefId: item.templateRefId,
                         templateName: item.templateName,
+                        instanceTypeLabel: item.instanceTypeLabel,
+                        diskImageLabel: item.diskImageLabel,
+                        diskImageId: item.diskImageId,
+                        clusterVersionMode: item.clusterVersionMode,
                       })}
-                    </Td>
-                    <Td dataLabel="Networking">
-                      <NetworkingSummary
-                        item={item}
-                        organization={organization}
-                        catalogDraft={catalogDraft}
-                        preferCatalogDraft={preferCatalogDraft}
-                        compact
-                        onViewDetails={() => openDetails(item)}
-                      />
                     </Td>
                     <Td dataLabel="Action">
                       <Button
@@ -493,31 +537,8 @@ export function TenantUserCatalogPage({
             </Table>
           </div>
         )}
-
-        {activeCatalogItem ? (
-          <TenantUserLaunchInstanceWizard
-            isOpen={isWizardOpen}
-            catalogItem={activeCatalogItem}
-            organization={organization}
-            catalogDraft={catalogDraft}
-            preferCatalogDraft={preferCatalogDraft}
-            scopeKind={scopeKind}
-            scopeLabel={scopeLabel}
-            scopeFieldLabel={scopeFieldLabel}
-            existingInstanceNames={existingInstanceNames}
-            onClose={() => setIsWizardOpen(false)}
-            onProvisioningStarted={onProvisioningStarted}
-            onDismissDuringProvisioning={(instanceId, serviceId) => {
-              onDismissDuringProvisioning(instanceId, serviceId)
-              setIsWizardOpen(false)
-            }}
-            onWizardFinished={(instanceId, serviceId) => {
-              onWizardFinished(instanceId, serviceId)
-              setIsWizardOpen(false)
-            }}
-          />
-        ) : null}
       </div>
-    </TenantUserCatalogItemDetailsDrawer>
+      )}
+    </>
   )
 }

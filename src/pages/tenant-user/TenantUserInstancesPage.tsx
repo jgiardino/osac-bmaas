@@ -8,6 +8,8 @@ import {
   Content,
   EmptyState,
   EmptyStateBody,
+  Flex,
+  FlexItem,
   Form,
   FormGroup,
   FormSelect,
@@ -29,11 +31,16 @@ import {
   countCatalogServices,
   toggleCatalogServiceFilter,
 } from '../../components/catalog/CatalogServiceFilterToggle'
+import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
+import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
-import { TenantUserInstanceDetailsDrawer } from '../../components/tenant-user/TenantUserInstanceDetailsDrawer'
+import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
-import { formatCatalogTableResultCount } from '../../catalog/tableResultCount'
+import {
+  createCatalogServiceFilterSet,
+  describeCatalogServiceFilter,
+} from '../../catalog/catalogFilterSummary'
 import {
   getInstancesViewMode,
   setInstancesViewMode,
@@ -41,10 +48,13 @@ import {
 } from '../../catalog/viewMode'
 import { CATALOG_SERVICE_FILTER_LABELS, type CatalogServiceId } from '../../providerSetup/templateDemo'
 import {
+  BARE_METAL_DISK_IMAGE_FILTER_OPTIONS,
   createDemoPublicIp,
   downloadClusterKubeconfig,
   formatTenantInstanceCreatedAt,
   formatTenantInstanceName,
+  getBareMetalInstanceDiskImageFilterLabel,
+  getBareMetalSerialConsoleUrl,
   getClusterDemoPassword,
   getClusterNodeSetTypeLabel,
   getClusterPlatformLabel,
@@ -52,7 +62,8 @@ import {
   getTenantInstanceActions,
   getTenantInstanceCardSpecRows,
   getTenantInstanceGpuLabel,
-  getTenantInstanceScopeFieldLabel,
+  getTenantInstanceProjectIds,
+  getTenantInstanceProjectLabel,
   getTenantInstanceServiceId,
   getTenantInstanceSpecRows,
   getTenantInstanceStatusLabel,
@@ -61,19 +72,54 @@ import {
   type TenantInstance,
   type TenantInstanceNetworking,
   type TenantInstanceStatus,
+  withInstanceProjectIds,
 } from '../../tenantUser/instances'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
-import { removeTenantUserInstance, updateTenantUserInstance } from '../../tenantUser/storage'
+import {
+  ensureTenantDemoInstances,
+  removeTenantUserInstance,
+  updateTenantUserInstance,
+} from '../../tenantUser/storage'
+import type { TenantProject } from '../../tenantAdmin/projects'
+import {
+  generateTenantProjectId,
+  resolveOrganizationExternalIpPool,
+} from '../../tenantAdmin/projects'
+import {
+  DEFAULT_CREATE_PROJECT_WIZARD_FORM,
+  DEFAULT_PROJECT_IP_SLICE,
+} from '../../tenantAdmin/createProjectWizard'
+import { addTenantProject } from '../../tenantAdmin/storage'
+import type { RegisteredOrganization } from '../../providerAdmin/organizations'
+import {
+  filterInstancesByProjectScope,
+  isAllProjectsScope,
+  type ProjectScopeId,
+} from '../../tenantUser/projectScope'
+import { ProjectScopeSwitcher } from '../../components/shared/ProjectScopeSwitcher'
 
 type TenantUserInstancesPageProps = {
   tenantSlug: string
   instances: TenantInstance[]
   onInstancesChange: Dispatch<SetStateAction<TenantInstance[]>>
-  defaultScopeFieldLabel?: 'Organization' | 'Project'
+  projects: readonly TenantProject[]
+  projectScopeId: ProjectScopeId
+  onProjectScopeChange: (scopeId: ProjectScopeId) => void
+  onProjectsChange: (projects: TenantProject[]) => void
+  organization: RegisteredOrganization | null
   /** When set, page is scoped to one service (nav-driven) and hides service filters. */
   lockedServiceId?: CatalogServiceId
   /** Closes the instance detail drawer when left-nav selection changes. */
   activeNavId?: string
+  /** Opens the matching catalog item detail page in Catalog. */
+  onNavigateToCatalogItem?: (catalogItemDisplayName: string) => void
+  /** Opens the matching project detail page in Projects & teams. */
+  onNavigateToProject?: (project: TenantProject) => void
+  /** Opens this instance's detail page when navigating from another workspace view. */
+  openInstanceId?: string | null
+  onOpenInstanceConsumed?: () => void
+  /** Provider admin Services detail shows assigned networking objects without lock controls. */
+  instanceNetworkingVariant?: 'interactive' | 'summary'
 }
 
 function getStatusColor(status: TenantInstance['status']): 'green' | 'blue' | 'orange' | 'red' | 'grey' {
@@ -127,21 +173,48 @@ const CLUSTER_STATUS_FILTER_OPTIONS: Array<{
   label: string
 }> = [
   { value: 'all', label: 'All statuses' },
-  { value: 'running', label: 'Ready' },
+  { value: 'running', label: 'Running' },
   { value: 'provisioning', label: 'Provisioning' },
   { value: 'restarting', label: 'Restarting' },
   { value: 'stopped', label: 'Stopped' },
   { value: 'failed', label: 'Failed' },
 ]
 
+const DISK_IMAGE_FILTER_ALL_OPTION = { value: 'all', label: 'All disk images' } as const
+const OS_IMAGE_FILTER_ALL_OPTION = { value: 'all', label: 'All OS images' } as const
+
 export function TenantUserInstancesPage({
   tenantSlug,
   instances,
   onInstancesChange,
-  defaultScopeFieldLabel = 'Project',
+  projects,
+  projectScopeId,
+  onProjectScopeChange,
+  onProjectsChange,
+  organization,
   lockedServiceId,
   activeNavId,
+  onNavigateToCatalogItem,
+  onNavigateToProject,
+  openInstanceId = null,
+  onOpenInstanceConsumed,
+  instanceNetworkingVariant = 'summary',
 }: TenantUserInstancesPageProps) {
+  useEffect(() => {
+    const normalized = ensureTenantDemoInstances(tenantSlug, organization?.name ?? tenantSlug)
+    onInstancesChange((current) => {
+      if (
+        current.length === normalized.length &&
+        current.every((instance, index) => instance === normalized[index])
+      ) {
+        return current
+      }
+      return normalized
+    })
+    // Normalize demo showcase rows (e.g. bm-server-06 multi-project) on workspace entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount sync per tenant
+  }, [tenantSlug])
+
   const [viewMode, setViewMode] = useState<ViewMode>(() => getInstancesViewMode('grid'))
   const [searchValue, setSearchValue] = useState('')
   const [powerStateFilter, setPowerStateFilter] = useState<'all' | TenantInstanceStatus>('all')
@@ -157,6 +230,7 @@ export function TenantUserInstancesPage({
   const [instancePendingPassword, setInstancePendingPassword] = useState<TenantInstance | null>(
     null,
   )
+  const [sshAccessInstance, setSshAccessInstance] = useState<TenantInstance | null>(null)
   const [instancePendingPublicIp, setInstancePendingPublicIp] = useState<TenantInstance | null>(
     null,
   )
@@ -164,7 +238,12 @@ export function TenantUserInstancesPage({
   const [isProvisioningNoticeDismissed, setIsProvisioningNoticeDismissed] = useState(false)
   const restartTimersRef = useRef<Map<string, number>>(new Map())
 
-  const hasProvisioningInstances = instances.some((instance) => {
+  const scopedInstances = useMemo(
+    () => filterInstancesByProjectScope(instances, tenantSlug, projectScopeId),
+    [instances, tenantSlug, projectScopeId],
+  )
+
+  const hasProvisioningInstances = scopedInstances.some((instance) => {
     if (instance.status !== 'provisioning') {
       return false
     }
@@ -191,6 +270,19 @@ export function TenantUserInstancesPage({
   }, [activeNavId, lockedServiceId])
 
   useEffect(() => {
+    if (!openInstanceId) {
+      return
+    }
+
+    const match = instances.find((instance) => instance.id === openInstanceId) ?? null
+    if (match) {
+      setSelectedInstanceId(match.id)
+      setIsDetailsDrawerOpen(true)
+    }
+    onOpenInstanceConsumed?.()
+  }, [openInstanceId, instances, onOpenInstanceConsumed])
+
+  useEffect(() => {
     setPowerStateFilter('all')
     setOsFilter('all')
     setGpuFilter('all')
@@ -214,8 +306,8 @@ export function TenantUserInstancesPage({
     hasProvisioningInstances && !isProvisioningNoticeDismissed
 
   const instanceServiceIds = useMemo(
-    () => instances.map((instance) => getTenantInstanceServiceId(instance)),
-    [instances],
+    () => scopedInstances.map((instance) => getTenantInstanceServiceId(instance)),
+    [scopedInstances],
   )
   const initialServiceFilters = lockedServiceId
     ? [lockedServiceId]
@@ -234,42 +326,18 @@ export function TenantUserInstancesPage({
     setSelectedFilters(new Set([lockedServiceId]))
   }, [lockedServiceId])
 
-  const scopeColumnLabel = useMemo(() => {
-    if (instances.length === 0) {
-      return defaultScopeFieldLabel
-    }
-    const labels = new Set(
-      instances.map((instance) => getTenantInstanceScopeFieldLabel(instance)),
-    )
-    return labels.size === 1 ? [...labels][0] : 'Scope'
-  }, [defaultScopeFieldLabel, instances])
-
   const sortedInstances = useMemo(
     () =>
-      [...instances].sort(
+      [...scopedInstances].sort(
         (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
       ),
-    [instances],
+    [scopedInstances],
   )
 
   const serviceCounts = useMemo(
     () => countCatalogServices(instanceServiceIds),
     [instanceServiceIds],
   )
-
-  const bareMetalOsOptions = useMemo(() => {
-    const osValues = new Set<string>()
-    for (const instance of sortedInstances) {
-      if (getTenantInstanceServiceId(instance) !== 'baremetal') {
-        continue
-      }
-      const osImage = instance.osImage.trim()
-      if (osImage) {
-        osValues.add(osImage)
-      }
-    }
-    return [...osValues].sort((left, right) => left.localeCompare(right))
-  }, [sortedInstances])
 
   const bareMetalGpuOptions = useMemo(() => {
     const gpuValues = new Set<string>()
@@ -327,20 +395,28 @@ export function TenantUserInstancesPage({
     return [...osValues].sort((left, right) => left.localeCompare(right))
   }, [sortedInstances])
 
+  const serviceFilteredInstances = useMemo(
+    () =>
+      sortedInstances.filter((instance) =>
+        selectedFilters.has(getTenantInstanceServiceId(instance)),
+      ),
+    [sortedInstances, selectedFilters],
+  )
+
   const filteredInstances = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
 
-    return sortedInstances.filter((instance) => {
+    return serviceFilteredInstances.filter((instance) => {
       const serviceId = getTenantInstanceServiceId(instance)
-      if (!selectedFilters.has(serviceId)) {
-        return false
-      }
 
       if (isBareMetalPage) {
         if (powerStateFilter !== 'all' && instance.status !== powerStateFilter) {
           return false
         }
-        if (osFilter !== 'all' && instance.osImage !== osFilter) {
+        if (
+          osFilter !== 'all' &&
+          getBareMetalInstanceDiskImageFilterLabel(instance) !== osFilter
+        ) {
           return false
         }
         if (gpuFilter !== 'all' && getTenantInstanceGpuLabel(instance) !== gpuFilter) {
@@ -400,8 +476,7 @@ export function TenantUserInstancesPage({
       )
     })
   }, [
-    sortedInstances,
-    selectedFilters,
+    serviceFilteredInstances,
     searchValue,
     isBareMetalPage,
     isClustersPage,
@@ -412,6 +487,73 @@ export function TenantUserInstancesPage({
     platformFilter,
     nodeSetTypeFilter,
   ])
+
+  const filterDescriptionParts = useMemo(() => {
+    const parts: string[] = []
+
+    if (!lockedServiceId) {
+      const serviceDescription = describeCatalogServiceFilter(selectedFilters, instanceServiceIds)
+      if (serviceDescription) {
+        parts.push(`service: ${serviceDescription}`)
+      }
+    }
+
+    if (isBareMetalPage || isVirtualMachinesPage || isClustersPage) {
+      const powerOptions = isClustersPage ? CLUSTER_STATUS_FILTER_OPTIONS : POWER_STATE_FILTER_OPTIONS
+      if (powerStateFilter !== 'all') {
+        const label =
+          powerOptions.find((option) => option.value === powerStateFilter)?.label ??
+          powerStateFilter
+        parts.push(`status: ${label}`)
+      }
+    }
+
+    if (isBareMetalPage && osFilter !== 'all') {
+      parts.push(`Disk image: ${osFilter}`)
+    }
+    if (isBareMetalPage && gpuFilter !== 'all') {
+      parts.push(`GPU: ${gpuFilter}`)
+    }
+    if (isClustersPage && platformFilter !== 'all') {
+      parts.push(`platform: ${platformFilter}`)
+    }
+    if (isClustersPage && nodeSetTypeFilter !== 'all') {
+      parts.push(`node set: ${nodeSetTypeFilter}`)
+    }
+    if (isVirtualMachinesPage && osFilter !== 'all') {
+      parts.push(`OS image: ${osFilter}`)
+    }
+    if (searchValue.trim()) {
+      parts.push(`search: "${searchValue.trim()}"`)
+    }
+
+    return parts
+  }, [
+    gpuFilter,
+    instanceServiceIds,
+    isBareMetalPage,
+    isClustersPage,
+    isVirtualMachinesPage,
+    lockedServiceId,
+    nodeSetTypeFilter,
+    osFilter,
+    platformFilter,
+    powerStateFilter,
+    searchValue,
+    selectedFilters,
+  ])
+
+  const clearAllFilters = () => {
+    setSearchValue('')
+    setPowerStateFilter('all')
+    setOsFilter('all')
+    setGpuFilter('all')
+    setPlatformFilter('all')
+    setNodeSetTypeFilter('all')
+    if (!lockedServiceId) {
+      setSelectedFilters(createCatalogServiceFilterSet(instanceServiceIds))
+    }
+  }
 
   const selectedInstance = useMemo(
     () => instances.find((instance) => instance.id === selectedInstanceId) ?? null,
@@ -585,6 +727,14 @@ export function TenantUserInstancesPage({
           setInstancePendingPublicIp(target)
         },
       },
+      {
+        onConnectSsh: (target) => {
+          setSshAccessInstance(target)
+        },
+        onOpenSerialConsole: (target) => {
+          window.open(getBareMetalSerialConsoleUrl(target), '_blank', 'noopener,noreferrer')
+        },
+      },
     )
 
   const handleUpdateNetworking = (
@@ -603,6 +753,63 @@ export function TenantUserInstancesPage({
         current,
       ),
     )
+  }
+
+  const organizationName = organization?.name ?? tenantSlug
+
+  const handleAddInstanceProject = (instanceId: string, projectId: string) => {
+    onInstancesChange((current) => {
+      const target = current.find((instance) => instance.id === instanceId)
+      if (!target) {
+        return current
+      }
+
+      const nextIds = [...new Set([...getTenantInstanceProjectIds(target), projectId])]
+      return updateTenantUserInstance(
+        tenantSlug,
+        instanceId,
+        withInstanceProjectIds(target, nextIds, projects, organizationName),
+        current,
+      )
+    })
+  }
+
+  const handleCreateInstanceProject = (instanceId: string, projectName: string) => {
+    const organizationPool = organization
+      ? resolveOrganizationExternalIpPool(organization)
+      : null
+    const project: TenantProject = {
+      id: generateTenantProjectId(),
+      name: projectName.trim(),
+      description: '',
+      environmentType: DEFAULT_CREATE_PROJECT_WIZARD_FORM.environmentType,
+      instanceQuota: DEFAULT_CREATE_PROJECT_WIZARD_FORM.instanceQuota,
+      externalIpPoolId: organizationPool?.id ?? null,
+      externalIpPoolName: organizationPool?.name ?? null,
+      externalIpPoolCidr: DEFAULT_PROJECT_IP_SLICE,
+      catalogItems: [],
+      members: [],
+      createdAt: new Date().toISOString(),
+    }
+
+    addTenantProject(tenantSlug, project)
+    const nextProjects = [...projects, project]
+    onProjectsChange(nextProjects)
+
+    onInstancesChange((current) => {
+      const target = current.find((instance) => instance.id === instanceId)
+      if (!target) {
+        return current
+      }
+
+      const nextIds = [...new Set([...getTenantInstanceProjectIds(target), project.id])]
+      return updateTenantUserInstance(
+        tenantSlug,
+        instanceId,
+        withInstanceProjectIds(target, nextIds, nextProjects, organizationName),
+        current,
+      )
+    })
   }
 
   const closeAttachPublicIp = () => {
@@ -648,17 +855,26 @@ export function TenantUserInstancesPage({
     ? CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]
     : 'Services'
   const pageLede = lockedServiceId
-    ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances provisioned in your project.`
-    : 'Monitor and manage instances provisioned in your project.'
+    ? isAllProjectsScope(projectScopeId)
+      ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
+      : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
+    : isAllProjectsScope(projectScopeId)
+      ? 'Monitor and manage instances across all projects.'
+      : 'Monitor and manage instances in this project.'
 
   const emptyStateTitle = (() => {
+    if (!isAllProjectsScope(projectScopeId) && scopedInstances.length === 0) {
+      return lockedServiceId
+        ? `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances in this project`
+        : 'No instances in this project'
+    }
     if (searchValue.trim()) {
       return 'No instances match your search'
     }
     if (lockedServiceId) {
       return `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances yet`
     }
-    if (instances.length === 0) {
+    if (scopedInstances.length === 0) {
       return 'No instances yet'
     }
     if (selectedFilters.size === 0) {
@@ -671,32 +887,169 @@ export function TenantUserInstancesPage({
     return 'No instances for the selected services'
   })()
 
+  if (isDetailsDrawerOpen && selectedInstance) {
+    return (
+      <>
+        <TenantUserInstanceDetailsPage
+          instance={selectedInstance}
+          tenantSlug={tenantSlug}
+          projects={projects}
+          onBack={closeDetails}
+          onRequestTerminate={openTerminateConfirm}
+          onRestart={handleRestartInstance}
+          onStart={handleStartInstance}
+          onStop={handleStopInstance}
+          onAttachPublicIp={(instance) => {
+            setPublicIpFamily('IPv4')
+            setInstancePendingPublicIp(instance)
+          }}
+          onUpdateNetworking={handleUpdateNetworking}
+          onAddProject={handleAddInstanceProject}
+          onCreateProject={handleCreateInstanceProject}
+          onNavigateToCatalogItem={onNavigateToCatalogItem}
+          onNavigateToProject={onNavigateToProject}
+          onViewPassword={(instance) => {
+            setInstancePendingPassword(instance)
+          }}
+          instanceNetworkingVariant={instanceNetworkingVariant}
+        />
+
+        <Modal
+          variant={ModalVariant.small}
+          isOpen={instancePendingTerminate !== null}
+          onClose={closeTerminateConfirm}
+          aria-labelledby="terminate-instance-title"
+          aria-describedby="terminate-instance-description"
+        >
+          <ModalHeader
+            title={
+              instancePendingTerminate &&
+              getTenantInstanceServiceId(instancePendingTerminate) === 'cluster'
+                ? 'Delete cluster?'
+                : instancePendingTerminate &&
+                    getTenantInstanceServiceId(instancePendingTerminate) === 'virtual-machine'
+                  ? 'Delete virtual machine?'
+                  : 'Delete instance?'
+            }
+            titleIconVariant="warning"
+            labelId="terminate-instance-title"
+          />
+          <ModalBody>
+            <Content component="p" id="terminate-instance-description">
+              {instancePendingTerminate ? (
+                <>
+                  <strong>{formatTenantInstanceName(instancePendingTerminate.name)}</strong> will be
+                  permanently removed. This cannot be undone.
+                </>
+              ) : (
+                'This instance will be permanently removed. This cannot be undone.'
+              )}
+            </Content>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="danger" onClick={handleConfirmTerminate}>
+              Delete
+            </Button>
+            <Button variant="link" onClick={closeTerminateConfirm}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+
+        <Modal
+          variant={ModalVariant.small}
+          isOpen={instancePendingPublicIp !== null}
+          onClose={closeAttachPublicIp}
+          aria-labelledby="attach-public-ip-title"
+        >
+          <ModalHeader title="Attach public IP" labelId="attach-public-ip-title" />
+          <ModalBody>
+            <Form>
+              <FormGroup label="IP family" fieldId="attach-public-ip-family" isRequired>
+                <Radio
+                  id="attach-public-ip-ipv4"
+                  name="attach-public-ip-family"
+                  label="IPv4"
+                  isChecked={publicIpFamily === 'IPv4'}
+                  onChange={() => setPublicIpFamily('IPv4')}
+                />
+                <Radio
+                  id="attach-public-ip-ipv6"
+                  name="attach-public-ip-family"
+                  label="IPv6"
+                  isChecked={publicIpFamily === 'IPv6'}
+                  onChange={() => setPublicIpFamily('IPv6')}
+                />
+              </FormGroup>
+            </Form>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="link" onClick={closeAttachPublicIp}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleConfirmAttachPublicIp}>
+              Attach
+            </Button>
+          </ModalFooter>
+        </Modal>
+
+        <Modal
+          variant={ModalVariant.small}
+          isOpen={instancePendingPassword !== null}
+          onClose={() => setInstancePendingPassword(null)}
+          aria-labelledby="cluster-password-modal-title"
+        >
+          <ModalHeader title="Cluster password" labelId="cluster-password-modal-title" />
+          <ModalBody>
+            <Content component="p">
+              Use this kubeadmin password with the OpenShift web console.
+            </Content>
+            {instancePendingPassword ? (
+              <code className="tenant-user-instances__cluster-password">
+                {getClusterDemoPassword(instancePendingPassword)}
+              </code>
+            ) : null}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="primary" onClick={() => setInstancePendingPassword(null)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </Modal>
+      </>
+    )
+  }
+
   return (
     <>
-    <TenantUserInstanceDetailsDrawer
-      isExpanded={isDetailsDrawerOpen && selectedInstance !== null}
-      onClose={closeDetails}
-      instance={isDetailsDrawerOpen ? selectedInstance : null}
-      onRequestTerminate={openTerminateConfirm}
-      onRestart={handleRestartInstance}
-      onStart={handleStartInstance}
-      onStop={handleStopInstance}
-      onAttachPublicIp={(instance) => {
-        setPublicIpFamily('IPv4')
-        setInstancePendingPublicIp(instance)
-      }}
-      onUpdateNetworking={handleUpdateNetworking}
-    >
       <div className="tenant-user-workspace-page tenant-user-instances">
-        <Title headingLevel="h1" size="3xl" className="tenant-user-instances__title">
-          {pageTitle}
-        </Title>
-        <Content component="p" className="tenant-user-instances__lede">
-          {pageLede}
-        </Content>
+        <Flex
+          className="tenant-user-instances__page-header"
+          justifyContent={{ default: 'justifyContentSpaceBetween' }}
+          alignItems={{ default: 'alignItemsFlexStart' }}
+          gap={{ default: 'gapMd' }}
+        >
+          <FlexItem>
+            <Title headingLevel="h1" size="3xl" className="tenant-user-instances__title">
+              {pageTitle}
+            </Title>
+            <Content component="p" className="tenant-user-instances__lede">
+              {pageLede}
+            </Content>
+          </FlexItem>
+        </Flex>
 
         <div className="catalog-view-toolbar tenant-user-instances__toolbar">
           <div className="catalog-view-toolbar__start">
+            <ProjectScopeSwitcher
+              tenantSlug={tenantSlug}
+              projects={projects}
+              selectedScopeId={projectScopeId}
+              onChange={onProjectScopeChange}
+              organization={organization}
+              onProjectsChange={onProjectsChange}
+              id="tenant-user-instances-project-scope"
+            />
             {lockedServiceId ? null : (
               <CatalogServiceFilterToggle
                 selectedFilters={selectedFilters}
@@ -730,10 +1083,13 @@ export function TenantUserInstancesPage({
                   id="instances-bm-os-filter"
                   value={osFilter}
                   onChange={(_event, value) => setOsFilter(value)}
-                  aria-label="Filter bare metal by operating system"
+                  aria-label="Filter bare metal by disk image"
                 >
-                  <FormSelectOption value="all" label="All operating systems" />
-                  {bareMetalOsOptions.map((osImage) => (
+                  <FormSelectOption
+                    value={DISK_IMAGE_FILTER_ALL_OPTION.value}
+                    label={DISK_IMAGE_FILTER_ALL_OPTION.label}
+                  />
+                  {BARE_METAL_DISK_IMAGE_FILTER_OPTIONS.map((osImage) => (
                     <FormSelectOption key={osImage} value={osImage} label={osImage} />
                   ))}
                 </FormSelect>
@@ -820,9 +1176,12 @@ export function TenantUserInstancesPage({
                   id="instances-vm-os-filter"
                   value={osFilter}
                   onChange={(_event, value) => setOsFilter(value)}
-                  aria-label="Filter virtual machines by operating system"
+                  aria-label="Filter virtual machines by OS image"
                 >
-                  <FormSelectOption value="all" label="All operating systems" />
+                  <FormSelectOption
+                    value={OS_IMAGE_FILTER_ALL_OPTION.value}
+                    label={OS_IMAGE_FILTER_ALL_OPTION.label}
+                  />
                   {vmOsOptions.map((osImage) => (
                     <FormSelectOption key={osImage} value={osImage} label={osImage} />
                   ))}
@@ -868,6 +1227,13 @@ export function TenantUserInstancesPage({
         ) : null}
 
         {filteredInstances.length === 0 ? (
+          filterDescriptionParts.length > 0 ? (
+            <CatalogFilterEmptyState
+              title="No instances match your filters"
+              description="Try a different filter option or search term."
+              onClearFilters={clearAllFilters}
+            />
+          ) : (
           <EmptyState className="tenant-user-instances__empty">
             <span className="tenant-user-instances__empty-icon" aria-hidden>
               {getCatalogServiceIcon(lockedServiceId ?? 'baremetal')}
@@ -876,8 +1242,10 @@ export function TenantUserInstancesPage({
               {emptyStateTitle}
             </Title>
             <EmptyStateBody>
-              {instances.length === 0
-                ? 'Launch an instance from the catalog to start provisioning capacity for your project.'
+              {scopedInstances.length === 0
+                ? isAllProjectsScope(projectScopeId)
+                  ? 'Launch an instance from the catalog to start provisioning capacity.'
+                  : 'Launch an instance from the catalog while this project is selected, or switch to All projects.'
                 : selectedFilters.size === 0
                   ? 'Choose one or more services above to filter your instances.'
                   : searchValue.trim() || hasActiveServiceFilters
@@ -885,12 +1253,20 @@ export function TenantUserInstancesPage({
                     : 'No instances match the selected services.'}
             </EmptyStateBody>
           </EmptyState>
+          )
         ) : viewMode === 'grid' ? (
+            <>
+            <CatalogFilterResultsSummary
+              filteredCount={filteredInstances.length}
+              totalCount={serviceFilteredInstances.length}
+              singular="instance"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
             <div className="catalog-card-grid tenant-user-instances__grid">
               {filteredInstances.map((instance) => {
                 const serviceId = getTenantInstanceServiceId(instance)
                 const cardSpecRows = getTenantInstanceCardSpecRows(instance)
-                const isClusterCard = serviceId === 'cluster'
 
                 return (
                 <Card key={instance.id} isCompact={false} className="tenant-user-instances__card">
@@ -900,38 +1276,22 @@ export function TenantUserInstancesPage({
                         {getCatalogServiceIcon(serviceId)}
                       </span>
                       <div className="tenant-user-instances__card-header-actions">
-                        {isClusterCard ? null : <InstanceStatusLabel status={instance.status} />}
+                        <InstanceStatusLabel status={instance.status} />
                         <ActionsColumn items={getInstanceKebabActions(instance)} />
                       </div>
                     </div>
 
                     <div className="tenant-user-instances__card-title-block">
-                      {isClusterCard ? (
-                        <div className="tenant-user-instances__name-status-row">
-                          <Content component="p" className="tenant-user-instances__primary-cell">
-                            <Button
-                              variant="link"
-                              isInline
-                              className="tenant-user-instances__name-link catalog-item-name-link"
-                              onClick={() => handleViewDetails(instance)}
-                            >
-                              {formatTenantInstanceName(instance.name)}
-                            </Button>
-                          </Content>
-                          <InstanceStatusLabel status={instance.status} />
-                        </div>
-                      ) : (
-                        <Content component="p" className="tenant-user-instances__primary-cell">
-                          <Button
-                            variant="link"
-                            isInline
-                            className="tenant-user-instances__name-link catalog-item-name-link"
-                            onClick={() => handleViewDetails(instance)}
-                          >
-                            {formatTenantInstanceName(instance.name)}
-                          </Button>
-                        </Content>
-                      )}
+                      <Content component="p" className="tenant-user-instances__primary-cell">
+                        <Button
+                          variant="link"
+                          isInline
+                          className="tenant-user-instances__name-link catalog-item-name-link"
+                          onClick={() => handleViewDetails(instance)}
+                        >
+                          {formatTenantInstanceName(instance.name)}
+                        </Button>
+                      </Content>
                       <Content component="p" className="tenant-user-instances__secondary-cell">
                         {instance.catalogItemDisplayName}
                       </Content>
@@ -946,6 +1306,10 @@ export function TenantUserInstancesPage({
                     />
 
                     <dl className="tenant-user-instances__card-footer">
+                      <div className="tenant-user-instances__card-footer-row">
+                        <dt>Project</dt>
+                        <dd>{getTenantInstanceProjectLabel(instance, projects)}</dd>
+                      </div>
                       <div className="tenant-user-instances__card-footer-row">
                         <dt>Created</dt>
                         <dd>{formatTenantInstanceCreatedAt(instance.createdAt)}</dd>
@@ -963,16 +1327,36 @@ export function TenantUserInstancesPage({
                         </Button>
                       </div>
                     ) : null}
+                    {serviceId === 'baremetal' ? (
+                      <div className="tenant-user-instances__card-console">
+                        <Button
+                          variant="primary"
+                          isDisabled={instance.status !== 'running'}
+                          className="tenant-user-instances__console-button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSshAccessInstance(instance)
+                          }}
+                        >
+                          Connect via SSH
+                        </Button>
+                      </div>
+                    ) : null}
                   </CardBody>
                 </Card>
                 )
               })}
             </div>
+            </>
           ) : (
             <div className="catalog-table-panel">
-              <Content component="p" className="catalog-table-result-count">
-                {formatCatalogTableResultCount(filteredInstances.length, 'instance')}
-              </Content>
+              <CatalogFilterResultsSummary
+                filteredCount={filteredInstances.length}
+                totalCount={serviceFilteredInstances.length}
+                singular="instance"
+                filterParts={filterDescriptionParts}
+                onClearFilters={clearAllFilters}
+              />
               <Table
                 aria-label="My instances"
                 className="catalog-data-table tenant-user-instances__table"
@@ -981,7 +1365,7 @@ export function TenantUserInstancesPage({
                   <Tr>
                     <Th>Name</Th>
                     <Th>Status</Th>
-                    <Th>{scopeColumnLabel}</Th>
+                    <Th>Project</Th>
                     <Th>Profile</Th>
                     <Th>Detail</Th>
                     <Th>Created</Th>
@@ -1009,9 +1393,7 @@ export function TenantUserInstancesPage({
                     <Td dataLabel="Status">
                       <InstanceStatusLabel status={instance.status} />
                     </Td>
-                      <Td dataLabel={getTenantInstanceScopeFieldLabel(instance)}>
-                        {instance.projectName}
-                      </Td>
+                      <Td dataLabel="Project">{getTenantInstanceProjectLabel(instance, projects)}</Td>
                       <Td dataLabel={profileRow?.label ?? 'Profile'}>{profileRow?.value ?? '—'}</Td>
                       <Td dataLabel={detailRow?.label ?? 'Detail'}>{detailRow?.value ?? '—'}</Td>
                       <Td dataLabel="Created">
@@ -1028,7 +1410,6 @@ export function TenantUserInstancesPage({
             </div>
           )}
       </div>
-    </TenantUserInstanceDetailsDrawer>
 
       <Modal
         variant={ModalVariant.small}
@@ -1132,6 +1513,12 @@ export function TenantUserInstancesPage({
           </Button>
         </ModalFooter>
       </Modal>
+
+      <BareMetalConnectSshModal
+        instance={sshAccessInstance}
+        isOpen={sshAccessInstance !== null}
+        onClose={() => setSshAccessInstance(null)}
+      />
     </>
   )
 }

@@ -1,6 +1,7 @@
 import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
-import type { CatalogServiceId, PublishCatalogScope } from '../providerSetup/templateDemo'
-import { CATALOG_SERVICE_LABELS } from '../providerSetup/templateDemo'
+import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
+import type { CatalogServiceId, PublishCatalogScope, RateCard } from '../providerSetup/templateDemo'
+import { CATALOG_SERVICE_LABELS, DEFAULT_RATE_CARD, resolveRateCard } from '../providerSetup/templateDemo'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import {
@@ -12,7 +13,9 @@ import type { CatalogNetworkPolicy } from '../providerAdmin/catalogNetworkPolicy
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
 import {
   type CatalogSpecRow,
+  getCatalogSpecRowValue,
   resolveCatalogOsImage,
+  resolveBaremetalCatalogCardSpecRows,
   resolveCatalogSpecRows,
 } from '../catalog/catalogSpecs'
 import {
@@ -34,8 +37,16 @@ export type TenantCatalogGovernanceItem = {
   description?: string
   templateRefId: string
   templateName: string
+  instanceTypeId?: string
   instanceTypeLabel?: string
   diskImageLabel?: string
+  diskImageId?: string
+  clusterVersionMode?: 'locked' | 'editable'
+  nodeSetId?: string
+  nodeSetLabel?: string
+  hostTypeId?: string
+  hostTypeLabel?: string
+  clusterNodeTopologyMode?: 'locked' | 'editable'
   fieldPolicies?: CatalogFieldPolicy[]
   /** Card/table configuration rows (service-aware). */
   specRows: CatalogSpecRow[]
@@ -48,6 +59,8 @@ export type TenantCatalogGovernanceItem = {
   restricted: boolean
   approved: boolean
   scope: PublishCatalogScope
+  rateCard: RateCard
+  createdAt: string
 }
 
 export type TenantCatalogGovernanceItemWithNetworking = TenantCatalogGovernanceItem & {
@@ -119,10 +132,14 @@ function mapProviderCatalogToGovernanceItem(
   organization: RegisteredOrganization,
 ): TenantCatalogGovernanceItemWithNetworking {
   const serviceId = draft.serviceId ?? 'baremetal'
-  const specRows = resolveCatalogSpecRows(draft)
+  const specRows =
+    serviceId === 'baremetal'
+      ? resolveBaremetalCatalogCardSpecRows(draft)
+      : resolveCatalogSpecRows(draft)
   const networkPolicy = applyTenantNetworkOverrides(
     getCatalogItemNetworkPolicy(draft),
     getTenantNetworkOverrides(organization.slug, draft.catalogItemId),
+    organization.slug,
   )
 
   return {
@@ -135,18 +152,28 @@ function mapProviderCatalogToGovernanceItem(
     description: draft.description,
     templateRefId: draft.templateRefId,
     templateName: draft.templateName,
+    instanceTypeId: draft.instanceTypeId,
     instanceTypeLabel: draft.instanceTypeLabel,
     diskImageLabel: draft.diskImageLabel,
+    diskImageId: draft.diskImageId,
+    clusterVersionMode: draft.clusterVersionMode,
+    nodeSetId: draft.nodeSetId,
+    nodeSetLabel: draft.nodeSetLabel,
+    hostTypeId: draft.hostTypeId,
+    hostTypeLabel: draft.hostTypeLabel,
+    clusterNodeTopologyMode: draft.clusterNodeTopologyMode,
     fieldPolicies: draft.fieldPolicies,
     specRows,
     categoryLabel: specRows.map((row) => row.value).join(' · '),
-    cpu: specRows[0]?.value ?? '—',
-    ram: specRows[1]?.value ?? '—',
-    gpu: specRows[2]?.value ?? '—',
+    cpu: getCatalogSpecRowValue(specRows, 'CPU'),
+    ram: getCatalogSpecRowValue(specRows, 'RAM'),
+    gpu: getCatalogSpecRowValue(specRows, 'GPU'),
     osImage: resolveCatalogOsImage(draft),
     restricted: draft.scope === 'vip-enterprise',
     approved: true,
     scope: draft.scope,
+    rateCard: resolveRateCard(draft),
+    createdAt: draft.createdAt,
     networkPolicy,
   }
 }
@@ -162,20 +189,24 @@ export const TENANT_CATALOG_GOVERNANCE_ITEMS: TenantCatalogGovernanceItem[] = [
     description: undefined,
     templateRefId: 'bm-dell-r750',
     templateName: 'gpu-a100-training-standard',
+    instanceTypeId: 'large',
+    instanceTypeLabel: formatBaremetalInstanceTypeLabel('large'),
     specRows: [
-      { label: 'CPU', value: 'Intel Xeon Gold 6338 × 2' },
-      { label: 'RAM', value: '512 GB DDR4-3200' },
-      { label: 'GPU', value: 'CPU-only' },
-      { label: 'OS image', value: 'Red Hat Enterprise Linux 9.4' },
+      { label: 'CPU', value: '64 vCPU' },
+      { label: 'RAM', value: '512 GB' },
+      { label: 'GPU', value: 'NVIDIA A100 80 GB' },
+      { label: 'OS image', value: 'RHEL 9.4' },
     ],
     categoryLabel: 'Compute · Standard',
-    cpu: 'Intel Xeon Gold 6338 × 2',
-    ram: '512 GB DDR4-3200',
-    gpu: 'CPU-only',
-    osImage: 'Red Hat Enterprise Linux 9.4',
+    cpu: '64 vCPU',
+    ram: '512 GB',
+    gpu: 'NVIDIA A100 80 GB',
+    osImage: 'RHEL 9.4',
     restricted: false,
     approved: true,
     scope: 'global-public',
+    rateCard: DEFAULT_RATE_CARD,
+    createdAt: new Date().toISOString(),
   },
 ]
 
@@ -201,6 +232,7 @@ export function getTenantCatalogGovernanceItems(
     networkPolicy: applyTenantNetworkOverrides(
       DEFAULT_CATALOG_NETWORK_POLICY,
       getTenantNetworkOverrides(organization.slug, item.id),
+      organization.slug,
     ),
   }))
 }
@@ -221,8 +253,16 @@ export function getTenantCatalogItemDetailSpecRows(
       serviceId: item.serviceId,
       templateRefId: item.templateRefId,
       templateName: item.templateName,
+      instanceTypeId: item.instanceTypeId,
       instanceTypeLabel: item.instanceTypeLabel,
       diskImageLabel: item.diskImageLabel,
+      diskImageId: item.diskImageId,
+      clusterVersionMode: item.clusterVersionMode,
+      nodeSetId: item.nodeSetId,
+      nodeSetLabel: item.nodeSetLabel,
+      hostTypeId: item.hostTypeId,
+      hostTypeLabel: item.hostTypeLabel,
+      clusterNodeTopologyMode: item.clusterNodeTopologyMode,
     },
     { includeDetails: true },
   )

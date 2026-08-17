@@ -1,9 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { LockIcon } from '@patternfly/react-icons/dist/esm/icons/lock-icon'
+import { flushSync } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
 import {
-  Alert,
-  AlertActionLink,
   Button,
   Card,
   CardBody,
@@ -27,50 +26,52 @@ import {
 } from '@patternfly/react-core'
 import { Table, ActionsColumn, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
 import { CatalogServiceFilterToggle, countCatalogServices, toggleCatalogServiceFilter } from '../components/catalog/CatalogServiceFilterToggle'
+import { CatalogFilterEmptyState } from '../components/catalog/CatalogFilterEmptyState'
+import { CatalogFilterResultsSummary } from '../components/catalog/CatalogFilterResultsSummary'
 import { CatalogViewToggle } from '../components/catalog/CatalogViewToggle'
-import { AssignCatalogToOrganizationModal } from '../components/provider-admin/AssignCatalogToOrganizationModal'
-import { CatalogItemDetailsDrawer } from '../components/provider-admin/CatalogItemDetailsDrawer'
+import { CatalogItemDetailsPage } from '../components/provider-admin/CatalogItemDetailsPage'
 import { CatalogPublishScopeIcon } from '../components/provider-admin/CatalogPublishScopeIcon'
 import {
   formatVipEnterpriseVisibilityLabel,
   getCatalogEnterpriseTenantIds,
 } from '../components/provider-admin/VipEnterpriseOrganizationField'
-import {
-  EditCatalogItemModal,
-  type CatalogItemEditFields,
-} from '../components/provider-admin/EditCatalogItemModal'
 import { getCatalogServiceIcon } from '../catalog/serviceIcons'
-import { formatCatalogTableResultCount } from '../catalog/tableResultCount'
+import {
+  createCatalogServiceFilterSet,
+  describeCatalogServiceFilter,
+} from '../catalog/catalogFilterSummary'
 import {
   formatCatalogConfigurationSummary,
-  getCatalogProfileFieldLabel,
+  resolveBaremetalCatalogCardSpecRows,
   resolveCatalogSpecRows,
 } from '../catalog/catalogSpecs'
 import { CatalogSpecRowsList } from '../components/catalog/CatalogSpecRowsList'
+import { findCatalogLinkedTemplate } from '../catalog/hardwareSpecs'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../catalog/viewMode'
+import {
+  findCatalogItemByWorkspaceParam,
+  getWorkspaceCatalogItemParam,
+  syncWorkspaceCatalogItemParam,
+} from '../shared/workspaceNavUrl'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
-import { getCatalogNetworkLockSummary } from '../providerAdmin/catalogNetworkPolicy'
 import { sortByDemoCatalogOrder } from '../providerSetup/prototypeEntry'
 import type { CatalogItemStatus, ProviderCatalogDraft } from '../providerSetup/storage'
 import {
-  assignCatalogToRegisteredOrganization,
   consumeProviderVipCatalogResumeIntent,
   duplicateProviderCatalogItem,
-  getCatalogItemNetworkPolicy,
   getCatalogItemStatus,
+  getProviderCatalogItems,
   getProviderRegisteredOrganizations,
   getProviderSavedTemplate,
   deleteProviderCatalogItem,
   setProviderCatalogItemStatus,
   setProviderVipCatalogResumeIntent,
-  updateProviderCatalogItem,
-  updateProviderCatalogNetworkPolicy,
+  updateProviderCatalogItemFromPayload,
 } from '../providerSetup/storage'
 import {
   CATALOG_SERVICE_FILTER_LABELS,
   CATALOG_SERVICE_LABELS,
   DEFAULT_BLUEPRINT_FORM,
-  PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
   formatRateCardSummary,
   parseRateCardFromForm,
   type CatalogServiceId,
@@ -89,29 +90,75 @@ import {
   getTenantUserInstances,
   updateTenantUserInstance,
 } from '../tenantUser/storage'
+import type { TenantProject } from '../tenantAdmin/projects'
+import type { DemoTenantId } from '../demoTenant'
 
 type ProviderAdminCatalogPageProps = {
   catalogItems: ProviderCatalogDraft[]
   isEntering?: boolean
   onCreateCatalogItem: (payload: PublishedTemplatePayload) => ProviderCatalogDraft | void
-  onCatalogItemsChange?: () => void
+  onCatalogItemsChange?: (items?: ProviderCatalogDraft[]) => void
   isPublishing?: boolean
   onRegisterOrganization?: () => void
-  onNavigateToLinkedTemplate?: (template: {
-    templateRefId: string
-    templateName: string
-  }) => void
+  /** When set, open this catalog item's detail page (id or display name). */
+  openCatalogItemKey?: string | null
+  onOpenCatalogItemConsumed?: () => void
   onProvisioningStarted?: (instance: TenantInstance) => void
   onDismissDuringProvisioning?: (instanceId: string, serviceId: CatalogServiceId) => void
   onWizardFinished?: (instanceId: string, serviceId: CatalogServiceId) => void
+  tenantSlug?: DemoTenantId
+  projects?: readonly TenantProject[]
+  initialProjectId?: string | null
+  onProjectScopeChange?: (projectId: string) => void
+  onProjectsChange?: (projects: TenantProject[]) => void
+  /**
+   * When the edit wizard is open, parent navigation should call this to show the same
+   * leave confirmation before leaving the page.
+   */
+  onEditLeaveAttemptChange?: (
+    attemptLeave: ((onConfirmed: () => void) => void) | null,
+  ) => void
 }
 
 /** Intentional create latency before revealing the new catalog card. */
 const CATALOG_ITEM_CREATE_REVEAL_MS = 1600
+/** Intentional publish latency before revealing the live state. */
+const CATALOG_ITEM_PUBLISH_REVEAL_MS = 1500
 const PROVIDER_LAUNCH_DEMO_TENANT = 'northstar'
 
 function getDraftServiceId(catalogDraft: ProviderCatalogDraft): CatalogServiceId {
   return catalogDraft.serviceId ?? 'baremetal'
+}
+
+function dedupeCatalogItemsById(items: ProviderCatalogDraft[]): ProviderCatalogDraft[] {
+  const byId = new Map<string, ProviderCatalogDraft>()
+
+  for (const item of items) {
+    const existing = byId.get(item.catalogItemId)
+    if (!existing) {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+
+    const existingStatus = getCatalogItemStatus(existing)
+    const nextStatus = getCatalogItemStatus(item)
+
+    // Never let an unpublished duplicate replace a live row.
+    if (existingStatus === 'live' && nextStatus !== 'live') {
+      continue
+    }
+    if (existingStatus !== 'live' && nextStatus === 'live') {
+      byId.set(item.catalogItemId, item)
+      continue
+    }
+
+    const createdAtComparison = (item.createdAt ?? '').localeCompare(existing.createdAt ?? '')
+    if (createdAtComparison >= 0) {
+      byId.set(item.catalogItemId, item)
+    }
+  }
+
+  return Array.from(byId.values())
 }
 
 function catalogItemMatchesOrganization(
@@ -135,7 +182,25 @@ function formatCatalogCreatedAt(iso: string): string {
   })
 }
 
-function CatalogStatusLabel({ item }: { item: ProviderCatalogDraft }) {
+function CatalogStatusLabel({
+  item,
+  isPublishing = false,
+}: {
+  item: ProviderCatalogDraft
+  isPublishing?: boolean
+}) {
+  if (isPublishing) {
+    return (
+      <Label
+        color="blue"
+        className="provider-admin-catalog-items__card-label provider-admin-catalog-items__status provider-admin-catalog-items__status--publishing"
+        icon={<Spinner size="sm" aria-hidden />}
+      >
+        Publishing ...
+      </Label>
+    )
+  }
+
   const status = getCatalogItemStatus(item)
   const isLive = status === 'live'
 
@@ -168,84 +233,6 @@ function ScopeCell({ scope }: { scope: ProviderCatalogDraft['scope'] }) {
   )
 }
 
-function NetworkingSummary({
-  item,
-  compact = false,
-  onViewDetails,
-}: {
-  item: ProviderCatalogDraft
-  compact?: boolean
-  onViewDetails?: () => void
-}) {
-  const policy = getCatalogItemNetworkPolicy(item)
-  const lockSummary = getCatalogNetworkLockSummary(policy)
-  const externalIpLabel = policy.externalIpPool.enabled
-    ? policy.externalIpPool.poolIds.length > 0
-      ? `External IP · ${policy.externalIpPool.poolIds.length} pool${
-          policy.externalIpPool.poolIds.length === 1 ? '' : 's'
-        }`
-      : 'External IP · on'
-    : null
-
-  const statusContent = lockSummary ? (
-    <span className="provider-admin-catalog-items__networking-status">
-      <Label
-        color={
-          lockSummary.kind === 'all-locked'
-            ? 'grey'
-            : lockSummary.kind === 'all-editable'
-              ? 'blue'
-              : 'orange'
-        }
-        isCompact
-        icon={lockSummary.kind === 'all-locked' ? <LockIcon /> : undefined}
-        className="provider-admin-catalog-items__networking-status-label"
-      >
-        {lockSummary.label}
-      </Label>
-      {externalIpLabel ? (
-        <Label
-          color="green"
-          isCompact
-          className="provider-admin-catalog-items__networking-status-label"
-        >
-          {externalIpLabel}
-        </Label>
-      ) : null}
-      {onViewDetails ? (
-        <Button
-          variant="link"
-          isInline
-          className="provider-admin-catalog-items__inline-link"
-          onClick={onViewDetails}
-        >
-          Details
-        </Button>
-      ) : null}
-    </span>
-  ) : (
-    <Content
-      component="p"
-      className={
-        compact ? 'provider-admin-catalog-items__networking-table-summary' : undefined
-      }
-    >
-      Not configured
-    </Content>
-  )
-
-  if (compact) {
-    return statusContent
-  }
-
-  return (
-    <div className="provider-admin-catalog-items__card-spec">
-      <dt>Networking</dt>
-      <dd>{statusContent}</dd>
-    </div>
-  )
-}
-
 function getTemplateRowData() {
   const saved = getProviderSavedTemplate()
   if (saved) {
@@ -265,9 +252,9 @@ function getTemplateRowData() {
 
 function getCatalogItemActions(
   item: ProviderCatalogDraft,
+  isPublishing: boolean,
   onViewDetails: () => void,
   onLaunch: () => void,
-  onAssignToOrganization: () => void,
   onEdit: () => void,
   onDuplicate: () => void,
   onTogglePublish: () => void,
@@ -281,17 +268,10 @@ function getCatalogItemActions(
     },
   ]
 
-  if (!isUnpublished) {
+  if (!isUnpublished && !isPublishing) {
     actions.push({
       title: LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel,
       onClick: onLaunch,
-    })
-  }
-
-  if (item.scope !== 'vip-enterprise') {
-    actions.push({
-      title: 'Assign to organization',
-      onClick: onAssignToOrganization,
     })
   }
 
@@ -299,22 +279,26 @@ function getCatalogItemActions(
     {
       title: 'Edit',
       onClick: onEdit,
+      isDisabled: isPublishing,
     },
     {
       title: 'Duplicate',
       onClick: onDuplicate,
+      isDisabled: isPublishing,
     },
     {
       isSeparator: true,
     },
     {
-      title: isUnpublished ? 'Publish' : 'Unpublish',
+      title: isPublishing ? 'Publishing ...' : isUnpublished ? 'Publish' : 'Unpublish',
       onClick: onTogglePublish,
+      isDisabled: isPublishing,
     },
     {
       title: 'Delete',
       isDanger: true,
       onClick: onDelete,
+      isDisabled: isPublishing,
     },
   )
 
@@ -328,11 +312,19 @@ export function ProviderAdminCatalogPage({
   onCatalogItemsChange,
   isPublishing = false,
   onRegisterOrganization,
-  onNavigateToLinkedTemplate,
+  openCatalogItemKey = null,
+  onOpenCatalogItemConsumed,
   onProvisioningStarted,
   onDismissDuringProvisioning,
   onWizardFinished,
+  tenantSlug = PROVIDER_LAUNCH_DEMO_TENANT,
+  projects = [],
+  initialProjectId = null,
+  onProjectScopeChange,
+  onProjectsChange,
+  onEditLeaveAttemptChange,
 }: ProviderAdminCatalogPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const initialServiceFilters = catalogItems.map(getDraftServiceId)
   const [selectedFilters, setSelectedFilters] = useState<Set<CatalogServiceId>>(
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
@@ -344,11 +336,11 @@ export function ProviderAdminCatalogPage({
   const [organizations, setOrganizations] = useState(() => getProviderRegisteredOrganizations())
   const [isPublishWizardOpen, setIsPublishWizardOpen] = useState(false)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<ProviderCatalogDraft | null>(null)
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isEditWizardOpen, setIsEditWizardOpen] = useState(false)
+  const [editReturnToDetails, setEditReturnToDetails] = useState(false)
   const [isUnpublishModalOpen, setIsUnpublishModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
-  const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false)
+  const [isViewingDetails, setIsViewingDetails] = useState(false)
   const [isWizardOpen, setIsWizardOpen] = useState(false)
   const [existingInstanceNames, setExistingInstanceNames] = useState(() =>
     getTenantUserInstances(PROVIDER_LAUNCH_DEMO_TENANT).map((instance) => instance.name),
@@ -360,16 +352,58 @@ export function ProviderAdminCatalogPage({
   const [editResumeTenantId, setEditResumeTenantId] = useState<string | undefined>(undefined)
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
+  const [publishingCatalogItemId, setPublishingCatalogItemId] = useState<string | null>(null)
   const createRevealTimeoutRef = useRef<number | null>(null)
+  const publishRevealTimeoutRef = useRef<number | null>(null)
   const catalogCardGridRef = useRef<HTMLDivElement | null>(null)
+  const editWizardRequestCloseRef = useRef<(() => void) | null>(null)
+  const pendingLeaveActionRef = useRef<(() => void) | null>(null)
+  const itemParam = getWorkspaceCatalogItemParam(searchParams)
 
-  const newestCatalogItem = catalogItems[0] ?? null
+  const uniqueCatalogItems = useMemo(
+    () => dedupeCatalogItemsById(catalogItems),
+    [catalogItems],
+  )
+  /** Freeze card order for the session so publish/unpublish never reshuffles the grid. */
+  const catalogDisplayOrderRef = useRef<string[] | null>(null)
+  const orderedCatalogItems = useMemo(() => {
+    const byId = new Map(
+      uniqueCatalogItems.map((item) => [item.catalogItemId, item] as const),
+    )
+    const currentIds = new Set(byId.keys())
+
+    if (!catalogDisplayOrderRef.current) {
+      catalogDisplayOrderRef.current = sortByDemoCatalogOrder(uniqueCatalogItems).map(
+        (item) => item.catalogItemId,
+      )
+    } else {
+      const retained = catalogDisplayOrderRef.current.filter((id) => currentIds.has(id))
+      const retainedSet = new Set(retained)
+      const added = sortByDemoCatalogOrder(
+        uniqueCatalogItems.filter((item) => !retainedSet.has(item.catalogItemId)),
+      ).map((item) => item.catalogItemId)
+      // New cards prepend; existing cards keep their places (including across publish).
+      catalogDisplayOrderRef.current = [...added, ...retained]
+    }
+
+    return catalogDisplayOrderRef.current
+      .map((id) => byId.get(id))
+      .filter((item): item is ProviderCatalogDraft => Boolean(item))
+  }, [uniqueCatalogItems])
+  const newestCatalogItem = orderedCatalogItems[0] ?? null
   const knownServiceFiltersRef = useRef(new Set(initialServiceFilters))
+
+  const refreshCatalogItems = () => {
+    onCatalogItemsChange?.(getProviderCatalogItems())
+  }
 
   useEffect(() => {
     return () => {
       if (createRevealTimeoutRef.current !== null) {
         window.clearTimeout(createRevealTimeoutRef.current)
+      }
+      if (publishRevealTimeoutRef.current !== null) {
+        window.clearTimeout(publishRevealTimeoutRef.current)
       }
     }
   }, [])
@@ -392,7 +426,7 @@ export function ProviderAdminCatalogPage({
       const next = new Set(current)
       let changed = false
 
-      for (const item of catalogItems) {
+      for (const item of orderedCatalogItems) {
         const serviceId = getDraftServiceId(item)
         if (!knownServiceFiltersRef.current.has(serviceId)) {
           knownServiceFiltersRef.current.add(serviceId)
@@ -403,11 +437,11 @@ export function ProviderAdminCatalogPage({
 
       return changed ? next : current
     })
-  }, [catalogItems])
+  }, [orderedCatalogItems])
 
   const serviceCounts = useMemo(
-    () => countCatalogServices(catalogItems.map(getDraftServiceId)),
-    [catalogItems],
+    () => countCatalogServices(orderedCatalogItems.map(getDraftServiceId)),
+    [orderedCatalogItems],
   )
   const organizationOptions = useMemo(
     () =>
@@ -416,6 +450,7 @@ export function ProviderAdminCatalogPage({
       ),
     [organizations],
   )
+
   const filteredCatalogItems = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
     const selectedOrganization = organizationFilter
@@ -425,34 +460,33 @@ export function ProviderAdminCatalogPage({
         )
       : null
 
-    return sortByDemoCatalogOrder(
-      catalogItems.filter((item) => {
-        if (!selectedFilters.has(getDraftServiceId(item))) {
-          return false
-        }
+    // Filter only — preserve frozen display order (do not re-sort on status changes).
+    return orderedCatalogItems.filter((item) => {
+      if (!selectedFilters.has(getDraftServiceId(item))) {
+        return false
+      }
 
-        if (selectedStatus !== 'all' && getCatalogItemStatus(item) !== selectedStatus) {
-          return false
-        }
+      if (selectedStatus !== 'all' && getCatalogItemStatus(item) !== selectedStatus) {
+        return false
+      }
 
-        if (selectedOrganization && !catalogItemMatchesOrganization(item, selectedOrganization)) {
-          return false
-        }
+      if (selectedOrganization && !catalogItemMatchesOrganization(item, selectedOrganization)) {
+        return false
+      }
 
-        if (!query) {
-          return true
-        }
+      if (!query) {
+        return true
+      }
 
-        return (
-          item.displayName.toLowerCase().includes(query) ||
-          item.catalogItemId.toLowerCase().includes(query) ||
-          item.templateName.toLowerCase().includes(query) ||
-          item.templateRefId.toLowerCase().includes(query)
-        )
-      }),
-    )
+      return (
+        item.displayName.toLowerCase().includes(query) ||
+        item.catalogItemId.toLowerCase().includes(query) ||
+        item.templateName.toLowerCase().includes(query) ||
+        item.templateRefId.toLowerCase().includes(query)
+      )
+    })
   }, [
-    catalogItems,
+    orderedCatalogItems,
     selectedFilters,
     selectedStatus,
     organizationFilter,
@@ -483,13 +517,6 @@ export function ProviderAdminCatalogPage({
     setCreatingCardHeightPx(Math.round(referenceCard.getBoundingClientRect().height))
   }, [creatingCatalogItemId, filteredCatalogItems, viewMode])
 
-  const unassignedOrganizations = useMemo(
-    () => organizations.filter((organization) => !organization.catalogItemId),
-    [organizations],
-  )
-  const hasRegisteredOrganizations = organizations.length > 0
-  const hasUnassignedOrganizations = unassignedOrganizations.length > 0
-
   const linkedTemplate = useMemo(() => getTemplateRowData(), [])
   const availableTemplates = useMemo(() => {
     // Demo currently has one real template; don't invent a second picker option.
@@ -513,6 +540,8 @@ export function ProviderAdminCatalogPage({
     if (intent.kind === 'publish') {
       setPublishResumeScope('vip-enterprise')
       setPublishResumeTenantId(preferredTenantId)
+      setIsViewingDetails(false)
+      setIsWizardOpen(false)
       setIsPublishWizardOpen(true)
       return
     }
@@ -525,7 +554,8 @@ export function ProviderAdminCatalogPage({
 
     setSelectedCatalogItem(catalogItem)
     setEditResumeTenantId(preferredTenantId)
-    setIsEditModalOpen(true)
+    setEditReturnToDetails(true)
+    setIsEditWizardOpen(true)
     // Resume once when returning from organization registration.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only resume
   }, [])
@@ -538,23 +568,142 @@ export function ProviderAdminCatalogPage({
   }) => {
     setProviderVipCatalogResumeIntent(intent)
     setIsPublishWizardOpen(false)
-    setIsEditModalOpen(false)
+    setIsEditWizardOpen(false)
     onRegisterOrganization?.()
   }
 
   const openDetails = (item: ProviderCatalogDraft) => {
     setSelectedCatalogItem(item)
-    setIsDetailsDrawerOpen(true)
+    setIsPublishWizardOpen(false)
+    setIsWizardOpen(false)
+    setIsViewingDetails(true)
+    // Prefer stable id in the URL so display-name collisions cannot open the wrong row.
+    syncWorkspaceCatalogItemParam(setSearchParams, item.catalogItemId)
   }
 
-  const openAssign = (item: ProviderCatalogDraft) => {
-    setSelectedCatalogItem(item)
-    setIsAssignModalOpen(true)
+  const closeDetails = () => {
+    setIsViewingDetails(false)
+    syncWorkspaceCatalogItemParam(setSearchParams, null)
   }
 
-  const openEdit = (item: ProviderCatalogDraft) => {
+  const closeCreateWizard = () => {
+    setIsPublishWizardOpen(false)
+    setPublishResumeScope('global-public')
+    setPublishResumeTenantId('')
+  }
+
+  const closeLaunchWizard = () => {
+    setIsWizardOpen(false)
+  }
+
+  const closeEditWizard = () => {
+    const pendingLeave = pendingLeaveActionRef.current
+    pendingLeaveActionRef.current = null
+    const returnToDetails = editReturnToDetails
+
+    setIsEditWizardOpen(false)
+    setEditResumeTenantId(undefined)
+    setEditReturnToDetails(false)
+
+    if (pendingLeave) {
+      pendingLeave()
+      return
+    }
+
+    if (returnToDetails && selectedCatalogItem) {
+      setIsViewingDetails(true)
+      syncWorkspaceCatalogItemParam(setSearchParams, selectedCatalogItem.catalogItemId)
+    }
+  }
+
+  const openCreateWizard = () => {
+    setIsViewingDetails(false)
+    setIsWizardOpen(false)
+    setPublishResumeScope('global-public')
+    setPublishResumeTenantId('')
+    setIsPublishWizardOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+  }
+
+  useEffect(() => {
+    if (!openCatalogItemKey) {
+      return
+    }
+
+    const match = findCatalogItemByWorkspaceParam(orderedCatalogItems, openCatalogItemKey)
+    if (match) {
+      openDetails(match)
+      setIsWizardOpen(false)
+    }
+
+    onOpenCatalogItemConsumed?.()
+  }, [openCatalogItemKey, orderedCatalogItems, onOpenCatalogItemConsumed])
+
+  useEffect(() => {
+    const match = findCatalogItemByWorkspaceParam(orderedCatalogItems, itemParam)
+    if (match) {
+      setSelectedCatalogItem((current) => {
+        // While publishing, keep the current selection so the CTA stays on Publishing ...
+        // until storage + list both report live.
+        if (
+          current &&
+          current.catalogItemId === match.catalogItemId &&
+          publishingCatalogItemId === current.catalogItemId
+        ) {
+          return current
+        }
+        return match
+      })
+      if (!isWizardOpen && !isEditWizardOpen && !isPublishWizardOpen) {
+        setIsViewingDetails(true)
+      }
+      return
+    }
+
+    if (!itemParam) {
+      setIsViewingDetails(false)
+    }
+  }, [
+    itemParam,
+    orderedCatalogItems,
+    isWizardOpen,
+    isEditWizardOpen,
+    isPublishWizardOpen,
+    publishingCatalogItemId,
+  ])
+
+  useEffect(() => {
+    if (!onEditLeaveAttemptChange) {
+      return
+    }
+
+    if (!isEditWizardOpen) {
+      onEditLeaveAttemptChange(null)
+      return
+    }
+
+    onEditLeaveAttemptChange((onConfirmed) => {
+      pendingLeaveActionRef.current = onConfirmed
+      editWizardRequestCloseRef.current?.()
+    })
+
+    return () => {
+      onEditLeaveAttemptChange(null)
+    }
+  }, [isEditWizardOpen, onEditLeaveAttemptChange])
+
+  const openEdit = (
+    item: ProviderCatalogDraft,
+    options?: {
+      returnToDetails?: boolean
+    },
+  ) => {
     setSelectedCatalogItem(item)
-    setIsEditModalOpen(true)
+    setEditReturnToDetails(options?.returnToDetails ?? isViewingDetails)
+    setIsViewingDetails(false)
+    setIsPublishWizardOpen(false)
+    setIsWizardOpen(false)
+    setIsEditWizardOpen(true)
   }
 
   const handleDuplicate = (item: ProviderCatalogDraft) => {
@@ -563,21 +712,67 @@ export function ProviderAdminCatalogPage({
       return
     }
 
+    const wasOnDetailPage =
+      isViewingDetails && selectedCatalogItem?.catalogItemId === item.catalogItemId
+
+    refreshCatalogItems()
     setSelectedCatalogItem(duplicate)
-    onCatalogItemsChange?.()
+    setIsEditWizardOpen(false)
+    setIsPublishWizardOpen(false)
+    setIsWizardOpen(false)
+
+    if (wasOnDetailPage) {
+      setIsViewingDetails(false)
+      setViewMode('grid')
+      setCatalogViewMode('grid')
+      setSelectedStatus('all')
+      setSearchValue('')
+      beginCatalogItemCreateReveal(duplicate.catalogItemId)
+      syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+    }
   }
 
-  const openTogglePublish = (item: ProviderCatalogDraft) => {
-    setSelectedCatalogItem(item)
-    if (getCatalogItemStatus(item) === 'unpublished') {
-      const updated = setProviderCatalogItemStatus(item.catalogItemId, 'live')
-      if (updated) {
-        setSelectedCatalogItem(updated)
-        onCatalogItemsChange?.()
-      }
+  const publishCatalogItem = (item: ProviderCatalogDraft) => {
+    if (getCatalogItemStatus(item) === 'live') {
+      return
+    }
+    if (publishingCatalogItemId === item.catalogItemId) {
       return
     }
 
+    if (publishRevealTimeoutRef.current !== null) {
+      window.clearTimeout(publishRevealTimeoutRef.current)
+    }
+
+    const catalogItemId = item.catalogItemId
+    // Persist live immediately so the detail CTA can complete Publishing → Launch.
+    // Keep publishingCatalogItemId for the 1.5s card/detail "Publishing ..." chrome.
+    const updated = setProviderCatalogItemStatus(catalogItemId, 'live')
+    const nextItems = getProviderCatalogItems()
+
+    flushSync(() => {
+      if (updated) {
+        setSelectedCatalogItem(updated)
+      } else {
+        setSelectedCatalogItem(item)
+      }
+      onCatalogItemsChange?.(nextItems)
+      setPublishingCatalogItemId(catalogItemId)
+    })
+
+    publishRevealTimeoutRef.current = window.setTimeout(() => {
+      setPublishingCatalogItemId((current) => (current === catalogItemId ? null : current))
+      publishRevealTimeoutRef.current = null
+    }, CATALOG_ITEM_PUBLISH_REVEAL_MS)
+  }
+
+  const openTogglePublish = (item: ProviderCatalogDraft) => {
+    if (getCatalogItemStatus(item) === 'unpublished') {
+      publishCatalogItem(item)
+      return
+    }
+
+    setSelectedCatalogItem(item)
     setIsUnpublishModalOpen(true)
   }
 
@@ -589,7 +784,7 @@ export function ProviderAdminCatalogPage({
     const updated = setProviderCatalogItemStatus(selectedCatalogItem.catalogItemId, 'unpublished')
     if (updated) {
       setSelectedCatalogItem(updated)
-      onCatalogItemsChange?.()
+      refreshCatalogItems()
     }
     setIsUnpublishModalOpen(false)
   }
@@ -607,36 +802,37 @@ export function ProviderAdminCatalogPage({
     const deletedId = selectedCatalogItem.catalogItemId
     const deleted = deleteProviderCatalogItem(deletedId)
     if (deleted) {
-      setIsDetailsDrawerOpen(false)
-      setIsAssignModalOpen(false)
-      setIsEditModalOpen(false)
+      closeDetails()
+      syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
+      setIsWizardOpen(false)
+      setIsEditWizardOpen(false)
       setSelectedCatalogItem(null)
-      onCatalogItemsChange?.()
+      refreshCatalogItems()
       refreshOrganizations()
     }
     setIsDeleteModalOpen(false)
   }
 
-  const handleAssignCatalog = (organizationId: string) => {
-    if (!selectedCatalogItem) {
+  const handleUpdateCatalogItemFromWizard = (
+    catalogItemId: string,
+    payload: PublishedTemplatePayload,
+  ) => {
+    const updated = updateProviderCatalogItemFromPayload(catalogItemId, payload)
+    if (!updated) {
       return
     }
 
-    assignCatalogToRegisteredOrganization(organizationId, selectedCatalogItem)
+    const returnToDetails = editReturnToDetails
+    setSelectedCatalogItem(updated)
+    refreshCatalogItems()
     refreshOrganizations()
-    setIsAssignModalOpen(false)
-  }
+    setIsEditWizardOpen(false)
+    setEditResumeTenantId(undefined)
+    setEditReturnToDetails(false)
 
-  const handleSaveCatalogEdit = (fields: CatalogItemEditFields) => {
-    if (!selectedCatalogItem) {
-      return
-    }
-
-    const updated = updateProviderCatalogItem(selectedCatalogItem.catalogItemId, fields)
-    if (updated) {
-      setSelectedCatalogItem(updated)
-      onCatalogItemsChange?.()
-      refreshOrganizations()
+    if (returnToDetails) {
+      setIsViewingDetails(true)
+      syncWorkspaceCatalogItemParam(setSearchParams, updated.catalogItemId)
     }
   }
 
@@ -647,6 +843,50 @@ export function ProviderAdminCatalogPage({
 
   const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
     setSelectedFilters((current) => toggleCatalogServiceFilter(current, serviceId, isSelected))
+  }
+
+  const catalogServiceIds = useMemo(
+    () => orderedCatalogItems.map(getDraftServiceId),
+    [orderedCatalogItems],
+  )
+
+  const filterDescriptionParts = useMemo(() => {
+    const parts: string[] = []
+    const serviceDescription = describeCatalogServiceFilter(selectedFilters, catalogServiceIds)
+    if (serviceDescription) {
+      parts.push(`service: ${serviceDescription}`)
+    }
+    if (selectedStatus !== 'all') {
+      parts.push(
+        `publish status: ${selectedStatus === 'live' ? 'Published' : 'Unpublished'}`,
+      )
+    }
+    if (organizationFilter) {
+      const organizationName =
+        organizations.find(
+          (organization) =>
+            organization.tenantId === organizationFilter || organization.id === organizationFilter,
+        )?.name ?? organizationFilter
+      parts.push(`organization: ${organizationName}`)
+    }
+    if (searchValue.trim()) {
+      parts.push(`search: "${searchValue.trim()}"`)
+    }
+    return parts
+  }, [
+    catalogServiceIds,
+    organizationFilter,
+    organizations,
+    searchValue,
+    selectedFilters,
+    selectedStatus,
+  ])
+
+  const clearAllFilters = () => {
+    setSearchValue('')
+    setSelectedStatus('all')
+    setOrganizationFilter('')
+    setSelectedFilters(createCatalogServiceFilterSet(catalogServiceIds))
   }
 
   const emptyStateTitle = (() => {
@@ -679,7 +919,22 @@ export function ProviderAdminCatalogPage({
     return 'Create a catalog item for this service to see it listed here.'
   })()
 
-  const drawerCatalog = selectedCatalogItem ?? newestCatalogItem
+  // Persisted list is the source of truth so card + detail status stay aligned.
+  // During publish, keep the pre-live row so Publishing ... can render until flush completes.
+  const drawerCatalog = selectedCatalogItem
+    ? (() => {
+        const catalogFromList =
+          orderedCatalogItems.find(
+            (item) => item.catalogItemId === selectedCatalogItem.catalogItemId,
+          ) ?? null
+
+        if (publishingCatalogItemId === selectedCatalogItem.catalogItemId) {
+          return catalogFromList ?? selectedCatalogItem
+        }
+
+        return catalogFromList ?? selectedCatalogItem
+      })()
+    : null
   const launchOrganization =
     organizations.find((organization) => organization.slug === PROVIDER_LAUNCH_DEMO_TENANT) ??
     organizations[0] ??
@@ -693,50 +948,131 @@ export function ProviderAdminCatalogPage({
       return
     }
     setSelectedCatalogItem(catalog)
-    setIsDetailsDrawerOpen(false)
+    setIsPublishWizardOpen(false)
+    setIsViewingDetails(false)
     setIsWizardOpen(true)
+    syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
   }
 
+  const linkedTemplateForDetails = drawerCatalog
+    ? findCatalogLinkedTemplate(drawerCatalog.templateRefId, drawerCatalog.templateName)
+    : null
+
   return (
-    <CatalogItemDetailsDrawer
-      isExpanded={isDetailsDrawerOpen}
-      onClose={() => setIsDetailsDrawerOpen(false)}
-      catalog={drawerCatalog}
-      serviceId={drawerCatalog ? getDraftServiceId(drawerCatalog) : 'baremetal'}
-      templateDescription={linkedTemplate.description}
-      onPublish={() => {
-        if (!drawerCatalog) {
-          return
-        }
-        openTogglePublish(drawerCatalog)
-      }}
-      onLaunch={() => {
-        if (drawerCatalog) {
-          openLaunchWizard(drawerCatalog)
-        }
-      }}
-      onNavigateToLinkedTemplate={
-        onNavigateToLinkedTemplate
-          ? (template) => {
-              setIsDetailsDrawerOpen(false)
-              onNavigateToLinkedTemplate(template)
+    <>
+      {isPublishWizardOpen ? (
+        <ProviderSetupPublishCatalogWizard
+          presentation="page"
+          isOpen={isPublishWizardOpen}
+          templates={availableTemplates}
+          organizations={organizations}
+          defaultTemplateRefId={newestCatalogItem?.templateRefId}
+          initialPublishScope={publishResumeScope}
+          initialEnterpriseTenantId={publishResumeTenantId}
+          onClose={closeCreateWizard}
+          onCreateCatalogItem={(payload) => {
+            closeCreateWizard()
+            const created = onCreateCatalogItem(payload)
+            if (created?.catalogItemId) {
+              setViewMode('grid')
+              setCatalogViewMode('grid')
+              setSelectedStatus('all')
+              setSearchValue('')
+              beginCatalogItemCreateReveal(created.catalogItemId)
+              setIsViewingDetails(false)
+              syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
             }
-          : undefined
-      }
-      onNetworkPolicyChange={(networkPolicy) => {
-        if (!drawerCatalog) {
-          return
-        }
-        const updated = updateProviderCatalogNetworkPolicy(
-          drawerCatalog.catalogItemId,
-          networkPolicy,
-        )
-        if (updated) {
-          setSelectedCatalogItem(updated)
-          onCatalogItemsChange?.()
-        }
-      }}
-    >
+          }}
+          onRegisterOrganization={() => handleRegisterOrganizationFromVip({ kind: 'publish' })}
+          isPublishing={isPublishing}
+        />
+      ) : isEditWizardOpen && selectedCatalogItem ? (
+        <ProviderSetupPublishCatalogWizard
+          mode="edit"
+          presentation="page"
+          isOpen={isEditWizardOpen}
+          editingCatalog={selectedCatalogItem}
+          templates={availableTemplates}
+          organizations={organizations}
+          initialPublishScope={selectedCatalogItem.scope}
+          initialEnterpriseTenantId={editResumeTenantId}
+          leaveConfirmActionLabel={
+            editReturnToDetails ? 'Back to catalog item' : 'Go to Catalog'
+          }
+          onRegisterRequestClose={(requestClose) => {
+            editWizardRequestCloseRef.current = requestClose
+          }}
+          onLeaveConfirmDismissed={() => {
+            pendingLeaveActionRef.current = null
+          }}
+          onClose={closeEditWizard}
+          onCreateCatalogItem={() => undefined}
+          onSaveCatalogItem={handleUpdateCatalogItemFromWizard}
+          onRegisterOrganization={() =>
+            handleRegisterOrganizationFromVip({
+              kind: 'edit',
+              catalogItemId: selectedCatalogItem.catalogItemId,
+            })
+          }
+        />
+      ) : isWizardOpen && launchCatalogCard ? (
+        <TenantUserLaunchInstanceWizard
+          presentation="page"
+          isOpen={isWizardOpen}
+          catalogItem={launchCatalogCard}
+          organization={launchOrganization}
+          catalogDraft={drawerCatalog}
+          preferCatalogDraft
+          tenantSlug={tenantSlug}
+          projects={projects}
+          initialProjectId={initialProjectId}
+          onProjectScopeChange={onProjectScopeChange}
+          onProjectsChange={onProjectsChange ?? (() => undefined)}
+          existingInstanceNames={existingInstanceNames}
+          onClose={closeLaunchWizard}
+          onProvisioningStarted={(instance) => {
+            onProvisioningStarted?.(instance)
+            if (!onProvisioningStarted) {
+              addTenantUserInstance(PROVIDER_LAUNCH_DEMO_TENANT, instance)
+              window.setTimeout(() => {
+                updateTenantUserInstance(PROVIDER_LAUNCH_DEMO_TENANT, instance.id, {
+                  status: 'running',
+                  provisionedAt: new Date().toISOString(),
+                })
+              }, LAUNCH_INSTANCE_PROVISIONING_DURATION_MS)
+            }
+            setExistingInstanceNames(
+              getTenantUserInstances(PROVIDER_LAUNCH_DEMO_TENANT).map((item) => item.name),
+            )
+          }}
+          onDismissDuringProvisioning={(instanceId, serviceId) => {
+            onDismissDuringProvisioning?.(instanceId, serviceId)
+            closeLaunchWizard()
+          }}
+          onWizardFinished={(instanceId, serviceId) => {
+            onWizardFinished?.(instanceId, serviceId)
+            closeLaunchWizard()
+            setExistingInstanceNames(
+              getTenantUserInstances(PROVIDER_LAUNCH_DEMO_TENANT).map((item) => item.name),
+            )
+          }}
+        />
+      ) : isViewingDetails && drawerCatalog ? (
+        <CatalogItemDetailsPage
+          catalog={drawerCatalog}
+          templateDescription={
+            linkedTemplateForDetails?.description ?? linkedTemplate.description
+          }
+          onBackToCatalog={closeDetails}
+          onPublish={() => publishCatalogItem(drawerCatalog)}
+          onUnpublish={() => openTogglePublish(drawerCatalog)}
+          isPublishing={publishingCatalogItemId === drawerCatalog.catalogItemId}
+          onLaunch={() => openLaunchWizard(drawerCatalog)}
+          onEdit={() => openEdit(drawerCatalog, { returnToDetails: true })}
+          onDuplicate={() => handleDuplicate(drawerCatalog)}
+          onDelete={() => openDelete(drawerCatalog)}
+        />
+      ) : (
     <div
       className={`provider-admin-catalog-items${
         isEntering ? ' provider-admin-catalog-items--entering' : ''
@@ -766,11 +1102,7 @@ export function ProviderAdminCatalogPage({
             icon={<PlusIcon />}
             className="provider-admin-catalog-items__create"
             isDisabled={isPublishing}
-            onClick={() => {
-              setPublishResumeScope('global-public')
-              setPublishResumeTenantId('')
-              setIsPublishWizardOpen(true)
-            }}
+            onClick={openCreateWizard}
           >
             Create catalog item
           </Button>
@@ -825,55 +1157,43 @@ export function ProviderAdminCatalogPage({
         <CatalogViewToggle viewMode={viewMode} onChange={handleViewModeChange} />
       </div>
 
-      {filteredCatalogItems.length > 0 &&
-      hasRegisteredOrganizations &&
-      hasUnassignedOrganizations ? (
-        <Alert
-          variant="info"
-          isInline
-          title="Organizations are waiting for catalog access"
-          className="provider-admin-catalog-items__assign-alert"
-          actionLinks={
-            <AlertActionLink
-              component="button"
-              onClick={() => {
-                if (newestCatalogItem) {
-                  openAssign(newestCatalogItem)
-                }
-              }}
-            >
-              Assign to organization
-            </AlertActionLink>
-          }
-        >
-          <Content component="p">
-            {unassignedOrganizations.length} registered{' '}
-            {unassignedOrganizations.length === 1 ? 'organization does' : 'organizations do'} not
-            have a catalog item attached yet.
-          </Content>
-        </Alert>
-      ) : null}
-
       {filteredCatalogItems.length === 0 ? (
+        filterDescriptionParts.length > 0 ? (
+          <CatalogFilterEmptyState
+            title="No catalog items match your filters"
+            description="Try a different service, publish status, organization, or search term."
+            onClearFilters={clearAllFilters}
+          />
+        ) : (
         <EmptyState className="provider-admin-catalog-items__empty">
           <Title headingLevel="h2" size="lg">
             {emptyStateTitle}
           </Title>
           <EmptyStateBody>{emptyStateBody}</EmptyStateBody>
         </EmptyState>
+        )
       ) : viewMode === 'grid' ? (
+        <>
+          <CatalogFilterResultsSummary
+            filteredCount={filteredCatalogItems.length}
+            totalCount={orderedCatalogItems.length}
+            singular="catalog item"
+            filterParts={filterDescriptionParts}
+            onClearFilters={clearAllFilters}
+          />
         <div
           ref={catalogCardGridRef}
-          className="catalog-card-grid provider-admin-catalog-items__card-grid"
+          className="catalog-card-grid catalog-card-grid--stable provider-admin-catalog-items__card-grid"
         >
           {filteredCatalogItems.map((item) => {
             const serviceId = getDraftServiceId(item)
             const isCreating = creatingCatalogItemId === item.catalogItemId
+            const isPublishing = publishingCatalogItemId === item.catalogItemId
             const catalogItemActions = getCatalogItemActions(
               item,
+              isPublishing,
               () => openDetails(item),
               () => openLaunchWizard(item),
-              () => openAssign(item),
               () => openEdit(item),
               () => handleDuplicate(item),
               () => openTogglePublish(item),
@@ -886,7 +1206,10 @@ export function ProviderAdminCatalogPage({
                     getCatalogEnterpriseTenantIds(item),
                   )
                 : 'Global public'
-            const specRows = resolveCatalogSpecRows(item)
+            const specRows =
+              (item.serviceId ?? 'baremetal') === 'baremetal'
+                ? resolveBaremetalCatalogCardSpecRows(item)
+                : resolveCatalogSpecRows(item)
 
             return (
               <Card
@@ -930,7 +1253,7 @@ export function ProviderAdminCatalogPage({
                       <Label color="blue" className="provider-admin-catalog-items__card-label">
                         {CATALOG_SERVICE_LABELS[serviceId]}
                       </Label>
-                      <CatalogStatusLabel item={item} />
+                      <CatalogStatusLabel item={item} isPublishing={isPublishing} />
                       <ActionsColumn items={catalogItemActions} />
                     </div>
                   </div>
@@ -953,14 +1276,9 @@ export function ProviderAdminCatalogPage({
                   />
                   <dl className="provider-admin-catalog-items__card-specs">
                     <div className="provider-admin-catalog-items__card-spec">
-                      <dt>{getCatalogProfileFieldLabel(serviceId)}</dt>
-                      <dd>{item.templateName}</dd>
-                    </div>
-                    <div className="provider-admin-catalog-items__card-spec">
                       <dt>Rate</dt>
                       <dd>{formatRateCardSummary(item.rateCard)}</dd>
                     </div>
-                    <NetworkingSummary item={item} onViewDetails={() => openDetails(item)} />
                   </dl>
                   <div
                     className="provider-admin-catalog-items__card-footer"
@@ -986,11 +1304,16 @@ export function ProviderAdminCatalogPage({
             )
           })}
         </div>
+        </>
       ) : (
         <div className="catalog-table-panel">
-          <Content component="p" className="catalog-table-result-count">
-            {formatCatalogTableResultCount(filteredCatalogItems.length, 'catalog item')}
-          </Content>
+          <CatalogFilterResultsSummary
+            filteredCount={filteredCatalogItems.length}
+            totalCount={orderedCatalogItems.length}
+            singular="catalog item"
+            filterParts={filterDescriptionParts}
+            onClearFilters={clearAllFilters}
+          />
           <Table
             aria-label="Catalog items"
             className="catalog-data-table provider-admin-catalog-items__table"
@@ -999,10 +1322,8 @@ export function ProviderAdminCatalogPage({
             <Tr>
               <Th>Name</Th>
               <Th>Status</Th>
-              <Th>Profile / template</Th>
               <Th>Configuration</Th>
               <Th>Rate</Th>
-              <Th>Networking</Th>
               <Th>Visibility</Th>
               <Th>Created</Th>
               <Th screenReaderText="Actions" />
@@ -1012,9 +1333,9 @@ export function ProviderAdminCatalogPage({
             {filteredCatalogItems.map((item) => {
               const catalogItemActions = getCatalogItemActions(
                 item,
+                publishingCatalogItemId === item.catalogItemId,
                 () => openDetails(item),
                 () => openLaunchWizard(item),
-                () => openAssign(item),
                 () => openEdit(item),
                 () => handleDuplicate(item),
                 () => openTogglePublish(item),
@@ -1039,9 +1360,11 @@ export function ProviderAdminCatalogPage({
                     </Content>
                   </Td>
                   <Td dataLabel="Status">
-                    <CatalogStatusLabel item={item} />
+                    <CatalogStatusLabel
+                      item={item}
+                      isPublishing={publishingCatalogItemId === item.catalogItemId}
+                    />
                   </Td>
-                  <Td dataLabel="Profile / template">{item.templateName}</Td>
                   <Td dataLabel="Configuration">
                     <Content component="p" className="provider-admin-catalog-items__primary-cell">
                       {formatCatalogConfigurationSummary(item)}
@@ -1051,13 +1374,6 @@ export function ProviderAdminCatalogPage({
                     <Content component="p" className="provider-admin-catalog-items__primary-cell">
                       {formatRateCardSummary(item.rateCard)}
                     </Content>
-                  </Td>
-                  <Td dataLabel="Networking">
-                    <NetworkingSummary
-                      item={item}
-                      compact
-                      onViewDetails={() => openDetails(item)}
-                    />
                   </Td>
                   <Td dataLabel="Visibility">
                     <ScopeCell scope={item.scope} />
@@ -1073,68 +1389,8 @@ export function ProviderAdminCatalogPage({
         </Table>
         </div>
       )}
-
-      <ProviderSetupPublishCatalogWizard
-        isOpen={isPublishWizardOpen}
-        templates={availableTemplates}
-        organizations={organizations}
-        defaultTemplateRefId={newestCatalogItem?.templateRefId}
-        defaultDisplayName={
-          catalogItems.length > 0 ? PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME : undefined
-        }
-        initialPublishScope={publishResumeScope}
-        initialEnterpriseTenantId={publishResumeTenantId}
-        onClose={() => {
-          setIsPublishWizardOpen(false)
-          setPublishResumeScope('global-public')
-          setPublishResumeTenantId('')
-        }}
-        onCreateCatalogItem={(payload) => {
-          setIsPublishWizardOpen(false)
-          setPublishResumeScope('global-public')
-          setPublishResumeTenantId('')
-          const created = onCreateCatalogItem(payload)
-          if (created?.catalogItemId) {
-            setViewMode('grid')
-            setCatalogViewMode('grid')
-            setSelectedStatus('all')
-            setSearchValue('')
-            beginCatalogItemCreateReveal(created.catalogItemId)
-          }
-        }}
-        onRegisterOrganization={() => handleRegisterOrganizationFromVip({ kind: 'publish' })}
-        isPublishing={isPublishing}
-      />
-
-      <AssignCatalogToOrganizationModal
-        catalog={isAssignModalOpen ? selectedCatalogItem : null}
-        organizations={organizations}
-        onClose={() => setIsAssignModalOpen(false)}
-        onAssign={handleAssignCatalog}
-      />
-
-      <EditCatalogItemModal
-        catalog={isEditModalOpen ? selectedCatalogItem : null}
-        serviceId={
-          selectedCatalogItem ? getDraftServiceId(selectedCatalogItem) : 'baremetal'
-        }
-        organizations={organizations}
-        initialEnterpriseTenantId={editResumeTenantId}
-        onClose={() => {
-          setIsEditModalOpen(false)
-          setEditResumeTenantId(undefined)
-        }}
-        onSave={handleSaveCatalogEdit}
-        onRegisterOrganization={
-          selectedCatalogItem
-            ? () =>
-                handleRegisterOrganizationFromVip({
-                  kind: 'edit',
-                  catalogItemId: selectedCatalogItem.catalogItemId,
-                })
-            : onRegisterOrganization
-        }
-      />
+    </div>
+      )}
 
       <Modal
         variant={ModalVariant.small}
@@ -1198,47 +1454,6 @@ export function ProviderAdminCatalogPage({
           </Button>
         </ModalFooter>
       </Modal>
-      {launchCatalogCard ? (
-        <TenantUserLaunchInstanceWizard
-          isOpen={isWizardOpen}
-          catalogItem={launchCatalogCard}
-          organization={launchOrganization}
-          catalogDraft={drawerCatalog}
-          preferCatalogDraft
-          scopeKind="organization"
-          scopeLabel={launchOrganization?.name ?? 'Organization'}
-          scopeFieldLabel="Organization"
-          existingInstanceNames={existingInstanceNames}
-          onClose={() => setIsWizardOpen(false)}
-          onProvisioningStarted={(instance) => {
-            onProvisioningStarted?.(instance)
-            if (!onProvisioningStarted) {
-              addTenantUserInstance(PROVIDER_LAUNCH_DEMO_TENANT, instance)
-              window.setTimeout(() => {
-                updateTenantUserInstance(PROVIDER_LAUNCH_DEMO_TENANT, instance.id, {
-                  status: 'running',
-                  provisionedAt: new Date().toISOString(),
-                })
-              }, LAUNCH_INSTANCE_PROVISIONING_DURATION_MS)
-            }
-            setExistingInstanceNames(
-              getTenantUserInstances(PROVIDER_LAUNCH_DEMO_TENANT).map((item) => item.name),
-            )
-          }}
-          onDismissDuringProvisioning={(instanceId, serviceId) => {
-            onDismissDuringProvisioning?.(instanceId, serviceId)
-            setIsWizardOpen(false)
-          }}
-          onWizardFinished={(instanceId, serviceId) => {
-            onWizardFinished?.(instanceId, serviceId)
-            setIsWizardOpen(false)
-            setExistingInstanceNames(
-              getTenantUserInstances(PROVIDER_LAUNCH_DEMO_TENANT).map((item) => item.name),
-            )
-          }}
-        />
-      ) : null}
-    </div>
-    </CatalogItemDetailsDrawer>
+    </>
   )
 }

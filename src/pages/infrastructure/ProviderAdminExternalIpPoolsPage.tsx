@@ -12,18 +12,16 @@ import {
   Title,
 } from '@patternfly/react-core'
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
-import { formatCatalogTableResultCount } from '../../catalog/tableResultCount'
-import { AssignExternalIpPoolModal } from '../../components/provider-admin/AssignExternalIpPoolModal'
-import { CreateExternalIpPoolModal } from '../../components/provider-admin/CreateExternalIpPoolModal'
-import { ExternalIpPoolDetailsDrawer } from '../../components/provider-admin/ExternalIpPoolDetailsDrawer'
+import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
+import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
+import { buildInventoryFilterParts } from '../../catalog/catalogFilterSummary'
+import { CreateExternalIpPoolWizard } from '../../components/networking/CreateExternalIpPoolWizard'
+import { ExternalIpPoolDetailsPage } from '../../components/provider-admin/ExternalIpPoolDetailsPage'
 import { ProviderAdminWorkspacePageHeader } from '../../components/provider-admin/ProviderAdminWorkspacePageHeader'
 import type { ExternalIpPool } from '../../providerAdmin/externalIpPools'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
-import {
-  assignExternalIpPoolToRegisteredOrganization,
-  getProviderExternalIpPools,
-  getProviderRegisteredOrganizations,
-} from '../../providerSetup/storage'
+import { getProviderRegisteredOrganizations } from '../../providerSetup/storage'
+import { resolveNetworkInventoryScope } from '../../shared/networkInventoryScope'
 
 const EXTERNAL_IP_POOL_STATUSES = ['Available', 'Assigned'] as const
 
@@ -36,37 +34,23 @@ function getExternalIpPoolStatus(pool: ExternalIpPool): ExternalIpPoolStatus {
 function getExternalIpPoolActions(
   pool: ExternalIpPool,
   onViewDetails: (pool: ExternalIpPool) => void,
-  onAssign: (pool: ExternalIpPool) => void,
+  onEdit: (pool: ExternalIpPool) => void,
 ): IAction[] {
-  const isAssigned = pool.assignedOrganizationId !== null
-
   return [
     {
       title: 'View details',
       onClick: () => onViewDetails(pool),
     },
     {
-      title: 'Assign to organization',
-      isAriaDisabled: isAssigned,
-      onClick: () => {
-        if (!isAssigned) {
-          onAssign(pool)
-        }
-      },
-    },
-    {
-      title: 'Edit pool',
-      isAriaDisabled: isAssigned,
-      onClick: () => {
-        /* demo */
-      },
+      title: 'Edit',
+      onClick: () => onEdit(pool),
     },
     {
       isSeparator: true,
     },
     {
-      title: 'Delete pool',
-      isAriaDisabled: isAssigned,
+      title: 'Delete',
+      isDanger: true,
       onClick: () => {
         /* demo */
       },
@@ -74,21 +58,44 @@ function getExternalIpPoolActions(
   ]
 }
 
-export function ProviderAdminExternalIpPoolsPage() {
-  const [pools, setPools] = useState<ExternalIpPool[]>(() => getProviderExternalIpPools())
+export function ProviderAdminExternalIpPoolsPage({
+  tenantSlug,
+  readOnly = false,
+  scopeOrganization = null,
+}: {
+  tenantSlug?: string
+  readOnly?: boolean
+  scopeOrganization?: RegisteredOrganization | null
+} = {}) {
+  const inventory = useMemo(() => resolveNetworkInventoryScope(tenantSlug), [tenantSlug])
+  const isTenantScope = inventory.mode === 'tenant'
+  const canManagePools = !readOnly && !isTenantScope
+  const [pools, setPools] = useState<ExternalIpPool[]>(() => inventory.getExternalIpPools())
   const [organizations, setOrganizations] = useState<RegisteredOrganization[]>(() =>
     getProviderRegisteredOrganizations(),
   )
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isCreateWizardOpen, setIsCreateWizardOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<'all' | ExternalIpPoolStatus>('all')
   const [selectedPool, setSelectedPool] = useState<ExternalIpPool | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-  const [assignPool, setAssignPool] = useState<ExternalIpPool | null>(null)
+  const [editingPool, setEditingPool] = useState<ExternalIpPool | null>(null)
+
+  const closeWizard = () => {
+    setIsCreateWizardOpen(false)
+    setEditingPool(null)
+  }
+
+  const openEdit = (pool: ExternalIpPool) => {
+    setIsDetailsOpen(false)
+    setEditingPool(pool)
+  }
 
   const refreshData = () => {
-    setPools(getProviderExternalIpPools())
-    setOrganizations(getProviderRegisteredOrganizations())
+    setPools(inventory.getExternalIpPools())
+    if (!isTenantScope) {
+      setOrganizations(getProviderRegisteredOrganizations())
+    }
   }
 
   const filteredPools = useMemo(() => {
@@ -119,6 +126,16 @@ export function ProviderAdminExternalIpPoolsPage() {
 
   const hasActiveFilters = Boolean(searchValue.trim()) || selectedStatus !== 'all'
 
+  const filterDescriptionParts = useMemo(
+    () => buildInventoryFilterParts(searchValue, selectedStatus),
+    [searchValue, selectedStatus],
+  )
+
+  const clearAllFilters = () => {
+    setSearchValue('')
+    setSelectedStatus('all')
+  }
+
   const openDetails = (pool: ExternalIpPool) => {
     setSelectedPool(pool)
     setIsDetailsOpen(true)
@@ -141,175 +158,183 @@ export function ProviderAdminExternalIpPoolsPage() {
     )
   }, [selectedPool, organizations])
 
-  const handleAssignPool = (organizationId: string) => {
-    if (!assignPool) {
-      return
-    }
+  if ((isCreateWizardOpen || editingPool) && canManagePools) {
+    return (
+      <CreateExternalIpPoolWizard
+        isOpen
+        tenantSlug={tenantSlug}
+        organizations={organizations}
+        resource={editingPool}
+        onClose={closeWizard}
+        onCreated={() => {
+          refreshData()
+          closeWizard()
+        }}
+      />
+    )
+  }
 
-    assignExternalIpPoolToRegisteredOrganization(assignPool.id, organizationId)
-    refreshData()
-    const updatedPools = getProviderExternalIpPools()
-    const updated = updatedPools.find((pool) => pool.id === assignPool.id) ?? null
-    setAssignPool(null)
-    if (updated && isDetailsOpen && selectedPool?.id === updated.id) {
-      setSelectedPool(updated)
-    }
+  if (isDetailsOpen && selectedPool) {
+    return (
+      <ExternalIpPoolDetailsPage
+        pool={selectedPool}
+        organization={detailsOrganization}
+        onBack={closeDetails}
+        readOnly={!canManagePools}
+        scopeOrganization={isTenantScope ? scopeOrganization : null}
+        onEdit={canManagePools ? () => openEdit(selectedPool) : undefined}
+        onDelete={() => undefined}
+      />
+    )
   }
 
   return (
-    <ExternalIpPoolDetailsDrawer
-      isExpanded={isDetailsOpen}
-      pool={selectedPool}
-      organization={detailsOrganization}
-      onClose={closeDetails}
-      onAssign={
-        selectedPool && selectedPool.assignedOrganizationId === null
-          ? () => {
-              setAssignPool(selectedPool)
+    <div className="provider-admin-workspace-page provider-admin-external-ip-pools">
+      <ProviderAdminWorkspacePageHeader
+        kicker="Networking"
+        title="External IP pools"
+        lede={
+          isTenantScope
+            ? 'External IP pools available for workloads that need public addressing in your organization.'
+            : 'Define routable address pools for tenant edge exposure and assign them during creation.'
+        }
+        action={
+          canManagePools ? (
+          <Button
+            variant="primary"
+            icon={<PlusIcon />}
+            className="provider-admin-workspace-page__action"
+            onClick={() => setIsCreateWizardOpen(true)}
+          >
+            Create pool
+          </Button>
+          ) : undefined
+        }
+      />
+
+      <div className="catalog-view-toolbar">
+        <div className="catalog-view-toolbar__start">
+          <FormSelect
+            className="catalog-status-filter"
+            id="external-ip-pools-status-filter"
+            value={selectedStatus}
+            onChange={(_event, value) =>
+              setSelectedStatus(value as 'all' | ExternalIpPoolStatus)
             }
-          : undefined
-      }
-    >
-      <div className="provider-admin-workspace-page provider-admin-external-ip-pools">
-        <ProviderAdminWorkspacePageHeader
-          kicker="Networking"
-          title="External IP pools"
-          lede="Define routable address pools for tenant edge exposure and assign them to tenant organizations."
-          action={
-            <Button
-              variant="primary"
-              icon={<PlusIcon />}
-              className="provider-admin-workspace-page__action"
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              Create pool
-            </Button>
-          }
-        />
-
-        <div className="catalog-view-toolbar">
-          <div className="catalog-view-toolbar__start">
-            <FormSelect
-              className="catalog-status-filter"
-              id="external-ip-pools-status-filter"
-              value={selectedStatus}
-              onChange={(_event, value) =>
-                setSelectedStatus(value as 'all' | ExternalIpPoolStatus)
-              }
-              aria-label="Filter external IP pools by status"
-            >
-              <FormSelectOption value="all" label="All statuses" />
-              {EXTERNAL_IP_POOL_STATUSES.map((status) => (
-                <FormSelectOption key={status} value={status} label={status} />
-              ))}
-            </FormSelect>
-            <SearchInput
-              className="catalog-search"
-              placeholder="Search external IP pools"
-              value={searchValue}
-              onChange={(_event, value) => setSearchValue(value)}
-              onClear={() => setSearchValue('')}
-              aria-label="Search external IP pools"
-            />
-          </div>
+            aria-label="Filter external IP pools by status"
+          >
+            <FormSelectOption value="all" label="All statuses" />
+            {EXTERNAL_IP_POOL_STATUSES.map((status) => (
+              <FormSelectOption key={status} value={status} label={status} />
+            ))}
+          </FormSelect>
+          <SearchInput
+            className="catalog-search"
+            placeholder="Search external IP pools"
+            value={searchValue}
+            onChange={(_event, value) => setSearchValue(value)}
+            onClear={() => setSearchValue('')}
+            aria-label="Search external IP pools"
+          />
         </div>
-
-        {filteredPools.length === 0 ? (
-          <EmptyState>
-            <Title headingLevel="h2" size="lg">
-              {hasActiveFilters
-                ? 'No external IP pools match your filters'
-                : 'No external IP pools yet'}
-            </Title>
-            <EmptyStateBody>
-              {hasActiveFilters
-                ? 'Try a different status, search term, or clear filters.'
-                : 'Create a pool to define routable address ranges for tenant edge exposure.'}
-            </EmptyStateBody>
-          </EmptyState>
-        ) : (
-          <div className="catalog-table-panel">
-            <Content component="p" className="catalog-table-result-count">
-              {formatCatalogTableResultCount(filteredPools.length, 'external IP pool')}
-            </Content>
-            <Table
-              aria-label="External IP pools"
-              className="catalog-data-table provider-admin-external-ip-pools__table"
-            >
-              <Thead>
-                <Tr>
-                  <Th>Pool</Th>
-                  <Th>Status</Th>
-                  <Th>CIDR</Th>
-                  <Th>Data center</Th>
-                  <Th>Capacity</Th>
-                  <Th screenReaderText="Actions" />
-                </Tr>
-              </Thead>
-              <Tbody>
-                {filteredPools.map((pool) => {
-                  const status = getExternalIpPoolStatus(pool)
-                  return (
-                    <Tr key={pool.id}>
-                      <Td dataLabel="Pool">
-                        <Content
-                          component="p"
-                          className="provider-admin-external-ip-pools__primary-cell"
-                        >
-                          <Button
-                            variant="link"
-                            isInline
-                            className="catalog-table-name-link"
-                            onClick={() => openDetails(pool)}
-                          >
-                            {pool.name}
-                          </Button>
-                        </Content>
-                        <Content
-                          component="p"
-                          className="provider-admin-external-ip-pools__meta-cell"
-                        >
-                          <code>{pool.id}</code>
-                        </Content>
-                      </Td>
-                      <Td dataLabel="Status">
-                        <Label color={status === 'Assigned' ? 'blue' : 'green'} isCompact>
-                          {status}
-                        </Label>
-                      </Td>
-                      <Td dataLabel="CIDR">
-                        <code>{pool.cidr}</code>
-                      </Td>
-                      <Td dataLabel="Data center">{pool.dataCenter}</Td>
-                      <Td dataLabel="Capacity">
-                        {pool.totalAddresses.toLocaleString()} addresses
-                      </Td>
-                      <Td isActionCell>
-                        <ActionsColumn
-                          items={getExternalIpPoolActions(pool, openDetails, setAssignPool)}
-                        />
-                      </Td>
-                    </Tr>
-                  )
-                })}
-              </Tbody>
-            </Table>
-          </div>
-        )}
-
-        <CreateExternalIpPoolModal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          onCreated={() => refreshData()}
-        />
-
-        <AssignExternalIpPoolModal
-          pool={assignPool}
-          organizations={organizations}
-          onClose={() => setAssignPool(null)}
-          onAssign={handleAssignPool}
-        />
       </div>
-    </ExternalIpPoolDetailsDrawer>
+
+      {filteredPools.length === 0 ? (
+        hasActiveFilters ? (
+          <CatalogFilterEmptyState
+            title="No external IP pools match your filters"
+            description="Try a different status or search term."
+            onClearFilters={clearAllFilters}
+          />
+        ) : (
+        <EmptyState>
+          <Title headingLevel="h2" size="lg">
+            No external IP pools yet
+          </Title>
+          <EmptyStateBody>
+            {isTenantScope
+              ? 'Your provider has not published any external IP pools for this organization yet.'
+              : 'Create a pool to define routable address ranges for tenant edge exposure.'}
+          </EmptyStateBody>
+        </EmptyState>
+        )
+      ) : (
+        <div className="catalog-table-panel">
+          <CatalogFilterResultsSummary
+            filteredCount={filteredPools.length}
+            totalCount={pools.length}
+            singular="external IP pool"
+            filterParts={filterDescriptionParts}
+            onClearFilters={clearAllFilters}
+          />
+          <Table
+            aria-label="External IP pools"
+            className="catalog-data-table provider-admin-external-ip-pools__table"
+          >
+            <Thead>
+              <Tr>
+                <Th>Pool</Th>
+                <Th>Status</Th>
+                <Th>CIDR</Th>
+                <Th>Data center</Th>
+                <Th>Capacity</Th>
+                <Th screenReaderText="Actions" />
+              </Tr>
+            </Thead>
+            <Tbody>
+              {filteredPools.map((pool) => {
+                const status = getExternalIpPoolStatus(pool)
+                return (
+                  <Tr key={pool.id}>
+                    <Td dataLabel="Pool">
+                      <Content
+                        component="p"
+                        className="provider-admin-external-ip-pools__primary-cell"
+                      >
+                        <Button
+                          variant="link"
+                          isInline
+                          className="catalog-table-name-link"
+                          onClick={() => openDetails(pool)}
+                        >
+                          {pool.name}
+                        </Button>
+                      </Content>
+                      <Content
+                        component="p"
+                        className="provider-admin-external-ip-pools__meta-cell"
+                      >
+                        <code>{pool.id}</code>
+                      </Content>
+                    </Td>
+                    <Td dataLabel="Status">
+                      <Label color={status === 'Assigned' ? 'blue' : 'green'} isCompact>
+                        {status}
+                      </Label>
+                    </Td>
+                    <Td dataLabel="CIDR">
+                      <code>{pool.cidr}</code>
+                    </Td>
+                    <Td dataLabel="Data center">{pool.dataCenter}</Td>
+                    <Td dataLabel="Capacity">
+                      {pool.totalAddresses.toLocaleString()} addresses
+                    </Td>
+                    <Td isActionCell>
+                      <ActionsColumn
+                        items={
+                          isTenantScope
+                            ? [{ title: 'View details', onClick: () => openDetails(pool) }]
+                            : getExternalIpPoolActions(pool, openDetails, openEdit)
+                        }
+                      />
+                    </Td>
+                  </Tr>
+                )
+              })}
+            </Tbody>
+          </Table>
+        </div>
+      )}
+    </div>
   )
 }

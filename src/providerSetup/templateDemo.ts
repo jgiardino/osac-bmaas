@@ -1,4 +1,5 @@
 import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import { CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE } from '../catalog/catalogItemDescriptions'
 import type { CatalogNetworkPolicy } from '../providerAdmin/catalogNetworkPolicy'
 
 export type { CatalogNetworkPolicy }
@@ -218,6 +219,30 @@ export const LEGACY_SECOND_CATALOG_ITEM_TITLE_CASE_DISPLAY_NAME = 'Bare Metal - 
 /** Prefill for Provider Admin “Create catalog item” Name step (distinct from seeded items). */
 export const PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME = 'bare-metal-general-purpose-server'
 
+/** Service-specific Name step prefills for Create catalog item. */
+export const PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAMES = {
+  baremetal: PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
+  cluster: 'cluster-general-purpose',
+  'virtual-machine': 'vm-general-purpose',
+  models: 'model-serving-endpoint',
+} as const satisfies Record<CatalogServiceId, string>
+
+export function getPublishCatalogSuggestedDisplayName(serviceId: CatalogServiceId): string {
+  return PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAMES[serviceId]
+}
+
+/** Service-specific Description step prefills for Create catalog item. */
+export const PUBLISH_CATALOG_SUGGESTED_DESCRIPTIONS = {
+  baremetal: CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE.baremetal,
+  cluster: CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE.cluster,
+  'virtual-machine': CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE['virtual-machine'],
+  models: CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE.models,
+} as const satisfies Record<CatalogServiceId, string>
+
+export function getPublishCatalogSuggestedDescription(serviceId: CatalogServiceId): string {
+  return PUBLISH_CATALOG_SUGGESTED_DESCRIPTIONS[serviceId]
+}
+
 export function getCatalogDisplayName(hardwareProfileId: string): string {
   const profile = DISCOVERED_HARDWARE_PROFILES.find((item) => item.id === hardwareProfileId)
   if (!profile) {
@@ -322,9 +347,10 @@ export function getCatalogServiceOffering(serviceId: CatalogServiceId): CatalogS
 export const PUBLISH_CATALOG_STEPS = [
   { id: 'service', label: 'Service' },
   { id: 'template', label: 'Template' },
-  { id: 'hardware-os', label: 'Hardware & OS' },
-  { id: 'field-policies', label: 'Lock fields' },
   { id: 'display-name', label: 'Name' },
+  { id: 'hardware-os', label: 'Hardware & OS' },
+  { id: 'node-topology', label: 'Node topology' },
+  { id: 'field-policies', label: 'Lock fields' },
   { id: 'publish-scope', label: 'Visibility' },
   { id: 'review', label: 'Review' },
 ] as const
@@ -362,6 +388,16 @@ export type PublishedTemplatePayload = {
   /** Disk / OS image shown to tenants. */
   diskImageId?: string
   diskImageLabel?: string
+  /** Cluster as a Service: locked (default) or editable at provisioning. */
+  clusterVersionMode?: 'locked' | 'editable'
+  /** Cluster default worker node set id/label. */
+  nodeSetId?: string
+  nodeSetLabel?: string
+  /** Cluster default host type for the node set. */
+  hostTypeId?: string
+  hostTypeLabel?: string
+  /** Cluster node set / host type: locked (default) or editable at provisioning. */
+  clusterNodeTopologyMode?: 'locked' | 'editable'
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
 }
