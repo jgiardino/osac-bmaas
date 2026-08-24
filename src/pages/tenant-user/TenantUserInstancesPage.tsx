@@ -293,6 +293,7 @@ export function TenantUserInstancesPage({
   const isBareMetalPage = lockedServiceId === 'baremetal'
   const isClustersPage = lockedServiceId === 'cluster'
   const isVirtualMachinesPage = lockedServiceId === 'virtual-machine'
+  const isModelsPage = lockedServiceId === 'models'
   const hasActiveServiceFilters =
     (isBareMetalPage &&
       (powerStateFilter !== 'all' || osFilter !== 'all' || gpuFilter !== 'all')) ||
@@ -854,22 +855,36 @@ export function TenantUserInstancesPage({
   const pageTitle = lockedServiceId
     ? CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]
     : 'Services'
-  const pageLede = lockedServiceId
-    ? isAllProjectsScope(projectScopeId)
-      ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
-      : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
-    : isAllProjectsScope(projectScopeId)
+  const pageLede = (() => {
+    if (isModelsPage) {
+      return isAllProjectsScope(projectScopeId)
+        ? 'Monitor and manage Models as a Service (MaaS) endpoints across all projects.'
+        : 'Monitor and manage Models as a Service (MaaS) endpoints in this project.'
+    }
+    if (lockedServiceId) {
+      return isAllProjectsScope(projectScopeId)
+        ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
+        : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
+    }
+    return isAllProjectsScope(projectScopeId)
       ? 'Monitor and manage instances across all projects.'
       : 'Monitor and manage instances in this project.'
+  })()
 
   const emptyStateTitle = (() => {
     if (!isAllProjectsScope(projectScopeId) && scopedInstances.length === 0) {
+      if (isModelsPage) {
+        return 'No MaaS endpoints in this project'
+      }
       return lockedServiceId
         ? `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances in this project`
         : 'No instances in this project'
     }
     if (searchValue.trim()) {
       return 'No instances match your search'
+    }
+    if (isModelsPage) {
+      return 'No MaaS endpoints yet'
     }
     if (lockedServiceId) {
       return `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances yet`
@@ -1243,9 +1258,13 @@ export function TenantUserInstancesPage({
             </Title>
             <EmptyStateBody>
               {scopedInstances.length === 0
-                ? isAllProjectsScope(projectScopeId)
-                  ? 'Launch an instance from the catalog to start provisioning capacity.'
-                  : 'Launch an instance from the catalog while this project is selected, or switch to All projects.'
+                ? isModelsPage
+                  ? isAllProjectsScope(projectScopeId)
+                    ? 'Launch a MaaS endpoint from the catalog to start serving inference.'
+                    : 'Launch a MaaS endpoint from the catalog while this project is selected, or switch to All projects.'
+                  : isAllProjectsScope(projectScopeId)
+                    ? 'Launch an instance from the catalog to start provisioning capacity.'
+                    : 'Launch an instance from the catalog while this project is selected, or switch to All projects.'
                 : selectedFilters.size === 0
                   ? 'Choose one or more services above to filter your instances.'
                   : searchValue.trim() || hasActiveServiceFilters
