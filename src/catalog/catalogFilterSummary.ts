@@ -46,7 +46,7 @@ function humanizeFilterPart(part: string): string {
     return `results matching ${searchMatch[1].trim()}`
   }
 
-  const organizationMatch = part.match(/^organization:\s*(.+)$/i)
+  const organizationMatch = part.match(/^(?:organization|tenant):\s*(.+)$/i)
   if (organizationMatch) {
     return `items for ${organizationMatch[1].trim()}`
   }
@@ -54,8 +54,14 @@ function humanizeFilterPart(part: string): string {
   const statusMatch = part.match(/^status:\s*(.+)$/i)
   if (statusMatch) {
     const status = statusMatch[1].trim()
-    if (status === 'Active' || status === 'Pending activation') {
-      return `organizations with ${status.toLowerCase()} status`
+    if (status === 'Pending') {
+      return 'pending administrators'
+    }
+    if (status === 'Active') {
+      return 'active administrators'
+    }
+    if (status === 'Pending activation') {
+      return 'tenants with pending activation status'
     }
     return `items with ${status.toLowerCase()} status`
   }
@@ -64,21 +70,21 @@ function humanizeFilterPart(part: string): string {
   if (setupMatch) {
     const setup = setupMatch[1].trim()
     if (setup === 'Ready') {
-      return 'ready organizations'
+      return 'ready tenants'
     }
     if (setup === 'Needs identity provider') {
-      return 'organizations that need an identity provider'
+      return 'tenants that need an identity provider'
     }
     if (setup === 'Waiting on IdP Manager') {
-      return 'organizations waiting on IdP Manager'
+      return 'tenants waiting on IdP Manager'
     }
-    if (setup === 'IdP invitation expired') {
-      return 'organizations with an expired IdP invitation'
+    if (setup === 'IdP manager link expired') {
+      return 'tenants with an expired IdP manager link'
     }
     if (setup === 'Needs roles') {
-      return 'organizations that need roles'
+      return 'tenants that need roles'
     }
-    return `organizations with ${setup.toLowerCase()} setup`
+    return `tenants with ${setup.toLowerCase()} setup`
   }
 
   const osImageMatch = part.match(/^OS image:\s*(.+)$/i)
@@ -111,16 +117,40 @@ function humanizeFilterPart(part: string): string {
     return `${environmentMatch[1].trim()} projects`
   }
 
+  const protocolMatch = part.match(/^protocol:\s*(.+)$/i)
+  if (protocolMatch) {
+    const protocol = protocolMatch[1].trim()
+    if (protocol === 'OIDC') {
+      return 'OpenID Connect identity providers'
+    }
+    if (protocol === 'SAML') {
+      return 'SAML identity providers'
+    }
+    return `identity providers using ${protocol}`
+  }
+
+  const idpStatusMatch = part.match(/^idp status:\s*(.+)$/i)
+  if (idpStatusMatch) {
+    const status = idpStatusMatch[1].trim()
+    if (status === 'Connected') {
+      return 'connected identity providers'
+    }
+    return `identity providers with ${status.toLowerCase()} status`
+  }
+
   const roleMatch = part.match(/^role:\s*(.+)$/i)
   if (roleMatch) {
     const role = roleMatch[1].trim()
-    if (role === 'Primary administrator') {
-      return 'primary administrators'
-    }
     if (role === 'Tenant administrator') {
       return 'tenant administrators'
     }
-    return `administrators with ${role.toLowerCase()} role`
+    if (role === 'Tenant reader') {
+      return 'tenant readers'
+    }
+    if (role === 'Tenant user') {
+      return 'tenant users'
+    }
+    return `assignments with ${role.toLowerCase()} role`
   }
 
   return part

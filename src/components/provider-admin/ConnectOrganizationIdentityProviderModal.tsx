@@ -8,11 +8,8 @@ import {
   DescriptionListTerm,
   Form,
   FormGroup,
-  FormHelperText,
   FormSelect,
   FormSelectOption,
-  HelperText,
-  HelperTextItem,
   Modal,
   ModalBody,
   ModalFooter,
@@ -21,10 +18,15 @@ import {
   TextInput,
 } from '@patternfly/react-core'
 import {
+  areAdditionalDomainsValid,
+  buildDefaultAdditionalDomains,
+  buildDefaultIdentityProviderClientId,
   buildDemoIdentityProviderName,
+  getTakenEmailDomains,
+  normalizeAdditionalDomains,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
-import { updateProviderRegisteredOrganization } from '../../providerSetup/storage'
+import { getProviderRegisteredOrganizations, updateProviderRegisteredOrganization } from '../../providerSetup/storage'
 import {
   ORGANIZATION_ACTION_SUCCESS_AUTO_CLOSE_MS,
   ORGANIZATION_ACTION_WORKING_MS,
@@ -32,6 +34,10 @@ import {
   OrganizationActionWorkingState,
   type OrganizationActionCompletionPhase,
 } from './OrganizationActionSuccessState'
+import {
+  AdditionalEmailDomainsField,
+  AdditionalEmailDomainsValue,
+} from './AdditionalEmailDomainsField'
 
 type IdentityProviderProtocol = 'OIDC' | 'SAML'
 
@@ -54,7 +60,9 @@ function buildDefaultForm(organization: RegisteredOrganization): ConnectIdentity
         organization.identityProviderDisplayName || `${organization.name}-idp`,
       issuerUrl:
         organization.identityProviderIssuerUrl || `https://login.${domain}/oauth2`,
-      clientId: organization.identityProviderClientId || `bmaas-${organization.slug || 'tenant'}`,
+      clientId:
+        organization.identityProviderClientId ||
+        buildDefaultIdentityProviderClientId(organization),
     }
   }
 
@@ -62,7 +70,7 @@ function buildDefaultForm(organization: RegisteredOrganization): ConnectIdentity
     protocol: 'OIDC',
     displayName: `${organization.name}-idp`,
     issuerUrl: `https://login.${domain}/oauth2`,
-    clientId: `bmaas-${organization.slug || 'tenant'}`,
+    clientId: buildDefaultIdentityProviderClientId(organization),
   }
 }
 
@@ -90,6 +98,7 @@ export function ConnectOrganizationIdentityProviderModal({
     issuerUrl: '',
     clientId: '',
   })
+  const [additionalDomains, setAdditionalDomains] = useState<string[]>([])
   const [completionPhase, setCompletionPhase] =
     useState<OrganizationActionCompletionPhase>('idle')
   const completionTimersRef = useRef<number[]>([])
@@ -113,6 +122,7 @@ export function ConnectOrganizationIdentityProviderModal({
     clearCompletionTimers()
     setCompletionPhase('idle')
     setForm(buildDefaultForm(organization))
+    setAdditionalDomains(buildDefaultAdditionalDomains(organization))
     setMode(organization.identityProviderConnected ? 'view' : 'connect')
   }, [isOpen, organization])
 
@@ -120,7 +130,20 @@ export function ConnectOrganizationIdentityProviderModal({
     return null
   }
 
-  const isFormDisabled = !form.displayName.trim() || !form.issuerUrl.trim() || !form.clientId.trim()
+  const takenEmailDomains = getTakenEmailDomains(
+    getProviderRegisteredOrganizations(),
+    organization.id,
+  )
+  const additionalDomainsValid = areAdditionalDomainsValid(
+    additionalDomains,
+    organization.primaryDomain,
+    takenEmailDomains,
+  )
+  const isFormDisabled =
+    !form.displayName.trim() ||
+    !form.issuerUrl.trim() ||
+    !form.clientId.trim() ||
+    !additionalDomainsValid
   const issuerLabel = form.protocol === 'SAML' ? 'Metadata URL' : 'Issuer URL'
   const clientLabel = form.protocol === 'SAML' ? 'Entity ID' : 'Client ID'
   const isCompleting = completionPhase !== 'idle'
@@ -133,6 +156,7 @@ export function ConnectOrganizationIdentityProviderModal({
 
   const handleCancelEdit = () => {
     setForm(buildDefaultForm(organization))
+    setAdditionalDomains(buildDefaultAdditionalDomains(organization))
     setMode('view')
   }
 
@@ -151,6 +175,10 @@ export function ConnectOrganizationIdentityProviderModal({
       identityProviderProtocol: form.protocol,
       identityProviderIssuerUrl: form.issuerUrl.trim(),
       identityProviderClientId: form.clientId.trim(),
+      additionalDomains: normalizeAdditionalDomains(
+        additionalDomains,
+        organization.primaryDomain,
+      ),
       idpInviteStatus: organization.idpInviteToken ? 'accepted' : organization.idpInviteStatus,
     })
 
@@ -192,7 +220,7 @@ export function ConnectOrganizationIdentityProviderModal({
   const description = isCompleting
     ? undefined
     : mode === 'connect'
-      ? `Map sign-in for ${organization.name} to users from ${organization.primaryDomain || 'the primary domain'}.`
+      ? `Connect the IdP for ${organization.name}.`
       : mode === 'edit'
         ? `Update the identity provider for ${organization.name}.`
         : `Connected identity provider for ${organization.name}.`
@@ -219,12 +247,12 @@ export function ConnectOrganizationIdentityProviderModal({
         ) : completionPhase === 'success' ? (
           <OrganizationActionSuccessState
             title="Identity provider connected"
-            body="This organization is now active. You can define roles anytime."
+            body="This tenant is now active. You can define roles anytime."
           />
         ) : mode === 'view' ? (
           <>
             <Content component="p" className="provider-admin-organizations__idp-modal-lede">
-              Review the settings used to authenticate users from the organization primary domain.
+              Review the settings used to authenticate users from the tenant email domains.
             </Content>
             <DescriptionList
               isCompact
@@ -234,7 +262,13 @@ export function ConnectOrganizationIdentityProviderModal({
               <DescriptionListGroup>
                 <DescriptionListTerm>Primary email domain</DescriptionListTerm>
                 <DescriptionListDescription>
-                  <code>{organization.primaryDomain || '—'}</code>
+                  {organization.primaryDomain || '—'}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Additional email domains</DescriptionListTerm>
+                <DescriptionListDescription>
+                  <AdditionalEmailDomainsValue domains={organization.additionalDomains ?? []} />
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
@@ -250,13 +284,13 @@ export function ConnectOrganizationIdentityProviderModal({
               <DescriptionListGroup>
                 <DescriptionListTerm>{issuerLabel}</DescriptionListTerm>
                 <DescriptionListDescription>
-                  <code>{form.issuerUrl || '—'}</code>
+                  {form.issuerUrl || '—'}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>{clientLabel}</DescriptionListTerm>
                 <DescriptionListDescription>
-                  <code>{form.clientId || '—'}</code>
+                  {form.clientId || '—'}
                 </DescriptionListDescription>
               </DescriptionListGroup>
             </DescriptionList>
@@ -265,8 +299,8 @@ export function ConnectOrganizationIdentityProviderModal({
           <>
             <Content component="p" className="provider-admin-organizations__idp-modal-lede">
               {mode === 'connect'
-                ? 'Registration already captured the email domain. Connect the IdP that issues tokens for that domain — roles and the first tenant admin come next.'
-                : 'Changes apply to tenant sign-in for this organization.'}
+                ? 'Connect the IdP that issues tokens for this tenant.'
+                : 'Changes apply to tenant sign-in for this tenant.'}
             </Content>
             <Form autoComplete="off" className="provider-admin-organizations__idp-form">
               <FormGroup label="Primary email domain" fieldId="connect-idp-domain">
@@ -276,14 +310,15 @@ export function ConnectOrganizationIdentityProviderModal({
                   readOnlyVariant="default"
                   aria-readonly="true"
                 />
-                <FormHelperText>
-                  <HelperText>
-                    <HelperTextItem>
-                      Only identities from this domain can join this organization.
-                    </HelperTextItem>
-                  </HelperText>
-                </FormHelperText>
               </FormGroup>
+              <AdditionalEmailDomainsField
+                idPrefix="connect-idp-additional-domain"
+                primaryDomain={organization.primaryDomain}
+                domains={additionalDomains}
+                onChange={setAdditionalDomains}
+                takenDomains={takenEmailDomains}
+                isDisabled={isCompleting}
+              />
               <FormGroup label="Protocol" fieldId="connect-idp-protocol" isRequired>
                 <FormSelect
                   id="connect-idp-protocol"

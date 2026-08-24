@@ -53,8 +53,10 @@ import {
   type TenantProject,
 } from '../../tenantAdmin/projects'
 import { addTenantProject } from '../../tenantAdmin/storage'
-import { resolveCatalogSpecRows, resolveClusterCatalogHighlightRows } from '../../catalog/catalogSpecs'
+import { resolveBaremetalCatalogCardSpecRows, resolveCatalogSpecRows, resolveClusterCatalogHighlightRows } from '../../catalog/catalogSpecs'
 import {
+  formatBaremetalInstanceTypeLabel,
+  formatCatalogDiskImageLabel,
   formatClusterHostTypeLabel,
   formatClusterNodeSetLabel,
   formatClusterPlatformLabel,
@@ -64,10 +66,14 @@ import {
   getCatalogClusterVersionLifecycleMeta,
   getCatalogClusterVersionModeLabel,
   getCatalogClusterVersionOptions,
+  getCatalogDiskImageOptions,
+  getCatalogHardwareOsModeLabel,
+  getCatalogInstanceTypeOptions,
   getLatestCatalogClusterVersionId,
   getReleaseImageForClusterVersion,
   resolveCatalogClusterNodeTopologyMode,
   resolveCatalogClusterVersionMode,
+  resolveCatalogHardwareOsMode,
 } from '../../catalog/catalogPublishConfig'
 import type { TenantUserCatalogCard } from '../../tenantUser/catalog'
 import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
@@ -131,6 +137,11 @@ type TenantUserLaunchInstanceWizardProps = {
   onProvisioningStarted: (instance: TenantInstance) => void
   onDismissDuringProvisioning: (instanceId: string, serviceId: CatalogServiceId) => void
   onWizardFinished: (instanceId: string, serviceId: CatalogServiceId) => void
+  /**
+   * Provider / tenant admin launch: networking lede can point to Networking
+   * to add objects. Tenant users keep the original choose-only copy.
+   */
+  canManageNetworkObjects?: boolean
 }
 
 function resolveInitialLaunchProjectId(
@@ -179,6 +190,7 @@ export function TenantUserLaunchInstanceWizard({
   onProvisioningStarted,
   onDismissDuringProvisioning,
   onWizardFinished,
+  canManageNetworkObjects = false,
 }: TenantUserLaunchInstanceWizardProps) {
   const networkContext = useMemo(
     () =>
@@ -211,7 +223,7 @@ export function TenantUserLaunchInstanceWizard({
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
   const launchScopeKind: TenantUserScopeKind = selectedProject ? 'project' : 'organization'
   const launchScopeLabel = selectedProject?.name ?? organization?.name ?? tenantSlug
-  const launchScopeFieldLabel = selectedProject ? 'Project' : 'Organization'
+  const launchScopeFieldLabel = selectedProject ? 'Project' : 'Tenant'
   const selectedProjectLabel = selectedProject?.name ?? 'Select a project'
   const projectToggleLabel = isCreatingProject
     ? TENANT_PROJECTS_TEAMS_DEMO.createProjectLabel
@@ -277,9 +289,11 @@ export function TenantUserLaunchInstanceWizard({
               templateRefId: catalogItem.templateRefId,
               templateName: catalogItem.templateName,
               instanceTypeLabel: catalogItem.instanceTypeLabel,
+              instanceTypeId: catalogItem.instanceTypeId,
               diskImageLabel: catalogItem.diskImageLabel,
               diskImageId: catalogItem.diskImageId,
               clusterVersionMode: catalogItem.clusterVersionMode,
+              hardwareOsMode: catalogItem.hardwareOsMode,
               nodeSetId: catalogItem.nodeSetId,
               nodeSetLabel: catalogItem.nodeSetLabel,
               hostTypeId: catalogItem.hostTypeId,
@@ -295,9 +309,11 @@ export function TenantUserLaunchInstanceWizard({
       catalogItem.templateRefId,
       catalogItem.templateName,
       catalogItem.instanceTypeLabel,
+      catalogItem.instanceTypeId,
       catalogItem.diskImageLabel,
       catalogItem.diskImageId,
       catalogItem.clusterVersionMode,
+      catalogItem.hardwareOsMode,
       catalogItem.nodeSetId,
       catalogItem.nodeSetLabel,
       catalogItem.hostTypeId,
@@ -344,6 +360,12 @@ export function TenantUserLaunchInstanceWizard({
   ])
   // Networking is service-level — always available at launch for every catalog service.
   const includeNetworkingStep = true
+  const networkingLede = canManageNetworkObjects
+    ? LAUNCH_INSTANCE_WIZARD_DEMO.networkingAdminLede
+    : LAUNCH_INSTANCE_WIZARD_DEMO.networkingLede
+  const clusterInfrastructureNetworkingLede = canManageNetworkObjects
+    ? CLUSTER_LAUNCH_INSTANCE_DEMO.infrastructureNetworkingAdminLede
+    : CLUSTER_LAUNCH_INSTANCE_DEMO.infrastructureNetworkingLede
   const wizardSteps = useMemo(
     () =>
       getLaunchInstanceWizardSteps({
@@ -386,6 +408,28 @@ export function TenantUserLaunchInstanceWizard({
   const clusterVersionModeLabel = getCatalogClusterVersionModeLabel(
     resolveCatalogClusterVersionMode(catalogItem.clusterVersionMode),
   )
+  const isBareMetalHardwareOsEditable =
+    isBareMetalCatalogItem &&
+    resolveCatalogHardwareOsMode(catalogItem.hardwareOsMode) === 'editable'
+  const hardwareOsModeLabel = getCatalogHardwareOsModeLabel(
+    resolveCatalogHardwareOsMode(catalogItem.hardwareOsMode),
+  )
+  const bareMetalInstanceTypeOptions = useMemo(() => {
+    const options = getCatalogInstanceTypeOptions('baremetal')
+    const catalogId = catalogItem.instanceTypeId?.trim()
+    if (catalogId && !options.some((option) => option.id === catalogId)) {
+      return [
+        {
+          id: catalogId,
+          label: catalogItem.instanceTypeLabel?.trim() || catalogId,
+          detail: '',
+        },
+        ...options,
+      ]
+    }
+    return options
+  }, [catalogItem.instanceTypeId, catalogItem.instanceTypeLabel])
+  const bareMetalDiskImageOptions = useMemo(() => getCatalogDiskImageOptions(), [])
 
   const [form, setForm] = useState<LaunchInstanceWizardForm>(() =>
     createLaunchInstanceWizardForm({
@@ -398,6 +442,8 @@ export function TenantUserLaunchInstanceWizard({
       clusterVersion: catalogClusterVersion || catalogItem.osImage,
       hostType: catalogDefaultHostType,
       nodeSetId: catalogDefaultNodeSetId,
+      instanceTypeId: catalogItem.instanceTypeId,
+      diskImageId: catalogItem.diskImageId,
     }),
   )
   const [activeStepId, setActiveStepId] = useState<LaunchInstanceWizardStepId>(
@@ -451,6 +497,8 @@ export function TenantUserLaunchInstanceWizard({
         clusterVersion: catalogClusterVersion || catalogItem.osImage,
         hostType: catalogDefaultHostType,
         nodeSetId: catalogDefaultNodeSetId,
+      instanceTypeId: catalogItem.instanceTypeId,
+      diskImageId: catalogItem.diskImageId,
       }),
     )
     setSelectedProjectId(resolveInitialLaunchProjectId(projects, initialProjectId))
@@ -517,6 +565,8 @@ export function TenantUserLaunchInstanceWizard({
         clusterVersion: catalogClusterVersion || catalogItem.osImage,
         hostType: catalogDefaultHostType,
         nodeSetId: catalogDefaultNodeSetId,
+      instanceTypeId: catalogItem.instanceTypeId,
+      diskImageId: catalogItem.diskImageId,
       }),
     )
     setSelectedProjectId(resolveInitialLaunchProjectId(projects, initialProjectId))
@@ -536,6 +586,8 @@ export function TenantUserLaunchInstanceWizard({
     catalogItem.osImage,
     catalogDefaultHostType,
     catalogDefaultNodeSetId,
+    catalogItem.instanceTypeId,
+    catalogItem.diskImageId,
   ])
 
   useEffect(() => {
@@ -550,6 +602,19 @@ export function TenantUserLaunchInstanceWizard({
       ? parseVmLaunchInstanceTypeOption(form.instanceType.trim())
       : null
     const vmOsImage = isVmCatalogItem ? resolvedVmOsImage : null
+    const bareMetalLaunchSpecRows = isBareMetalCatalogItem
+      ? resolveBaremetalCatalogCardSpecRows({
+          templateRefId: catalogItem.templateRefId,
+          templateName: catalogItem.templateName,
+          instanceTypeId: form.instanceType || catalogItem.instanceTypeId,
+          instanceTypeLabel:
+            formatBaremetalInstanceTypeLabel(form.instanceType) ?? catalogItem.instanceTypeLabel,
+          diskImageId: form.diskImageId || catalogItem.diskImageId,
+          diskImageLabel:
+            formatCatalogDiskImageLabel(form.diskImageId, catalogItem.diskImageLabel) ??
+            catalogItem.diskImageLabel,
+        })
+      : null
 
     const instance: TenantInstance = {
       id: generateTenantInstanceId(),
@@ -565,15 +630,23 @@ export function TenantUserLaunchInstanceWizard({
         ? formatClusterPlatformLabel(form.clusterVersionId || form.releaseImage)
         : isVmCatalogItem
           ? (vmOsImage ?? catalogItem.osImage)
-          : catalogItem.osImage,
+          : isBareMetalCatalogItem
+            ? (formatCatalogDiskImageLabel(form.diskImageId, catalogItem.diskImageLabel) ??
+              catalogItem.osImage)
+            : catalogItem.osImage,
       networkLabel,
       networking,
       gpuLabel: isClusterCatalogItem
         ? (detailSpecRows.find((row) => row.label === 'Node set')?.value ?? catalogItem.gpu)
         : isVmCatalogItem
           ? (vmInstanceTypeParts?.size ?? catalogItem.gpu)
-          : catalogItem.gpu,
-      specRows: isServiceAwareCatalogItem
+          : isBareMetalCatalogItem
+            ? (bareMetalLaunchSpecRows?.find((row) => row.label === 'GPU')?.value ??
+              catalogItem.gpu)
+            : catalogItem.gpu,
+      specRows: isBareMetalCatalogItem
+        ? (bareMetalLaunchSpecRows ?? catalogItem.specRows)
+        : isServiceAwareCatalogItem
         ? isVmCatalogItem
           ? [
               {
@@ -812,7 +885,7 @@ export function TenantUserLaunchInstanceWizard({
         <FormHelperText>
           <HelperText>
             <HelperTextItem>
-              Create a project to launch into, or this instance will use the organization.
+              Create a project to launch into, or this instance will use the tenant.
             </HelperTextItem>
           </HelperText>
         </FormHelperText>
@@ -943,6 +1016,63 @@ export function TenantUserLaunchInstanceWizard({
               </HelperText>
             </FormHelperText>
           </FormGroup>
+
+          {isBareMetalHardwareOsEditable ? (
+            <>
+              <FormGroup label="Instance type" fieldId="launch-bm-instance-type" isRequired>
+                <FormSelect
+                  id="launch-bm-instance-type"
+                  value={form.instanceType}
+                  onChange={(_event, value) =>
+                    setForm((current) => ({ ...current, instanceType: value }))
+                  }
+                  aria-label="Instance type"
+                >
+                  {bareMetalInstanceTypeOptions.map((option) => (
+                    <FormSelectOption
+                      key={option.id}
+                      value={option.id}
+                      label={
+                        option.accelerator
+                          ? `${option.label} (${option.detail} · ${option.accelerator})`
+                          : option.detail
+                            ? `${option.label} (${option.detail})`
+                            : option.label
+                      }
+                    />
+                  ))}
+                </FormSelect>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>
+                      {`Editable on this catalog item (${hardwareOsModeLabel}). Tenants can change at launch.`}
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              </FormGroup>
+              <FormGroup label="Disk image" fieldId="launch-bm-disk-image" isRequired>
+                <FormSelect
+                  id="launch-bm-disk-image"
+                  value={form.diskImageId}
+                  onChange={(_event, value) =>
+                    setForm((current) => ({ ...current, diskImageId: value }))
+                  }
+                  aria-label="Disk image"
+                >
+                  {bareMetalDiskImageOptions.map((option) => (
+                    <FormSelectOption key={option.id} value={option.id} label={option.label} />
+                  ))}
+                </FormSelect>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>
+                      {`Editable on this catalog item (${hardwareOsModeLabel}). Tenants can change at launch.`}
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              </FormGroup>
+            </>
+          ) : null}
 
           {isClusterCatalogItem ? (
             <FormGroup label="Pull secret" fieldId="launch-cluster-pull-secret" isRequired>
@@ -1175,6 +1305,9 @@ export function TenantUserLaunchInstanceWizard({
 
   const renderVmNetworkingStep = () => (
     <div className="tenant-user-launch-wizard__step">
+      <Content component="p" className="tenant-user-launch-wizard__step-lede">
+        {networkingLede}
+      </Content>
       <Form autoComplete="off" className="tenant-user-launch-wizard__form">
         {renderPlacementNetworkingFields('launch-vm')}
       </Form>
@@ -1184,7 +1317,7 @@ export function TenantUserLaunchInstanceWizard({
   const renderBareMetalNetworkingStep = () => (
     <div className="tenant-user-launch-wizard__step">
       <Content component="p" className="tenant-user-launch-wizard__step-lede">
-        {LAUNCH_INSTANCE_WIZARD_DEMO.networkingLede}
+        {networkingLede}
       </Content>
       <Form autoComplete="off" className="tenant-user-launch-wizard__form">
         {renderPlacementNetworkingFields('launch-bm')}
@@ -1443,7 +1576,7 @@ export function TenantUserLaunchInstanceWizard({
             {CLUSTER_LAUNCH_INSTANCE_DEMO.infrastructureNetworkingTitle}
           </Content>
           <Content component="p" className="tenant-user-launch-wizard__network-section-lede">
-            {CLUSTER_LAUNCH_INSTANCE_DEMO.infrastructureNetworkingLede}
+            {clusterInfrastructureNetworkingLede}
           </Content>
           {renderPlacementNetworkingFields('launch-cluster')}
         </div>
@@ -1543,7 +1676,7 @@ export function TenantUserLaunchInstanceWizard({
         {LAUNCH_INSTANCE_WIZARD_DEMO.networkingTitle}
       </Content>
       <Content component="p" className="tenant-user-launch-wizard__step-lede">
-        {LAUNCH_INSTANCE_WIZARD_DEMO.networkingLede}
+        {networkingLede}
       </Content>
 
       <Form autoComplete="off" className="tenant-user-launch-wizard__form">
@@ -1638,7 +1771,22 @@ export function TenantUserLaunchInstanceWizard({
 
     const renderServiceSpecificRows = () => {
       if (isBareMetalCatalogItem) {
-        return renderPlacementNetworkingRows()
+        return [
+          renderReviewRow(
+            'Instance type',
+            formatBaremetalInstanceTypeLabel(form.instanceType) ||
+              catalogItem.instanceTypeLabel ||
+              form.instanceType.trim() ||
+              '—',
+          ),
+          renderReviewRow(
+            'Disk image',
+            formatCatalogDiskImageLabel(form.diskImageId, catalogItem.diskImageLabel) ||
+              catalogItem.osImage ||
+              '—',
+          ),
+          ...renderPlacementNetworkingRows(),
+        ]
       }
 
       if (isVmCatalogItem) {
@@ -2048,9 +2196,7 @@ export function TenantUserLaunchInstanceWizard({
   const wizard = isOpen ? (
     <Wizard
       key={`launch-instance-wizard-${catalogItem.serviceId}-${includeNetworkingStep ? 'net' : 'no-net'}`}
-      className={['tenant-user-launch-wizard', isPage ? 'catalog-wizard-page__wizard' : undefined]
-        .filter(Boolean)
-        .join(' ')}
+      className="tenant-user-launch-wizard"
       height={isPage ? '100%' : '40rem'}
       isPlain={isPage}
       onClose={isPage ? undefined : requestClose}

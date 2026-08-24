@@ -899,18 +899,14 @@ export function getClusterDemoPassword(instance: TenantInstance): string {
 
 export function getTenantInstanceScopeFieldLabel(
   instance: TenantInstance,
-): 'Organization' | 'Project' {
-  return getTenantInstanceProjectIds(instance).length > 0 ? 'Project' : 'Organization'
+): 'Tenant' | 'Project' {
+  return getTenantInstanceProjectIds(instance).length > 0 ? 'Project' : 'Tenant'
 }
 
-/** Normalized project membership ids (supports legacy single-project instances). */
+/** Normalized owning project id (supports legacy single-project instances). */
 export function getTenantInstanceProjectIds(instance: TenantInstance): string[] {
-  const resolved = resolveStoredTenantInstanceProjectIds(instance)
-  if (!isDemoMultiProjectShowcaseInstance(instance)) {
-    return resolved
-  }
-
-  return [...new Set([...resolved, ...getDemoMultiProjectShowcaseProjectIds()])]
+  const [owningProjectId] = resolveStoredTenantInstanceProjectIds(instance)
+  return owningProjectId ? [owningProjectId] : []
 }
 
 export function instanceBelongsToProject(
@@ -954,11 +950,7 @@ export function getTenantInstanceProjectLabel(
     }
     return projectId
   })
-  if (names.length === 1) {
-    return names[0]!
-  }
-
-  return `${names[0]} +${names.length - 1}`
+  return names[0] ?? '—'
 }
 
 /**
@@ -970,7 +962,7 @@ export function withInstanceProjectIds(
   projects: readonly { id: string; name: string }[],
   organizationName: string,
 ): TenantInstance {
-  const uniqueIds = [...new Set(projectIds.filter(Boolean))]
+  const uniqueIds = [...new Set(projectIds.filter(Boolean))].slice(0, 1)
   const resolvedNames = uniqueIds
     .map((projectId) => projects.find((project) => project.id === projectId)?.name)
     .filter((name): name is string => Boolean(name))
@@ -999,7 +991,7 @@ export const DEMO_TENANT_BARE_METAL_INSTANCE_ID = 'instance-demo-bm-01'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_02 = 'instance-demo-bm-02'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_03 = 'instance-demo-bm-03'
 
-/** Services detail demo: two projects shown side by side. */
+/** Services detail demo: dense GPU host used in walkthroughs. */
 export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME = 'bm-server-06'
 
 export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_IDS = [
@@ -1042,44 +1034,35 @@ export const DEMO_TENANT_CLUSTER_STATES: ReadonlyArray<{
 export const DEMO_TENANT_PROJECT_INSTANCE_IDS = [
   DEMO_TENANT_BARE_METAL_INSTANCE_ID,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
-  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
   DEMO_TENANT_CLUSTER_INSTANCE_ID,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_03,
-  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
   DEMO_TENANT_MODEL_INSTANCE_ID,
+] as const
+
+/** Demo instances seeded under `ml-dev-team` (exclusive owner). */
+export const DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS = [
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
+  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
   DEMO_TENANT_MODEL_INSTANCE_ID_02,
 ] as const
 
-/** Demo instances that also belong to `ml-dev-team` (two projects). */
-export const DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS = [
-  DEMO_TENANT_BARE_METAL_INSTANCE_ID,
-  DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
-  DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
-  DEMO_TENANT_CLUSTER_INSTANCE_ID,
-  DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
-  DEMO_TENANT_MODEL_INSTANCE_ID,
-] as const
-
 export function getDemoInstanceProjectIds(instanceId: string): string[] {
-  const belongsToPrimary = DEMO_TENANT_PROJECT_INSTANCE_IDS.includes(
-    instanceId as (typeof DEMO_TENANT_PROJECT_INSTANCE_IDS)[number],
-  )
-  if (!belongsToPrimary) {
-    return []
-  }
-
   const belongsToSecondary = DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS.includes(
     instanceId as (typeof DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS)[number],
   )
+  if (belongsToSecondary) {
+    return [DEMO_TENANT_PROJECT_ID_02]
+  }
 
-  return belongsToSecondary
-    ? getDemoMultiProjectShowcaseProjectIds()
-    : [DEMO_TENANT_PROJECT_ID]
-}
+  const belongsToPrimary = DEMO_TENANT_PROJECT_INSTANCE_IDS.includes(
+    instanceId as (typeof DEMO_TENANT_PROJECT_INSTANCE_IDS)[number],
+  )
+  if (belongsToPrimary) {
+    return [DEMO_TENANT_PROJECT_ID]
+  }
 
-export function getDemoMultiProjectShowcaseProjectIds(): string[] {
-  return [DEMO_TENANT_PROJECT_ID, DEMO_TENANT_PROJECT_ID_02]
+  return []
 }
 
 export function isDemoMultiProjectShowcaseInstance(
@@ -1120,12 +1103,12 @@ export function syncDemoMultiProjectShowcaseInstance(instance: TenantInstance): 
   }
 
   const expectedName = DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME
-  const expectedProjectIds = getDemoMultiProjectShowcaseProjectIds()
+  const expectedProjectIds = getDemoInstanceProjectIds(DEMO_TENANT_BARE_METAL_INSTANCE_ID_03)
   const currentProjectIds = resolveStoredTenantInstanceProjectIds(instance)
-  const mergedProjectIds = [...new Set([...currentProjectIds, ...expectedProjectIds])]
-  const hasExpectedMembership = expectedProjectIds.every((projectId) =>
-    mergedProjectIds.includes(projectId),
-  )
+  const hasExpectedMembership =
+    expectedProjectIds.length === 1 &&
+    currentProjectIds.length === 1 &&
+    currentProjectIds[0] === expectedProjectIds[0]
 
   if (instance.name === expectedName && hasExpectedMembership) {
     return null
@@ -1134,9 +1117,9 @@ export function syncDemoMultiProjectShowcaseInstance(instance: TenantInstance): 
   return {
     ...instance,
     name: expectedName,
-    projectIds: mergedProjectIds,
+    projectIds: expectedProjectIds,
     scopeKind: 'project',
-    projectName: DEMO_TENANT_PROJECT_NAME,
+    projectName: DEMO_TENANT_PROJECT_NAME_02,
   }
 }
 

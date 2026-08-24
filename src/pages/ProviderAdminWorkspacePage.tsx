@@ -234,6 +234,7 @@ export function ProviderAdminWorkspacePage() {
       ...(payload.clusterVersionMode
         ? { clusterVersionMode: payload.clusterVersionMode }
         : {}),
+      ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
       ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
       ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
       ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
@@ -463,7 +464,6 @@ export function ProviderAdminWorkspacePage() {
             projects={projects}
             instances={instances}
             onProjectsChange={setProjects}
-            onInstancesChange={(updater) => setInstances((current) => [...updater(current)])}
             openProjectId={openProjectId}
             onOpenProjectConsumed={() => setOpenProjectId(null)}
             onNavigateToInstance={(instance) => {

@@ -85,7 +85,7 @@ type TenantAdminCatalogPageProps = {
 
 function getVisibilityTooltip(scope: TenantCatalogGovernanceItemWithNetworking['scope']): string {
   return scope === 'vip-enterprise'
-    ? 'Only visible to your organization'
+    ? 'Only visible to your tenant'
     : 'Visible to all tenants'
 }
 
@@ -556,6 +556,7 @@ export function TenantAdminCatalogPage({
           organization={organization}
           catalogDraft={launchCatalogDraft}
           preferCatalogDraft
+          canManageNetworkObjects
           tenantSlug={organization.slug}
           projects={projects}
           initialProjectId={initialProjectId}
@@ -805,6 +806,7 @@ export function TenantAdminCatalogPage({
                             diskImageLabel: item.diskImageLabel,
                             diskImageId: item.diskImageId,
                             clusterVersionMode: item.clusterVersionMode,
+                            hardwareOsMode: item.hardwareOsMode,
                           })}
                         </Content>
                       </Td>

@@ -1,6 +1,8 @@
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 import {
   getCatalogClusterVersionOption,
+  getCatalogDiskImageOptions,
+  getCatalogInstanceTypeOptions,
   getLatestCatalogClusterVersionId,
   getReleaseImageForClusterVersion,
 } from '../catalog/catalogPublishConfig'
@@ -124,7 +126,9 @@ export const LAUNCH_INSTANCE_WIZARD_DEMO = {
   networkingTitle: 'Networking',
   networkingLede:
     'Choose the virtual network, subnet, security group, and external IP pool for this instance.',
-  networkingAssignedHelper: 'Set by your organization',
+  networkingAdminLede:
+    'Choose a virtual network, subnet, security group, and IP pool. Add objects in Networking.',
+  networkingAssignedHelper: 'Set by your tenant',
   reviewTitle: 'Review',
   reviewHardware: 'Dell PowerEdge R750',
   reviewGpu: 'NVIDIA A100 80 GB',
@@ -194,7 +198,9 @@ export const CLUSTER_LAUNCH_INSTANCE_DEMO = {
   defaultNodeCount: 1,
   infrastructureNetworkingTitle: 'Infrastructure networking',
   infrastructureNetworkingLede:
-    'Attach this cluster to your organization network objects.',
+    'Attach this cluster to your tenant network objects.',
+  infrastructureNetworkingAdminLede:
+    'Attach this cluster to tenant network objects. Add objects in Networking.',
   clusterNetworkTitle: 'Cluster network',
   clusterNetworkLede: 'Address ranges used inside the cluster for pods and services.',
   podCidr: '10.128.0.0/24',
@@ -299,6 +305,8 @@ export type LaunchInstanceWizardForm = {
   serviceCidr: string
   containerDiskImage: string
   instanceType: string
+  /** Bare metal disk image id when Hardware & OS is editable (or the catalog default). */
+  diskImageId: string
   bootDiskSizeGiB: number
   imageSourceType: string
   runStrategy: string
@@ -381,6 +389,7 @@ export const DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM: LaunchInstanceWizardForm = {
   serviceCidr: '',
   containerDiskImage: '',
   instanceType: '',
+  diskImageId: '',
   bootDiskSizeGiB: VM_LAUNCH_INSTANCE_DEMO.bootDiskSizeGiB,
   imageSourceType: VM_LAUNCH_INSTANCE_DEMO.imageSourceType,
   runStrategy: VM_LAUNCH_INSTANCE_DEMO.defaultRunStrategy,
@@ -404,6 +413,10 @@ export function createLaunchInstanceWizardForm(options: {
   hostType?: string
   /** Catalog default node-set kind for the first node set. */
   nodeSetId?: string
+  /** Bare metal default instance type id. */
+  instanceTypeId?: string
+  /** Bare metal default disk image id. */
+  diskImageId?: string
 }): LaunchInstanceWizardForm {
   const serviceId = options.serviceId ?? 'baremetal'
   const isCluster = serviceId === 'cluster'
@@ -442,7 +455,16 @@ export function createLaunchInstanceWizardForm(options: {
     podCidr: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.podCidr : '',
     serviceCidr: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.serviceCidr : '',
     containerDiskImage: isVm ? VM_LAUNCH_INSTANCE_DEMO.containerDiskImage : '',
-    instanceType: isVm ? VM_LAUNCH_INSTANCE_DEMO.defaultInstanceType : '',
+    instanceType: isVm
+      ? VM_LAUNCH_INSTANCE_DEMO.defaultInstanceType
+      : isBaremetal
+        ? options.instanceTypeId?.trim() ||
+          getCatalogInstanceTypeOptions('baremetal')[0]?.id ||
+          ''
+        : '',
+    diskImageId: isBaremetal
+      ? options.diskImageId?.trim() || getCatalogDiskImageOptions()[0]?.id || ''
+      : '',
     bootDiskSizeGiB: isVm
       ? VM_LAUNCH_INSTANCE_DEMO.bootDiskSizeGiB
       : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.bootDiskSizeGiB,

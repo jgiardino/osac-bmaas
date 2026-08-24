@@ -1,14 +1,33 @@
 import type { ProviderServiceId } from './constants'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
-import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import {
   createDemoHarborlineCapitalOrganization,
   createDemoNorthSummitBankOrganization,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_SLUG,
+  DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN,
+  DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME,
+  DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID,
+  DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME,
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  DEMO_NORTH_SUMMIT_BANK_ORG_NAME,
+  DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN,
+  DEMO_NORTHSTAR_ADDITIONAL_DOMAIN,
+  DEMO_NORTHSTAR_BILLING_ACCOUNT_NAME,
+  DEMO_NORTHSTAR_IDP_CLIENT_ID,
+  DEMO_NORTHSTAR_IDP_DISPLAY_NAME,
+  DEMO_NORTHSTAR_PRIMARY_DOMAIN,
   DEFAULT_REGISTER_ORGANIZATION_FORM,
+  DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN,
   hasPendingIdpInvite,
+  generateBreakGlassUsername,
+  getDemoBreakGlassPassword,
+  isOrganizationAssignedRoleId,
+  migrateLegacyIdentityProviderClientId,
+  normalizeAdditionalDomains,
+  normalizeOrganizationIdentityProviders,
+  type OrganizationRoleAssignment,
+  type RegisteredOrganization,
 } from '../providerAdmin/organizations'
 import type { ComputeImage } from '../providerAdmin/computeImages'
 import { DEFAULT_COMPUTE_IMAGES } from '../providerAdmin/computeImages'
@@ -37,6 +56,7 @@ import type {
   CatalogClusterNodeTopologyMode,
   CatalogClusterVersionMode,
   CatalogFieldPolicy,
+  CatalogHardwareOsMode,
 } from '../catalog/catalogPublishConfig'
 import type {
   CatalogServiceId,
@@ -247,6 +267,11 @@ export type ProviderCatalogDraft = {
    * Defaults to locked when omitted.
    */
   clusterVersionMode?: CatalogClusterVersionMode
+  /**
+   * Bare metal only. When `editable`, tenants may change instance type and disk
+   * image at launch. Defaults to locked when omitted.
+   */
+  hardwareOsMode?: CatalogHardwareOsMode
   /** Cluster default worker node set. */
   nodeSetId?: string
   nodeSetLabel?: string
@@ -631,6 +656,7 @@ export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCat
     ...(source.diskImageId ? { diskImageId: source.diskImageId } : {}),
     ...(source.diskImageLabel ? { diskImageLabel: source.diskImageLabel } : {}),
     ...(source.clusterVersionMode ? { clusterVersionMode: source.clusterVersionMode } : {}),
+    ...(source.hardwareOsMode ? { hardwareOsMode: source.hardwareOsMode } : {}),
     ...(source.nodeSetId ? { nodeSetId: source.nodeSetId } : {}),
     ...(source.nodeSetLabel ? { nodeSetLabel: source.nodeSetLabel } : {}),
     ...(source.hostTypeId ? { hostTypeId: source.hostTypeId } : {}),
@@ -785,6 +811,7 @@ export function updateProviderCatalogItemFromPayload(
     ...(payload.clusterVersionMode
       ? { clusterVersionMode: payload.clusterVersionMode }
       : {}),
+    ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
     ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
     ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
     ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
@@ -914,7 +941,7 @@ export function patchProviderCatalogItem(
 
 /**
  * Rewrite a catalog item's stable identity (id / template ref / display name) and
- * retarget organization assignments. Used when migrating demo seeds to DNS-1123 names.
+ * retarget tenant assignments. Used when migrating demo seeds to DNS-1123 names.
  */
 export function rewriteProviderCatalogItemIdentity(
   fromCatalogItemId: string,
@@ -961,10 +988,10 @@ export function rewriteProviderCatalogItemIdentity(
   persistProviderCatalogItems(next)
 
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    if (organizations.some((org) => org.catalogItemId === fromCatalogItemId)) {
+    const tenants = getProviderRegisteredOrganizations()
+    if (tenants.some((org) => org.catalogItemId === fromCatalogItemId)) {
       setProviderRegisteredOrganizations(
-        organizations.map((org) =>
+        tenants.map((org) =>
           org.catalogItemId === fromCatalogItemId
             ? {
                 ...org,
@@ -992,11 +1019,11 @@ export function deleteProviderCatalogItem(catalogItemId: string): boolean {
   persistProviderCatalogItems(next)
 
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    const hasAssigned = organizations.some((org) => org.catalogItemId === catalogItemId)
+    const tenants = getProviderRegisteredOrganizations()
+    const hasAssigned = tenants.some((org) => org.catalogItemId === catalogItemId)
     if (hasAssigned) {
       setProviderRegisteredOrganizations(
-        organizations.map((org) =>
+        tenants.map((org) =>
           org.catalogItemId === catalogItemId
             ? { ...org, catalogItemId: null, catalogDisplayName: null }
             : org,
@@ -1172,31 +1199,155 @@ export function clearProviderSavedTemplate(): void {
   }
 }
 
+function migrateNorthstarIssuerUrl(issuerUrl: string): string {
+  return issuerUrl
+    .replace(/bluesolacefinancial\.com/gi, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+    .replace(/northsummitbank\.com/gi, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+}
+
 function normalizeRegisteredOrganization(org: RegisteredOrganization): RegisteredOrganization {
   const emailDomain = org.tenantAdminEmail.includes('@')
     ? org.tenantAdminEmail.split('@')[1]?.toLowerCase() ?? ''
     : ''
+  const isNorthstar = org.slug === 'northstar'
+  const rawPrimaryDomain =
+    typeof org.primaryDomain === 'string' && org.primaryDomain.trim()
+      ? org.primaryDomain.trim().toLowerCase()
+      : emailDomain
+  const primaryDomain =
+    isNorthstar &&
+    (rawPrimaryDomain === DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN ||
+      rawPrimaryDomain === DEMO_NORTHSTAR_PRIMARY_DOMAIN ||
+      !rawPrimaryDomain)
+      ? DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN
+      : rawPrimaryDomain
+  const additionalDomains = normalizeAdditionalDomains(
+    (Array.isArray(org.additionalDomains) ? org.additionalDomains : []).map((domain) =>
+      isNorthstar &&
+      (domain === DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN ||
+        domain === `subsidiary.${DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN}` ||
+        domain === DEMO_NORTHSTAR_ADDITIONAL_DOMAIN ||
+        domain === `subsidiary.${DEMO_NORTHSTAR_PRIMARY_DOMAIN}`)
+        ? DEMO_NORTH_SUMMIT_BANK_ADDITIONAL_DOMAIN
+        : domain,
+    ),
+    primaryDomain,
+  )
+  const identityProviderDisplayName =
+    isNorthstar &&
+    (org.identityProviderDisplayName === 'North Summit Bank IdP' ||
+      org.identityProviderDisplayName === 'Northstar Bank IdP' ||
+      org.identityProviderDisplayName === DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME ||
+      org.identityProviderDisplayName === DEMO_NORTHSTAR_IDP_DISPLAY_NAME)
+      ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+      : org.identityProviderDisplayName === 'North Summit Bank IdP' ||
+          org.identityProviderDisplayName === 'Northstar Bank IdP'
+        ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+        : typeof org.identityProviderDisplayName === 'string' &&
+            org.identityProviderDisplayName.trim()
+          ? org.identityProviderDisplayName.trim()
+          : null
+  const identityProviderIssuerUrl =
+    typeof org.identityProviderIssuerUrl === 'string' && org.identityProviderIssuerUrl.trim()
+      ? isNorthstar
+        ? migrateNorthstarIssuerUrl(org.identityProviderIssuerUrl.trim())
+        : org.identityProviderIssuerUrl.trim()
+      : null
+  const identityProviderName =
+    typeof org.identityProviderName === 'string' && org.identityProviderName.trim()
+      ? isNorthstar
+        ? migrateNorthstarIssuerUrl(org.identityProviderName.trim())
+        : org.identityProviderName.trim()
+      : null
+  const identityProviderClientId =
+    typeof org.identityProviderClientId === 'string' && org.identityProviderClientId.trim()
+      ? isNorthstar &&
+        (org.identityProviderClientId.trim() === DEMO_NORTHSTAR_IDP_CLIENT_ID ||
+          org.identityProviderClientId.trim() === 'bmaas-northstar' ||
+          org.identityProviderClientId.trim() === DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID)
+        ? DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID
+        : migrateLegacyIdentityProviderClientId(org.identityProviderClientId.trim())
+      : null
+  const identityProviders = normalizeOrganizationIdentityProviders(org.identityProviders).map(
+    (provider) =>
+      isNorthstar
+        ? {
+            ...provider,
+            displayName:
+              provider.displayName === DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME ||
+              provider.displayName === DEMO_NORTHSTAR_IDP_DISPLAY_NAME ||
+              provider.displayName === 'North Summit Bank IdP' ||
+              provider.displayName === 'Northstar Bank IdP'
+                ? DEMO_NORTH_SUMMIT_BANK_IDP_DISPLAY_NAME
+                : provider.displayName,
+            issuerUrl: migrateNorthstarIssuerUrl(provider.issuerUrl),
+            clientId:
+              provider.clientId === DEMO_NORTHSTAR_IDP_CLIENT_ID ||
+              provider.clientId === 'bmaas-northstar'
+                ? DEMO_NORTH_SUMMIT_BANK_IDP_CLIENT_ID
+                : migrateLegacyIdentityProviderClientId(provider.clientId),
+            name: migrateNorthstarIssuerUrl(provider.name),
+          }
+        : provider,
+  )
+  const billingAccountName =
+    isNorthstar &&
+    (org.billingAccountName === 'North Summit Bank — Enterprise Billing' ||
+      org.billingAccountName === 'Northstar Bank — Enterprise Billing' ||
+      org.billingAccountName === DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME ||
+      org.billingAccountName === DEMO_NORTHSTAR_BILLING_ACCOUNT_NAME)
+      ? DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME
+      : org.billingAccountName === 'North Summit Bank — Enterprise Billing' ||
+          org.billingAccountName === 'Northstar Bank — Enterprise Billing'
+        ? DEMO_NORTH_SUMMIT_BANK_BILLING_ACCOUNT_NAME
+        : org.billingAccountName === 'BlueSolace Financial Group — Enterprise Billing' ||
+            org.billingAccountName === 'Bluestone Financial Group — Corporate'
+          ? org.billingAccountName.includes('Corporate')
+            ? 'bluestone-financial-group-corporate'
+            : DEMO_NORTHSTAR_BILLING_ACCOUNT_NAME
+          : org.billingAccountName === 'Harborline Capital — Enterprise Billing'
+            ? 'harborline-capital-enterprise-billing'
+            : org.billingAccountName === 'Silverpine Trust — Enterprise Billing'
+              ? 'silverpine-trust-enterprise-billing'
+              : org.billingAccountName === 'Redwood Mutual — Enterprise Billing'
+                ? 'redwood-mutual-enterprise-billing'
+                : org.billingAccountName
+  const placeholderTenantAdminEmail =
+    DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN.email.toLowerCase()
+  const shouldClearPlaceholderTenantAdmin =
+    !isNorthstar && org.tenantAdminEmail.trim().toLowerCase() === placeholderTenantAdminEmail
+
+  const breakGlassEmail =
+    typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+      ? isNorthstar
+        ? org.breakGlassEmail
+            .trim()
+            .toLowerCase()
+            .replace(/bluesolacefinancial\.com$/i, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+            .replace(/northsummitbank\.com$/i, DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN)
+        : org.breakGlassEmail.trim().toLowerCase()
+      : null
 
   const normalized: RegisteredOrganization = {
     ...org,
     id: org.id === 'org_northstar_bank' ? 'org-northstar-bank' : org.id,
     name:
-      org.name === 'North Summit Bank' || org.name === 'Northstar Bank'
-        ? 'north-summit-bank'
-        : org.name === 'BlueSolace Financial Group' ||
-            org.name === 'Bluestone Financial Group'
-          ? 'bluesolace-financial-group'
-          : org.name === 'Harborline Capital'
-            ? 'harborline-capital'
-            : org.name === 'Silverpine Trust'
-              ? 'silverpine-trust'
-              : org.name === 'Redwood Mutual'
-                ? 'redwood-mutual'
-                : org.name,
-    primaryDomain:
-      typeof org.primaryDomain === 'string' && org.primaryDomain.trim()
-        ? org.primaryDomain.trim().toLowerCase()
-        : emailDomain,
+      org.slug === 'northstar'
+        ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
+        : org.name === 'North Summit Bank' || org.name === 'Northstar Bank'
+          ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
+          : org.name === 'BlueSolace Financial Group' ||
+              org.name === 'Bluestone Financial Group'
+            ? 'bluesolace-financial-group'
+            : org.name === 'Harborline Capital'
+              ? 'harborline-capital'
+              : org.name === 'Silverpine Trust'
+                ? 'silverpine-trust'
+                : org.name === 'Redwood Mutual'
+                  ? 'redwood-mutual'
+                  : org.name,
+    primaryDomain,
+    additionalDomains,
     catalogItemId:
       org.catalogItemId === 'cat_BM_GPU_TRAINING'
         ? 'cat-bm-gpu-training'
@@ -1223,46 +1374,18 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
       ? migrateDns1123ResourceName(org.externalIpPoolName)
       : null,
     externalIpPoolCidr: org.externalIpPoolCidr ?? null,
-    billingAccountName:
-      org.billingAccountName === 'North Summit Bank — Enterprise Billing' ||
-      org.billingAccountName === 'Northstar Bank — Enterprise Billing'
-        ? 'north-summit-bank-enterprise-billing'
-        : org.billingAccountName === 'BlueSolace Financial Group — Enterprise Billing' ||
-            org.billingAccountName === 'Bluestone Financial Group — Corporate'
-          ? org.billingAccountName.includes('Corporate')
-            ? 'bluestone-financial-group-corporate'
-            : 'bluesolace-financial-group-enterprise-billing'
-          : org.billingAccountName === 'Harborline Capital — Enterprise Billing'
-            ? 'harborline-capital-enterprise-billing'
-            : org.billingAccountName === 'Silverpine Trust — Enterprise Billing'
-              ? 'silverpine-trust-enterprise-billing'
-              : org.billingAccountName === 'Redwood Mutual — Enterprise Billing'
-                ? 'redwood-mutual-enterprise-billing'
-                : org.billingAccountName,
-    identityProviderName:
-      typeof org.identityProviderName === 'string' && org.identityProviderName.trim()
-        ? org.identityProviderName.trim()
-        : null,
-    identityProviderDisplayName:
-      org.identityProviderDisplayName === 'North Summit Bank IdP' ||
-      org.identityProviderDisplayName === 'Northstar Bank IdP'
-        ? 'north-summit-bank-idp'
-        : typeof org.identityProviderDisplayName === 'string' &&
-            org.identityProviderDisplayName.trim()
-          ? org.identityProviderDisplayName.trim()
-          : null,
+    billingAccountName,
+    tenantAdminName: shouldClearPlaceholderTenantAdmin ? '' : org.tenantAdminName,
+    tenantAdminEmail: shouldClearPlaceholderTenantAdmin ? '' : org.tenantAdminEmail,
+    identityProviderName,
+    identityProviderDisplayName,
     identityProviderProtocol:
       org.identityProviderProtocol === 'OIDC' || org.identityProviderProtocol === 'SAML'
         ? org.identityProviderProtocol
         : null,
-    identityProviderIssuerUrl:
-      typeof org.identityProviderIssuerUrl === 'string' && org.identityProviderIssuerUrl.trim()
-        ? org.identityProviderIssuerUrl.trim()
-        : null,
-    identityProviderClientId:
-      typeof org.identityProviderClientId === 'string' && org.identityProviderClientId.trim()
-        ? org.identityProviderClientId.trim()
-        : null,
+    identityProviderIssuerUrl,
+    identityProviderClientId,
+    identityProviders,
     idpManagerEmail:
       typeof org.idpManagerEmail === 'string' && org.idpManagerEmail.trim()
         ? org.idpManagerEmail.trim().toLowerCase()
@@ -1289,17 +1412,35 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
       typeof org.breakGlassName === 'string' && org.breakGlassName.trim()
         ? org.breakGlassName.trim()
         : null,
-    breakGlassEmail:
-      typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
-        ? org.breakGlassEmail.trim().toLowerCase()
-        : null,
+    breakGlassEmail,
+    breakGlassUsername:
+      typeof org.breakGlassUsername === 'string' && org.breakGlassUsername.trim()
+        ? org.slug === 'evergreen' &&
+          org.breakGlassUsername.trim().toLowerCase() === 'breakglass-evergreen'
+          ? generateBreakGlassUsername(org.slug)
+          : org.breakGlassUsername.trim()
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? generateBreakGlassUsername(org.slug)
+          : null,
+    breakGlassPassword:
+      typeof org.breakGlassPassword === 'string' && org.breakGlassPassword.trim()
+        ? org.breakGlassPassword.trim()
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? getDemoBreakGlassPassword(org.slug)
+          : null,
+    breakGlassIssuedAt:
+      typeof org.breakGlassIssuedAt === 'string' && org.breakGlassIssuedAt.trim()
+        ? org.breakGlassIssuedAt
+        : typeof org.breakGlassEmail === 'string' && org.breakGlassEmail.trim()
+          ? (org.createdAt ?? null)
+          : null,
     // Name is the source of truth — clears stub-only "connected" flags from earlier demos.
     identityProviderConnected:
       typeof org.identityProviderName === 'string' && Boolean(org.identityProviderName.trim()),
     additionalTenantAdmins: Array.isArray(org.additionalTenantAdmins)
       ? org.additionalTenantAdmins
           .filter(
-            (admin): admin is { name: string; email: string } =>
+            (admin): admin is OrganizationRoleAssignment =>
               typeof admin === 'object' &&
               admin !== null &&
               typeof admin.name === 'string' &&
@@ -1309,6 +1450,10 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
           .map((admin) => ({
             name: admin.name.trim(),
             email: admin.email.trim().toLowerCase(),
+            ...(isOrganizationAssignedRoleId(admin.roleId) &&
+            admin.roleId !== 'tenant-administrator'
+              ? { roleId: admin.roleId }
+              : {}),
           }))
       : [],
     invitedTenantUserEmails: Array.isArray(org.invitedTenantUserEmails)
@@ -1367,18 +1512,26 @@ export function getProviderRegisteredOrganizations(): RegisteredOrganization[] {
       return []
     }
 
-    const organizations = parsed.filter(isRegisteredOrganization)
-    const normalized = organizations.map(normalizeRegisteredOrganization)
-    const needsPersist = normalized.some((organization, index) => {
-      const original = organizations[index]!
+    const tenants = parsed.filter(isRegisteredOrganization)
+    const normalized = tenants.map(normalizeRegisteredOrganization)
+    const needsPersist = normalized.some((tenant, index) => {
+      const original = tenants[index]!
       return (
-        original.id !== organization.id ||
-        original.name !== organization.name ||
-        original.catalogItemId !== organization.catalogItemId ||
-        original.catalogDisplayName !== organization.catalogDisplayName ||
-        original.externalIpPoolName !== organization.externalIpPoolName ||
-        original.billingAccountName !== organization.billingAccountName ||
-        original.identityProviderDisplayName !== organization.identityProviderDisplayName
+        original.id !== tenant.id ||
+        original.name !== tenant.name ||
+        original.catalogItemId !== tenant.catalogItemId ||
+        original.catalogDisplayName !== tenant.catalogDisplayName ||
+        original.externalIpPoolName !== tenant.externalIpPoolName ||
+        original.billingAccountName !== tenant.billingAccountName ||
+        original.primaryDomain !== tenant.primaryDomain ||
+        original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
+        original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
+        original.identityProviderClientId !== tenant.identityProviderClientId ||
+        original.tenantAdminName !== tenant.tenantAdminName ||
+        original.tenantAdminEmail !== tenant.tenantAdminEmail ||
+        original.breakGlassUsername !== tenant.breakGlassUsername ||
+        JSON.stringify(original.additionalDomains ?? []) !==
+          JSON.stringify(tenant.additionalDomains)
       )
     })
     if (needsPersist) {
@@ -1391,7 +1544,7 @@ export function getProviderRegisteredOrganizations(): RegisteredOrganization[] {
 }
 
 /**
- * Organizations must survive new tabs so IdP manager invite links work.
+ * Tenants must survive new tabs so IdP manager invite links work.
  * Prefer localStorage; migrate any legacy sessionStorage payload once.
  * When both exist, merge by id and keep invite/IdP fields from the richer record.
  */
@@ -1510,7 +1663,7 @@ function removeRegisteredOrganizationsRaw(): void {
 }
 
 /**
- * Seeds North Summit Bank + Harborline Capital as Organizations page baselines:
+ * Seeds North Summit Bank + Harborline Capital as Tenants page baselines:
  * Active, IdP connected, roles defined — two enterprises for VIP multi-select demos.
  */
 export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
@@ -1552,22 +1705,22 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       externalIpPoolCidr: harborlinePool?.cidr ?? null,
     })
 
-    const replacedOrganizations = current.filter(
-      (organization) =>
-        organization.id === northSummitBase.id ||
-        organization.slug === northSummitBase.slug ||
-        organization.id === harborlineBase.id ||
-        organization.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
+    const replacedTenants = current.filter(
+      (tenant) =>
+        tenant.id === northSummitBase.id ||
+        tenant.slug === northSummitBase.slug ||
+        tenant.id === harborlineBase.id ||
+        tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
     )
-    const replacedIds = new Set(replacedOrganizations.map((organization) => organization.id))
-    const remainingOrganizations = current.filter(
-      (organization) => !replacedIds.has(organization.id),
+    const replacedIds = new Set(replacedTenants.map((tenant) => tenant.id))
+    const remainingTenants = current.filter(
+      (tenant) => !replacedIds.has(tenant.id),
     )
 
-    const pendingInviteSource = replacedOrganizations.find(
-      (organization) =>
-        (organization.id === northSummitBase.id || organization.slug === northSummitBase.slug) &&
-        hasPendingIdpInvite(organization),
+    const pendingInviteSource = replacedTenants.find(
+      (tenant) =>
+        (tenant.id === northSummitBase.id || tenant.slug === northSummitBase.slug) &&
+        hasPendingIdpInvite(tenant),
     )
     const northSummit = pendingInviteSource
       ? {
@@ -1583,6 +1736,7 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
           identityProviderProtocol: pendingInviteSource.identityProviderProtocol,
           identityProviderIssuerUrl: pendingInviteSource.identityProviderIssuerUrl,
           identityProviderClientId: pendingInviteSource.identityProviderClientId,
+          identityProviders: pendingInviteSource.identityProviders ?? [],
         }
       : northSummitBase
 
@@ -1603,7 +1757,7 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
     setProviderRegisteredOrganizations([
       northSummit,
       harborlineBase,
-      ...remainingOrganizations,
+      ...remainingTenants,
     ])
 
     if (northSummitPool) {
@@ -1638,7 +1792,7 @@ export function getProviderRegisteredOrganizationByIdpInviteToken(
 
   return (
     getProviderRegisteredOrganizations().find(
-      (organization) => organization.idpInviteToken === normalizedToken,
+      (tenant) => tenant.idpInviteToken === normalizedToken,
     ) ?? null
   )
 }
@@ -1648,15 +1802,15 @@ export function updateProviderRegisteredOrganization(
   patch: Partial<RegisteredOrganization>,
 ): RegisteredOrganization | null {
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    const current = organizations.find((item) => item.id === organizationId)
+    const tenants = getProviderRegisteredOrganizations()
+    const current = tenants.find((item) => item.id === organizationId)
     if (!current) {
       return null
     }
 
     const updated = normalizeRegisteredOrganization({ ...current, ...patch, id: current.id })
     setProviderRegisteredOrganizations(
-      organizations.map((item) => (item.id === organizationId ? updated : item)),
+      tenants.map((item) => (item.id === organizationId ? updated : item)),
     )
     return updated
   } catch {
@@ -1666,9 +1820,9 @@ export function updateProviderRegisteredOrganization(
 
 export function removeProviderRegisteredOrganization(organizationId: string): boolean {
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    const next = organizations.filter((organization) => organization.id !== organizationId)
-    if (next.length === organizations.length) {
+    const tenants = getProviderRegisteredOrganizations()
+    const next = tenants.filter((tenant) => tenant.id !== organizationId)
+    if (next.length === tenants.length) {
       return false
     }
 
@@ -1700,7 +1854,7 @@ export function getOrganizationsAssignedToCatalogItem(
   catalogItemId: string,
 ): RegisteredOrganization[] {
   return getProviderRegisteredOrganizations().filter(
-    (organization) => organization.catalogItemId === catalogItemId,
+    (tenant) => tenant.catalogItemId === catalogItemId,
   )
 }
 
@@ -1709,25 +1863,25 @@ export function assignCatalogToRegisteredOrganization(
   catalog: ProviderCatalogDraft,
 ): boolean {
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    const organization = organizations.find((item) => item.id === organizationId)
-    if (!organization) {
+    const tenants = getProviderRegisteredOrganizations()
+    const tenant = tenants.find((item) => item.id === organizationId)
+    if (!tenant) {
       return false
     }
 
-    if (organization.catalogItemId && organization.catalogItemId !== catalog.catalogItemId) {
+    if (tenant.catalogItemId && tenant.catalogItemId !== catalog.catalogItemId) {
       return false
     }
 
     if (
-      organization.catalogItemId === catalog.catalogItemId &&
-      organization.catalogDisplayName === catalog.displayName
+      tenant.catalogItemId === catalog.catalogItemId &&
+      tenant.catalogDisplayName === catalog.displayName
     ) {
       return true
     }
 
     setProviderRegisteredOrganizations(
-      organizations.map((item) =>
+      tenants.map((item) =>
         item.id === organizationId
           ? {
               ...item,
@@ -1746,11 +1900,11 @@ export function assignCatalogToRegisteredOrganization(
 
 export function activateProviderRegisteredOrganizationBySlug(slug: string): void {
   try {
-    const organizations = getProviderRegisteredOrganizations()
-    const updated = organizations.map((organization) =>
-      organization.slug === slug && organization.status === 'Pending activation'
-        ? { ...organization, status: 'Active' as const }
-        : organization,
+    const tenants = getProviderRegisteredOrganizations()
+    const updated = tenants.map((tenant) =>
+      tenant.slug === slug && tenant.status === 'Pending activation'
+        ? { ...tenant, status: 'Active' as const }
+        : tenant,
     )
 
     writeRegisteredOrganizationsRaw(JSON.stringify(updated))
@@ -1787,9 +1941,10 @@ function isExternalIpPool(value: unknown): value is ExternalIpPool {
 
 function normalizeExternalIpPool(pool: ExternalIpPool): ExternalIpPool {
   const assignedOrganizationName =
+    pool.assignedOrganizationId === DEMO_NORTH_SUMMIT_BANK_ORG_ID ||
     pool.assignedOrganizationName === 'North Summit Bank' ||
     pool.assignedOrganizationName === 'Northstar Bank'
-      ? 'north-summit-bank'
+      ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
       : pool.assignedOrganizationName === 'BlueSolace Financial Group' ||
           pool.assignedOrganizationName === 'Bluestone Financial Group'
         ? 'bluesolace-financial-group'
@@ -1882,9 +2037,9 @@ export function assignExternalIpPoolToOrganization(
   setProviderExternalIpPools(updated)
 }
 
-function setProviderRegisteredOrganizations(organizations: RegisteredOrganization[]): void {
+function setProviderRegisteredOrganizations(tenants: RegisteredOrganization[]): void {
   try {
-    writeRegisteredOrganizationsRaw(JSON.stringify(organizations))
+    writeRegisteredOrganizationsRaw(JSON.stringify(tenants))
   } catch {
     /* demo storage unavailable */
   }
@@ -1901,9 +2056,9 @@ export function assignExternalIpPoolToRegisteredOrganization(
       return false
     }
 
-    const organizations = getProviderRegisteredOrganizations()
-    const organization = organizations.find((item) => item.id === organizationId)
-    if (!organization) {
+    const tenants = getProviderRegisteredOrganizations()
+    const tenant = tenants.find((item) => item.id === organizationId)
+    if (!tenant) {
       return false
     }
 
@@ -1918,11 +2073,11 @@ export function assignExternalIpPoolToRegisteredOrganization(
       return true
     }
 
-    assignExternalIpPoolToOrganization(poolId, organization.id, organization.name)
+    assignExternalIpPoolToOrganization(poolId, tenant.id, tenant.name)
     setProviderRegisteredOrganizations(
-      organizations.map((item) =>
+      tenants.map((item) =>
         item.id === organizationId
-          ? organization.externalIpPoolId
+          ? tenant.externalIpPoolId
             ? item
             : {
                 ...item,

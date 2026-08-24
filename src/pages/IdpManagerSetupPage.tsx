@@ -1,250 +1,203 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Alert, Content, Title } from '@patternfly/react-core'
 import {
-  Alert,
-  Button,
-  Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
-  Form,
-  FormGroup,
-  FormHelperText,
-  FormSelect,
-  FormSelectOption,
-  HelperText,
-  HelperTextItem,
-  Spinner,
-  TextInput,
-  Title,
-} from '@patternfly/react-core'
-import {
+  ensureProviderDemoOrganizations,
   getProviderRegisteredOrganizationByIdpInviteToken,
   getProviderRegisteredOrganizations,
   updateProviderRegisteredOrganization,
 } from '../providerSetup/storage'
 import {
-  buildDemoIdentityProviderName,
-  getIdpManagerSetupRoute,
+  findOrganizationForIdpManagerUrlSlug,
+  getIdpManagerChangePasswordRoute,
+  getIdpManagerPrototypeRoute,
+  getIdpManagerUrlSlug,
+  getIdpManagerWorkspaceRoute,
   getPendingIdpManagerInvites,
-  hasPendingIdpInvite,
+  hasBreakGlassAccount,
   isIdpInviteExpired,
+  resolveIdpManagerPrototypeOrganization,
   type RegisteredOrganization,
 } from '../providerAdmin/organizations'
-import {
-  ORGANIZATION_ACTION_SUCCESS_AUTO_CLOSE_MS,
-  ORGANIZATION_ACTION_WORKING_MS,
-  OrganizationActionSuccessState,
-  OrganizationActionWorkingState,
-  type OrganizationActionCompletionPhase,
-} from '../components/provider-admin/OrganizationActionSuccessState'
 import { RouterButton } from '../components/RouterButton'
-import { BlueSolaceFinancialGroupLoginPage } from './BlueSolaceFinancialGroupLoginPage'
-import { NorthstarBankLoginPage } from './NorthstarBankLoginPage'
-import { OsacSignInPage } from './OsacSignInPage'
+import { OsacChangePasswordPage, OsacSignInPage } from './OsacSignInPage'
 
-type IdentityProviderProtocol = 'OIDC' | 'SAML'
+type GateState = 'invalid' | 'expired' | 'ready'
+type IdpManagerPage = 'sign-in' | 'change-password'
 
-type IdpSetupForm = {
-  protocol: IdentityProviderProtocol
-  displayName: string
-  issuerUrl: string
-  clientId: string
-}
+const IDP_MANAGER_AUTH_DELAY_MS = 1500
 
-type GateState = 'loading' | 'invalid' | 'expired' | 'used' | 'ready'
-type AuthStep = 'osac' | 'institution'
-type SetupView = 'invite' | 'connect' | 'complete'
-
-const OSAC_CONTINUE_DELAY_MS = 1500
-
-function buildDefaultForm(organization: RegisteredOrganization): IdpSetupForm {
-  const domain = organization.primaryDomain || 'example.com'
-  return {
-    protocol: 'OIDC',
-    displayName: `${organization.name}-idp`,
-    issuerUrl: `https://login.${domain}/oauth2`,
-    clientId: `bmaas-${organization.slug || 'tenant'}`,
+function getIdpManagerPage(pathname: string): IdpManagerPage {
+  if (pathname.endsWith('/change-password')) {
+    return 'change-password'
   }
+  return 'sign-in'
 }
 
-function usesNorthstarLogin(organization: RegisteredOrganization): boolean {
-  const slug = organization.slug.toLowerCase()
-  const domain = organization.primaryDomain.toLowerCase()
-  const name = organization.name.toLowerCase()
-  return (
-    slug.includes('north-summit') ||
-    slug.includes('northstar') ||
-    domain.includes('northsummit') ||
-    name.includes('north summit')
-  )
+function findOrganizationBySlug(slug: string): RegisteredOrganization | null {
+  return findOrganizationForIdpManagerUrlSlug(getProviderRegisteredOrganizations(), slug)
 }
 
-/**
- * IdP manager experience from the invitation email link:
- * OSAC sign-in → institution login → IdP setup.
- */
-export function IdpManagerSetupPage() {
-  const navigate = useNavigate()
-  const { token = '' } = useParams<{ token: string }>()
-  const [gateState, setGateState] = useState<GateState>('loading')
-  const [authStep, setAuthStep] = useState<AuthStep>('osac')
-  const [setupView, setSetupView] = useState<SetupView>('invite')
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isOsacContinuing, setIsOsacContinuing] = useState(false)
-  const [isInstitutionLoading, setIsInstitutionLoading] = useState(false)
-  const [organization, setOrganization] = useState<RegisteredOrganization | null>(null)
-  const [form, setForm] = useState<IdpSetupForm>({
-    protocol: 'OIDC',
-    displayName: '',
-    issuerUrl: '',
-    clientId: '',
-  })
-  const [completionPhase, setCompletionPhase] =
-    useState<OrganizationActionCompletionPhase>('idle')
-  const completionTimersRef = useRef<number[]>([])
+function buildNextBreakGlassPassword(_currentPassword: string): string {
+  return 'BG-bluesolace-financial-group-vault-2026'
+}
 
-  const clearCompletionTimers = () => {
-    completionTimersRef.current.forEach((timerId) => window.clearTimeout(timerId))
-    completionTimersRef.current = []
-  }
+function credentialsMatch(
+  organization: RegisteredOrganization,
+  username: string,
+  password: string,
+): boolean {
+  const entered = username.trim().toLowerCase()
+  const expectedUsers = [
+    organization.breakGlassUsername?.trim().toLowerCase() ?? '',
+    organization.breakGlassEmail?.trim().toLowerCase() ?? '',
+  ].filter(Boolean)
+  const expectedPass = organization.breakGlassPassword ?? ''
+  return expectedUsers.includes(entered) && password === expectedPass
+}
 
-  useEffect(() => {
-    return () => {
-      clearCompletionTimers()
-    }
-  }, [])
-
-  useEffect(() => {
-    clearCompletionTimers()
-    setCompletionPhase('idle')
-    setIsAuthenticated(false)
-    setAuthStep('osac')
-    setSetupView('invite')
-    setIsOsacContinuing(false)
-    setIsInstitutionLoading(false)
-
-    // Do not call ensureProviderDemoOrganizations here — it replaces the North Summit
-    // seed org and can wipe a pending invite token from session storage.
+function resolveIdpManagerGate(
+  orgSlug: string | undefined,
+  token: string | undefined,
+): { gateState: GateState; organization: RegisteredOrganization | null } {
+  if (token) {
     const match = getProviderRegisteredOrganizationByIdpInviteToken(token)
-
     if (!match) {
-      setOrganization(null)
-      setGateState('invalid')
-      return
-    }
-
-    setOrganization(match)
-
-    if (match.identityProviderConnected || match.idpInviteStatus === 'accepted') {
-      setGateState('used')
-      return
+      return { gateState: 'invalid', organization: null }
     }
 
     if (match.idpInviteStatus === 'expired' || isIdpInviteExpired(match)) {
-      if (match.idpInviteStatus !== 'expired') {
-        updateProviderRegisteredOrganization(match.id, { idpInviteStatus: 'expired' })
-      }
-      setGateState('expired')
-      return
+      return { gateState: 'expired', organization: match }
     }
 
-    if (!hasPendingIdpInvite(match)) {
-      setGateState('invalid')
-      return
-    }
-
-    setForm(buildDefaultForm(match))
-    setGateState('ready')
-  }, [token])
-
-  useEffect(() => {
-    if (!isOsacContinuing) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setIsOsacContinuing(false)
-      setAuthStep('institution')
-    }, OSAC_CONTINUE_DELAY_MS)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [isOsacContinuing])
-
-  const isFormDisabled = useMemo(
-    () => !form.displayName.trim() || !form.issuerUrl.trim() || !form.clientId.trim(),
-    [form],
-  )
-
-  const issuerLabel = form.protocol === 'SAML' ? 'Metadata URL' : 'Issuer URL'
-  const clientLabel = form.protocol === 'SAML' ? 'Entity ID' : 'Client ID'
-  const isCompleting = completionPhase !== 'idle'
-  const signInEmail =
-    organization?.idpManagerEmail?.trim() ||
-    (organization
-      ? `idp-admin@${organization.primaryDomain || 'example.com'}`
-      : '')
-
-  const handleConnect = () => {
-    if (!organization || isFormDisabled || isCompleting) {
-      return
-    }
-
-    clearCompletionTimers()
-    setCompletionPhase('working')
-
-    const successTimer = window.setTimeout(() => {
-      const updated = updateProviderRegisteredOrganization(organization.id, {
-        identityProviderConnected: true,
-        identityProviderName: buildDemoIdentityProviderName(
-          form.protocol,
-          organization.primaryDomain,
-        ),
-        identityProviderDisplayName: form.displayName.trim(),
-        identityProviderProtocol: form.protocol,
-        identityProviderIssuerUrl: form.issuerUrl.trim(),
-        identityProviderClientId: form.clientId.trim(),
-        idpInviteStatus: 'accepted',
-        status: 'Active',
-      })
-
-      if (!updated) {
-        setCompletionPhase('idle')
-        return
-      }
-
-      setOrganization(updated)
-      setCompletionPhase('success')
-      const doneTimer = window.setTimeout(() => {
-        setCompletionPhase('idle')
-        setSetupView('complete')
-      }, ORGANIZATION_ACTION_SUCCESS_AUTO_CLOSE_MS)
-      completionTimersRef.current.push(doneTimer)
-    }, ORGANIZATION_ACTION_WORKING_MS)
-    completionTimersRef.current.push(successTimer)
+    return { gateState: 'ready', organization: match }
   }
 
-  if (gateState === 'loading') {
+  ensureProviderDemoOrganizations()
+  if (orgSlug?.trim()) {
+    const slugOrg = findOrganizationBySlug(orgSlug)
+    if (!slugOrg || !hasBreakGlassAccount(slugOrg)) {
+      return { gateState: 'invalid', organization: null }
+    }
+    return { gateState: 'ready', organization: slugOrg }
+  }
+
+  const prototypeOrg = resolveIdpManagerPrototypeOrganization(
+    getProviderRegisteredOrganizations(),
+  )
+  if (!prototypeOrg || !hasBreakGlassAccount(prototypeOrg)) {
+    return { gateState: 'invalid', organization: null }
+  }
+
+  return { gateState: 'ready', organization: prototypeOrg }
+}
+
+export function IdpManagerSetupPage() {
+  const { orgSlug, token } = useParams<{ orgSlug?: string; token?: string }>()
+  const location = useLocation()
+  const page = getIdpManagerPage(location.pathname)
+  const canonicalSlug = orgSlug ? getIdpManagerUrlSlug(orgSlug) : undefined
+
+  if (orgSlug && canonicalSlug && canonicalSlug !== orgSlug) {
     return (
-      <div className="idp-manager-setup-page">
-        <div className="idp-manager-setup-page__card">
-          <div className="idp-manager-setup-page__loading">
-            <Spinner size="lg" aria-label="Loading invitation" />
-          </div>
-        </div>
-      </div>
+      <Navigate
+        to={
+          page === 'change-password'
+            ? getIdpManagerChangePasswordRoute(canonicalSlug)
+            : getIdpManagerPrototypeRoute(canonicalSlug)
+        }
+        replace
+      />
     )
   }
 
-  if (gateState === 'invalid' || gateState === 'expired' || gateState === 'used') {
-    const currentInvites = getPendingIdpManagerInvites(getProviderRegisteredOrganizations())
-    const recoverableInvite =
-      gateState === 'invalid' && currentInvites.length === 1 ? currentInvites[0] : null
+  return (
+    <IdpManagerSetupSession
+      key={token ?? canonicalSlug ?? orgSlug ?? 'idp-manager'}
+      orgSlug={canonicalSlug ?? orgSlug}
+      token={token}
+    />
+  )
+}
 
-    if (recoverableInvite) {
-      return <Navigate to={getIdpManagerSetupRoute(recoverableInvite.token)} replace />
+function IdpManagerSetupSession({
+  orgSlug,
+  token,
+}: {
+  orgSlug?: string
+  token?: string
+}) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const page = getIdpManagerPage(location.pathname)
+  const resolved = resolveIdpManagerGate(orgSlug, token)
+  const [organization, setOrganization] = useState<RegisteredOrganization | null>(
+    resolved.organization,
+  )
+  const [signInError, setSignInError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [isSigningIn, setIsSigningIn] = useState(false)
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
+  const gateState = resolved.gateState
+  const gateOrganization = organization ?? resolved.organization
+
+  useEffect(() => {
+    if (gateState !== 'expired' || !resolved.organization) {
+      return
     }
+    if (resolved.organization.idpInviteStatus === 'expired') {
+      return
+    }
+    updateProviderRegisteredOrganization(resolved.organization.id, {
+      idpInviteStatus: 'expired',
+    })
+  }, [gateState, resolved.organization])
+
+  const handleSignIn = (username: string, password: string) => {
+    if (!gateOrganization || isSigningIn) {
+      return
+    }
+    if (!credentialsMatch(gateOrganization, username, password)) {
+      setSignInError('Username or password is incorrect.')
+      return
+    }
+
+    setSignInError(null)
+    setIsSigningIn(true)
+    const nextRoute = getIdpManagerChangePasswordRoute(gateOrganization.slug)
+    window.setTimeout(() => {
+      navigate(nextRoute)
+    }, IDP_MANAGER_AUTH_DELAY_MS)
+  }
+
+  const handleChangePassword = (currentPassword: string, newPassword: string) => {
+    if (!gateOrganization || isSavingPassword) {
+      return
+    }
+    if (currentPassword !== gateOrganization.breakGlassPassword) {
+      setPasswordError('Current password is incorrect.')
+      return
+    }
+
+    const updated = updateProviderRegisteredOrganization(gateOrganization.id, {
+      breakGlassPassword: newPassword,
+    })
+    if (!updated) {
+      setPasswordError('Could not save the new password.')
+      return
+    }
+
+    setPasswordError(null)
+    setOrganization(updated)
+    setIsSavingPassword(true)
+    const nextRoute = getIdpManagerWorkspaceRoute(updated.slug)
+    window.setTimeout(() => {
+      navigate(nextRoute)
+    }, IDP_MANAGER_AUTH_DELAY_MS)
+  }
+
+  if (gateState === 'invalid' || gateState === 'expired') {
+    const currentInvites = getPendingIdpManagerInvites(getProviderRegisteredOrganizations())
 
     return (
       <div className="idp-manager-setup-page">
@@ -253,274 +206,69 @@ export function IdpManagerSetupPage() {
             Vertexa Cloud · IdP manager
           </Content>
           <Title headingLevel="h1" size="2xl" className="idp-manager-setup-page__title">
-            IdP manager invitation
+            IdP manager
           </Title>
           {gateState === 'invalid' ? (
-            <Alert variant="danger" isInline title="Invitation not found">
-              This link is invalid or no longer available. Ask the provider admin to resend an
-              invitation.
+            <Alert variant="danger" isInline title="Break-glass account not found">
+              Ask the provider admin to create a break-glass account, then sign in with that
+              username and password.
             </Alert>
-          ) : null}
-          {gateState === 'expired' ? (
-            <Alert variant="warning" isInline title="Invitation expired">
-              Ask the provider admin for {organization?.name ?? 'this organization'} to resend a new
-              single-use setup link.
-            </Alert>
-          ) : null}
-          {gateState === 'used' ? (
-            <Alert variant="info" isInline title="Invitation already used">
-              The identity provider for {organization?.name ?? 'this organization'} is already
-              connected.
-            </Alert>
-          ) : null}
-          {gateState === 'invalid' && currentInvites.length > 1 ? (
-            <div className="idp-manager-setup-page__actions">
-              {currentInvites.map((invite) => (
-                <RouterButton
-                  key={invite.token}
-                  to={getIdpManagerSetupRoute(invite.token)}
-                  variant="primary"
-                >
-                  Open invite for {invite.organization.name}
-                </RouterButton>
-              ))}
-            </div>
           ) : (
-            <div className="idp-manager-setup-page__actions">
-              <RouterButton to="/" variant="secondary">
-                Return to home
-              </RouterButton>
-            </div>
+            <Alert variant="warning" isInline title="OSAC link expired">
+              Ask the provider admin for {gateOrganization?.name ?? 'this tenant'} to create
+              a new break-glass account.
+            </Alert>
           )}
+          {gateState === 'invalid' && currentInvites.length > 0 ? (
+            <Content component="p" className="idp-manager-setup-page__lede">
+              A pending tenant is waiting on IdP setup. Return home and open IdP manager
+              again, or use the OSAC link the provider admin sent.
+            </Content>
+          ) : null}
+          <div className="idp-manager-setup-page__actions">
+            <RouterButton to="/" variant="secondary">
+              Return to home
+            </RouterButton>
+          </div>
         </div>
       </div>
     )
   }
 
-  if (!organization) {
+  if (!gateOrganization) {
     return null
   }
 
-  if (!isAuthenticated) {
-    if (authStep === 'osac') {
-      return (
-        <OsacSignInPage
-          defaultEmail={signInEmail}
-          isContinuing={isOsacContinuing}
-          onNext={() => setIsOsacContinuing(true)}
-        />
-      )
-    }
+  if (token) {
+    return <Navigate to={getIdpManagerPrototypeRoute(gateOrganization.slug)} replace />
+  }
 
-    if (usesNorthstarLogin(organization)) {
-      return (
-        <NorthstarBankLoginPage
-          defaultUsername={signInEmail}
-          isLandingPageLoading={isInstitutionLoading}
-          onChooseAnotherInstitution={() => navigate('/')}
-          onLoginSuccess={() => {
-            setIsInstitutionLoading(true)
-            window.setTimeout(() => {
-              setIsInstitutionLoading(false)
-              setIsAuthenticated(true)
-            }, 600)
-          }}
-        />
-      )
-    }
+  if (!orgSlug) {
+    return <Navigate to={getIdpManagerPrototypeRoute(gateOrganization.slug)} replace />
+  }
 
+  if (page === 'change-password') {
     return (
-      <BlueSolaceFinancialGroupLoginPage
-        defaultEmail={signInEmail}
-        isLandingPageLoading={isInstitutionLoading}
-        onChooseAnotherInstitution={() => navigate('/')}
-        onLoginSuccess={() => {
-          setIsInstitutionLoading(true)
-          window.setTimeout(() => {
-            setIsInstitutionLoading(false)
-            setIsAuthenticated(true)
-          }, 600)
-        }}
+      <OsacChangePasswordPage
+        defaultCurrentPassword={gateOrganization.breakGlassPassword ?? ''}
+        defaultNewPassword={buildNextBreakGlassPassword(gateOrganization.breakGlassPassword ?? '')}
+        errorMessage={passwordError ?? undefined}
+        isWorking={isSavingPassword}
+        onSubmit={handleChangePassword}
       />
     )
   }
 
-  const title =
-    setupView === 'complete' || completionPhase === 'success'
-      ? 'Identity provider connected'
-      : completionPhase === 'working'
-        ? 'Connecting identity provider'
-        : setupView === 'connect'
-          ? 'Connect identity provider'
-          : "You've been invited"
-
   return (
-    <div className="idp-manager-setup-page">
-      <div className="idp-manager-setup-page__card">
-        <Content component="p" className="idp-manager-setup-page__kicker">
-          Vertexa Cloud · IdP manager
-        </Content>
-        <Title headingLevel="h1" size="2xl" className="idp-manager-setup-page__title">
-          {title}
-        </Title>
-
-        {isCompleting ? (
-          <div className="idp-manager-setup-page__completion">
-            {completionPhase === 'working' ? (
-              <OrganizationActionWorkingState
-                title="Connecting identity provider"
-                body="Validating configuration and mapping the primary domain…"
-              />
-            ) : (
-              <OrganizationActionSuccessState
-                title="Identity provider connected"
-                body="The provider admin can continue with roles for this organization."
-              />
-            )}
-          </div>
-        ) : null}
-
-        {!isCompleting && setupView === 'invite' ? (
-          <>
-            <Content component="p" className="idp-manager-setup-page__lede">
-              Complete federation for this organization, then return the flow to the provider admin.
-            </Content>
-
-            <div className="idp-manager-setup-page__email" aria-label="Invitation email">
-              <Content component="p" className="idp-manager-setup-page__email-label">
-                Invitation email
-              </Content>
-              <DescriptionList isCompact className="idp-manager-setup-page__email-meta">
-                <DescriptionListGroup>
-                  <DescriptionListTerm>To</DescriptionListTerm>
-                  <DescriptionListDescription>
-                    {organization.idpManagerEmail || signInEmail || '—'}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-                <DescriptionListGroup>
-                  <DescriptionListTerm>Subject</DescriptionListTerm>
-                  <DescriptionListDescription>
-                    Connect identity provider for {organization.name}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-              </DescriptionList>
-              <Content component="p" className="idp-manager-setup-page__email-body">
-                You've been invited as the IdP manager for <strong>{organization.name}</strong> (
-                {organization.primaryDomain}). Use this single-use link to connect the organization's
-                identity provider.
-              </Content>
-            </div>
-
-            <ol className="idp-manager-setup-page__steps" aria-label="What you'll do">
-              <li>Confirm the organization and primary email domain.</li>
-              <li>Enter OIDC or SAML settings for your IdP.</li>
-              <li>Connect — then the provider admin continues with roles.</li>
-            </ol>
-
-            <div className="idp-manager-setup-page__actions">
-              <Button variant="primary" onClick={() => setSetupView('connect')}>
-                Continue to setup
-              </Button>
-              <RouterButton to="/" variant="link">
-                Return to home
-              </RouterButton>
-            </div>
-          </>
-        ) : null}
-
-        {!isCompleting && setupView === 'connect' ? (
-          <>
-            <Content component="p" className="idp-manager-setup-page__lede">
-              Connect the IdP for <strong>{organization.name}</strong> (
-              {organization.primaryDomain}).
-            </Content>
-            <Form autoComplete="off" className="idp-manager-setup-page__form">
-              <FormGroup label="Primary email domain" fieldId="idp-setup-domain">
-                <TextInput
-                  id="idp-setup-domain"
-                  value={organization.primaryDomain}
-                  readOnlyVariant="default"
-                  aria-readonly="true"
-                />
-              </FormGroup>
-              <FormGroup label="Protocol" fieldId="idp-setup-protocol" isRequired>
-                <FormSelect
-                  id="idp-setup-protocol"
-                  value={form.protocol}
-                  onChange={(_event, value) =>
-                    setForm((current) => ({
-                      ...current,
-                      protocol: value as IdentityProviderProtocol,
-                    }))
-                  }
-                  aria-label="Protocol"
-                >
-                  <FormSelectOption value="OIDC" label="OpenID Connect (OIDC)" />
-                  <FormSelectOption value="SAML" label="SAML 2.0" />
-                </FormSelect>
-              </FormGroup>
-              <FormGroup label="Display name" fieldId="idp-setup-display-name" isRequired>
-                <TextInput
-                  id="idp-setup-display-name"
-                  value={form.displayName}
-                  onChange={(_event, value) =>
-                    setForm((current) => ({ ...current, displayName: value }))
-                  }
-                />
-              </FormGroup>
-              <FormGroup label={issuerLabel} fieldId="idp-setup-issuer" isRequired>
-                <TextInput
-                  id="idp-setup-issuer"
-                  value={form.issuerUrl}
-                  onChange={(_event, value) =>
-                    setForm((current) => ({ ...current, issuerUrl: value }))
-                  }
-                />
-                <FormHelperText>
-                  <HelperText>
-                    <HelperTextItem>
-                      Values are prefilled from the organization domain.
-                    </HelperTextItem>
-                  </HelperText>
-                </FormHelperText>
-              </FormGroup>
-              <FormGroup label={clientLabel} fieldId="idp-setup-client" isRequired>
-                <TextInput
-                  id="idp-setup-client"
-                  value={form.clientId}
-                  onChange={(_event, value) =>
-                    setForm((current) => ({ ...current, clientId: value }))
-                  }
-                />
-              </FormGroup>
-              <div className="idp-manager-setup-page__actions">
-                <Button variant="primary" onClick={handleConnect} isDisabled={isFormDisabled}>
-                  Connect identity provider
-                </Button>
-                <Button variant="secondary" onClick={() => setSetupView('invite')}>
-                  Back
-                </Button>
-              </div>
-            </Form>
-          </>
-        ) : null}
-
-        {!isCompleting && setupView === 'complete' ? (
-          <>
-            <Alert variant="success" isInline title="Setup complete">
-              {organization.name} is active and ready for tenant login.
-            </Alert>
-            <Content component="p" className="idp-manager-setup-page__lede">
-              You can close this window or return home.
-            </Content>
-            <div className="idp-manager-setup-page__actions">
-              <RouterButton to="/" variant="primary">
-                Return to home
-              </RouterButton>
-            </div>
-          </>
-        ) : null}
-      </div>
-    </div>
+    <OsacSignInPage
+      variant="local-account"
+      defaultUsername={gateOrganization.breakGlassUsername ?? ''}
+      defaultPassword={gateOrganization.breakGlassPassword ?? ''}
+      helperText="Break-glass local login. Not the tenant IdP."
+      errorMessage={signInError ?? undefined}
+      isContinuing={isSigningIn}
+      onNext={() => undefined}
+      onSubmitLocalAccount={handleSignIn}
+    />
   )
 }

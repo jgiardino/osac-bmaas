@@ -33,7 +33,6 @@ export const PROVIDER_ADMIN_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'catalog', label: 'Catalog' },
   { id: 'projects-teams', label: 'Projects & teams' },
-  { id: 'billing-metering', label: 'Billing & metering' },
 ]
 
 export const PROVIDER_ADMIN_SERVICES_NAV_ITEMS: ProviderAdminNavItem[] = [
@@ -69,8 +68,9 @@ export const PROVIDER_ADMIN_INFRASTRUCTURE_NAV_ITEMS: ProviderAdminNavItem[] = [
 ]
 
 export const PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS: ProviderAdminNavItem[] = [
-  { id: 'administration-organizations', label: 'Organizations' },
+  { id: 'administration-organizations', label: 'Tenants' },
   { id: 'administration-quotas', label: 'Quotas' },
+  { id: 'billing-metering', label: 'Billing & metering' },
 ]
 
 export function isServicesNavId(navId: string): boolean {
@@ -94,7 +94,7 @@ export function isInfrastructureNavId(navId: string): boolean {
 }
 
 export function isAdministrationNavId(navId: string): boolean {
-  return navId.startsWith('administration-')
+  return navId.startsWith('administration-') || navId === 'billing-metering'
 }
 
 export function isOrganizationsNavId(navId: string): boolean {

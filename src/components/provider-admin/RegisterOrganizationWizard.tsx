@@ -25,7 +25,6 @@ import { useWizardLeaveConfirm } from '../shared/useWizardLeaveConfirm'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import {
   getAssignableExternalIpPools,
-  getExternalIpPoolById,
 } from '../../providerAdmin/externalIpPools'
 import {
   getProviderExternalIpPools,
@@ -33,10 +32,10 @@ import {
 } from '../../providerSetup/storage'
 import {
   DEFAULT_REGISTER_ORGANIZATION_FORM,
-  DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN,
   buildNextRegisterOrganizationForm,
   generateOrganizationId,
   generateTenantId,
+  generateBillingAccountId,
   isOrganizationDomainTaken,
   isOrganizationNameTaken,
   isOrganizationSlugTaken,
@@ -138,20 +137,18 @@ export function RegisterOrganizationWizard({
 
   const handleRegister = () => {
     const maxInstances = Number.parseInt(form.maxInstances, 10)
-    const selectedPool = getExternalIpPoolById(getProviderExternalIpPools(), form.externalIpPoolId)
     const latestOrganizations = getProviderRegisteredOrganizations()
+    const selectedPool =
+      assignablePools.find((pool) => pool.id === form.externalIpPoolId) ??
+      assignablePools[0] ??
+      null
     if (
       !isOrganizationStepValid ||
       isOrganizationNameTaken(form.organizationName, latestOrganizations) ||
       isOrganizationDomainTaken(form.primaryDomain, latestOrganizations) ||
       isOrganizationSlugTaken(form.organizationName, latestOrganizations) ||
-      !form.billingAccountId.trim() ||
-      !form.externalIpPoolId.trim() ||
-      !selectedPool ||
-      selectedPool.assignedOrganizationId !== null ||
       !Number.isFinite(maxInstances) ||
-      maxInstances <= 0 ||
-      assignablePools.length === 0
+      maxInstances <= 0
     ) {
       return
     }
@@ -162,16 +159,17 @@ export function RegisterOrganizationWizard({
       tenantId: generateTenantId(),
       slug: slugifyOrganizationName(form.organizationName),
       primaryDomain,
-      billingAccountId: form.billingAccountId.trim(),
+      additionalDomains: [],
+      billingAccountId: form.billingAccountId.trim() || generateBillingAccountId(),
       billingAccountName: form.billingAccountName.trim(),
       catalogItemId: catalogDraft?.catalogItemId ?? null,
       catalogDisplayName: catalogDraft?.displayName ?? null,
-      externalIpPoolId: selectedPool.id,
-      externalIpPoolName: selectedPool.name,
-      externalIpPoolCidr: selectedPool.cidr,
+      externalIpPoolId: selectedPool?.id ?? null,
+      externalIpPoolName: selectedPool?.name ?? null,
+      externalIpPoolCidr: selectedPool?.cidr ?? null,
       maxInstances,
-      tenantAdminName: DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN.name,
-      tenantAdminEmail: DEFAULT_REGISTER_ORGANIZATION_TENANT_ADMIN.email,
+      tenantAdminName: '',
+      tenantAdminEmail: '',
       additionalTenantAdmins: [],
       invitedTenantUserEmails: [],
       identityProviderConnected: false,
@@ -180,6 +178,7 @@ export function RegisterOrganizationWizard({
       identityProviderProtocol: null,
       identityProviderIssuerUrl: null,
       identityProviderClientId: null,
+      identityProviders: [],
       idpManagerEmail: null,
       idpInviteToken: null,
       idpInviteStatus: 'none',
@@ -187,6 +186,9 @@ export function RegisterOrganizationWizard({
       idpInviteExpiresAt: null,
       breakGlassName: null,
       breakGlassEmail: null,
+      breakGlassUsername: null,
+      breakGlassPassword: null,
+      breakGlassIssuedAt: null,
       rbacConfigured: false,
       status: 'Pending activation',
       createdAt: new Date().toISOString(),
@@ -202,10 +204,10 @@ export function RegisterOrganizationWizard({
         return (
           <div className="provider-admin-organizations__wizard-step">
             <Content component="p" className="provider-admin-organizations__wizard-lede">
-              Create the tenant organization and map its billing account.
+              Create the tenant and map its billing account.
             </Content>
             <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
-              <FormGroup label="Organization name" fieldId="register-org-name" isRequired>
+              <FormGroup label="Tenant name" fieldId="register-org-name" isRequired>
                 <KubernetesResourceNameField
                   id="register-org-name"
                   value={form.organizationName}
@@ -230,9 +232,9 @@ export function RegisterOrganizationWizard({
                     <HelperText>
                       <HelperTextItem variant="error">
                         {nameTaken
-                          ? 'An organization with this name is already registered.'
+                          ? 'A tenant with this name is already registered.'
                           : slugTaken
-                            ? 'An organization with this login path already exists. Choose a different name.'
+                            ? 'A tenant with this login path already exists. Choose a different name.'
                             : nameFormat.message}
                       </HelperTextItem>
                     </HelperText>
@@ -253,8 +255,8 @@ export function RegisterOrganizationWizard({
                   <HelperText>
                     <HelperTextItem variant={domainTaken ? 'error' : 'default'}>
                       {domainTaken
-                        ? 'This email domain is already mapped to another organization.'
-                        : 'Used to associate identity-provider users with this organization. Tenant admins are assigned later under Roles.'}
+                        ? 'This email domain is already mapped to another tenant.'
+                        : 'Used to map this tenant to an identity provider. Add more domains when you connect the IdP.'}
                     </HelperTextItem>
                   </HelperText>
                 </FormHelperText>
@@ -285,7 +287,7 @@ export function RegisterOrganizationWizard({
         return (
           <DescriptionList isCompact className="provider-admin-organizations__wizard-review">
             <DescriptionListGroup>
-              <DescriptionListTerm>Organization</DescriptionListTerm>
+              <DescriptionListTerm>Tenant</DescriptionListTerm>
               <DescriptionListDescription>
                 {form.organizationName.trim() || '—'}
               </DescriptionListDescription>
@@ -293,7 +295,7 @@ export function RegisterOrganizationWizard({
             <DescriptionListGroup>
               <DescriptionListTerm>Primary email domain</DescriptionListTerm>
               <DescriptionListDescription>
-                <code>{primaryDomain || '—'}</code>
+                {primaryDomain || '—'}
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>
@@ -322,17 +324,13 @@ export function RegisterOrganizationWizard({
     if (stepId === 'review') {
       const maxInstances = Number.parseInt(form.maxInstances, 10)
       const canRegister =
-        isOrganizationStepValid &&
-        Boolean(form.externalIpPoolId.trim()) &&
-        assignablePools.length > 0 &&
-        Number.isFinite(maxInstances) &&
-        maxInstances > 0
+        isOrganizationStepValid && Number.isFinite(maxInstances) && maxInstances > 0
 
       return wrapStepFooter({
         nextButtonText: (
           <span className="provider-admin-organizations__register-label">
             <UsersIcon aria-hidden />
-            <span>Register organization</span>
+            <span>Register tenant</span>
             <ArrowRightIcon aria-hidden />
           </span>
         ),
@@ -344,18 +342,13 @@ export function RegisterOrganizationWizard({
     return undefined
   }
 
-  const wizardTitle = 'Register organization'
+  const wizardTitle = 'Register tenant'
   const isPage = presentation === 'page'
 
   const wizard = isOpen ? (
     <Wizard
       key="register-organization-wizard"
-      className={[
-        'provider-admin-organizations__wizard',
-        isPage ? 'catalog-wizard-page__wizard' : undefined,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      className="provider-admin-organizations__wizard"
       height={isPage ? '100%' : '40rem'}
       isPlain={isPage}
       onClose={isPage ? undefined : requestClose}
@@ -365,7 +358,7 @@ export function RegisterOrganizationWizard({
             title={wizardTitle}
             titleId="register-organization-wizard-title"
             onClose={requestClose}
-            closeButtonAriaLabel="Close register organization wizard"
+            closeButtonAriaLabel="Close register tenant wizard"
           />
         )
       }
@@ -389,7 +382,7 @@ export function RegisterOrganizationWizard({
     }
     return (
       <ResourceCreatePageShell
-        parentLabel="Organizations"
+        parentLabel="Tenants"
         title={wizardTitle}
         titleId="register-organization-wizard-title"
         onBack={requestClose}

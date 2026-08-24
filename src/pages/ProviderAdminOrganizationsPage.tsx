@@ -25,14 +25,14 @@ import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@p
 import { CatalogFilterEmptyState } from '../components/catalog/CatalogFilterEmptyState'
 import { CatalogFilterResultsSummary } from '../components/catalog/CatalogFilterResultsSummary'
 import { ConnectOrganizationIdentityProviderModal } from '../components/provider-admin/ConnectOrganizationIdentityProviderModal'
-import { DefineOrganizationRolesModal } from '../components/provider-admin/DefineOrganizationRolesModal'
 import { OrganizationDetailsPage } from '../components/provider-admin/OrganizationDetailsPage'
 import { RegisterOrganizationWizard } from '../components/provider-admin/RegisterOrganizationWizard'
 import { SetupIdentityProviderWizard } from '../components/provider-admin/SetupIdentityProviderWizard'
+import { AddTenantAdministratorWizard } from '../components/tenant-admin/AddTenantAdministratorWizard'
+import { IDP_MANAGER_ROLES_COPY } from '../idpManager/constants'
 import {
   getOrganizationSetupNextAction,
   getOrganizationSetupSignal,
-  hasPendingIdpInvite,
   buildOrganizationFilterParts,
   matchesOrganizationSetupFilter,
   ORGANIZATION_SETUP_FILTER_OPTIONS,
@@ -68,33 +68,12 @@ function formatRegisteredAt(iso: string): string {
 function getOrganizationActions(
   organization: RegisteredOrganization,
   onViewDetails: (organization: RegisteredOrganization) => void,
-  onIdentityProvider: (organization: RegisteredOrganization) => void,
-  onRoles: (organization: RegisteredOrganization) => void,
   onRemove: (organization: RegisteredOrganization) => void,
 ): IAction[] {
-  const idpActionTitle = organization.identityProviderConnected
-    ? 'View identity provider'
-    : hasPendingIdpInvite(organization)
-      ? 'Manage IdP invitation'
-      : 'Set up identity provider'
-
   return [
     {
       title: 'View details',
       onClick: () => onViewDetails(organization),
-    },
-    {
-      title: idpActionTitle,
-      onClick: () => onIdentityProvider(organization),
-    },
-    {
-      title: organization.rbacConfigured ? 'View roles' : 'Define roles',
-      isAriaDisabled: !organization.identityProviderConnected,
-      onClick: () => {
-        if (organization.identityProviderConnected) {
-          onRoles(organization)
-        }
-      },
     },
     {
       title: 'Edit',
@@ -316,18 +295,6 @@ export function ProviderAdminOrganizationsPage({
     setRolesOrganization(organization)
   }
 
-  const openIdentityProvider = (organization: RegisteredOrganization) => {
-    if (organization.identityProviderConnected) {
-      setIdpOrganization(organization)
-      return
-    }
-    setIdpDelegationOrganization(organization)
-  }
-
-  const openRoles = (organization: RegisteredOrganization) => {
-    setRolesOrganization(organization)
-  }
-
   const handleIdentityProviderConnected = (organization: RegisteredOrganization) => {
     refreshOrganizations(organization.id)
     // Keep the setup wizard mounted so working → success can play; it closes via onClose.
@@ -357,7 +324,21 @@ export function ProviderAdminOrganizationsPage({
 
   return (
     <>
-      {isWizardOpen ? (
+      {rolesOrganization !== null ? (
+        <AddTenantAdministratorWizard
+          isOpen
+          organization={rolesOrganization}
+          parentLabel="Tenants"
+          title={IDP_MANAGER_ROLES_COPY.wizardTitle}
+          submitLabel={IDP_MANAGER_ROLES_COPY.wizardSubmitLabel}
+          showRoleCatalog
+          onClose={() => setRolesOrganization(null)}
+          onAdded={(organization) => {
+            handleRolesConfigured(organization)
+            setRolesOrganization(null)
+          }}
+        />
+      ) : isWizardOpen ? (
         <RegisterOrganizationWizard
           presentation="page"
           isOpen={isWizardOpen}
@@ -388,6 +369,7 @@ export function ProviderAdminOrganizationsPage({
             setIdpDelegationOrganization(organization)
           }}
           onReviewRoles={(organization) => setRolesOrganization(organization)}
+          onOrganizationChange={(organization) => refreshOrganizations(organization.id)}
         />
       ) : (
       <div className="provider-admin-workspace-page provider-admin-organizations">
@@ -400,7 +382,7 @@ export function ProviderAdminOrganizationsPage({
           >
             <FlexItem>
               <Title headingLevel="h1" size="3xl" className="provider-admin-organizations__title">
-                Organizations
+                Tenants
               </Title>
               <Content component="p" className="provider-admin-organizations__lede">
                 {PROVIDER_ORGANIZATIONS_DEMO.lede}
@@ -415,7 +397,7 @@ export function ProviderAdminOrganizationsPage({
         ) : (
           <>
             <Title headingLevel="h1" size="3xl" className="provider-admin-organizations__title">
-              Organizations
+              Tenants
             </Title>
             <Content component="p" className="provider-admin-organizations__lede">
               {PROVIDER_ORGANIZATIONS_DEMO.lede}
@@ -428,12 +410,12 @@ export function ProviderAdminOrganizationsPage({
             <div className="catalog-view-toolbar__start">
               <FormSelect
                 className="catalog-status-filter"
-                id="organizations-status-filter"
+                id="tenants-status-filter"
                 value={selectedStatus}
                 onChange={(_event, value) =>
                   setSelectedStatus(value as 'all' | RegisteredOrganization['status'])
                 }
-                aria-label="Filter organizations by status"
+                aria-label="Filter tenants by status"
               >
                 <FormSelectOption value="all" label="All statuses" />
                 <FormSelectOption value="Active" label="Active" />
@@ -441,12 +423,12 @@ export function ProviderAdminOrganizationsPage({
               </FormSelect>
               <FormSelect
                 className="catalog-status-filter"
-                id="organizations-setup-filter"
+                id="tenants-setup-filter"
                 value={selectedSetup}
                 onChange={(_event, value) =>
                   setSelectedSetup(value as OrganizationSetupFilter)
                 }
-                aria-label="Filter organizations by setup state"
+                aria-label="Filter tenants by setup state"
               >
                 {ORGANIZATION_SETUP_FILTER_OPTIONS.map((option) => (
                   <FormSelectOption key={option.value} value={option.value} label={option.label} />
@@ -454,11 +436,11 @@ export function ProviderAdminOrganizationsPage({
               </FormSelect>
               <SearchInput
                 className="catalog-search"
-                placeholder="Search organizations"
+                placeholder="Search tenants"
                 value={searchValue}
                 onChange={(_event, value) => setSearchValue(value)}
                 onClear={() => setSearchValue('')}
-                aria-label="Search organizations"
+                aria-label="Search tenants"
               />
             </div>
           </div>
@@ -482,7 +464,7 @@ export function ProviderAdminOrganizationsPage({
           </EmptyState>
         ) : filteredOrganizations.length === 0 ? (
           <CatalogFilterEmptyState
-            title="No organizations match your filters"
+            title="No tenants match your filters"
             description="Try a different status, setup state, or search term."
             onClearFilters={clearAllFilters}
           />
@@ -491,18 +473,18 @@ export function ProviderAdminOrganizationsPage({
             <CatalogFilterResultsSummary
               filteredCount={filteredOrganizations.length}
               totalCount={organizations.length}
-              singular="organization"
+              singular="tenant"
               filterParts={filterDescriptionParts}
               onClearFilters={clearAllFilters}
             />
           <Table
-            aria-label="Organizations"
+            aria-label="Tenants"
             borders={false}
             className="provider-admin-organizations__table catalog-data-table"
           >
             <Thead>
               <Tr>
-                <Th>Organization</Th>
+                <Th>Tenant</Th>
                 <Th>Status</Th>
                 <Th>Primary domain</Th>
                 <Th>Billing account</Th>
@@ -527,7 +509,7 @@ export function ProviderAdminOrganizationsPage({
                         : undefined
                     }
                   >
-                    <Td modifier="wrap" dataLabel="Organization">
+                    <Td modifier="wrap" dataLabel="Tenant">
                       <Content component="p" className="provider-admin-organizations__primary-cell">
                         <Button
                           variant="link"
@@ -547,7 +529,7 @@ export function ProviderAdminOrganizationsPage({
                         {isActivating ? (
                           <span className="provider-admin-organizations__registering-status">
                             <Spinner size="sm" aria-label={`Activating ${org.name}`} />
-                            <span className="pf-v6-screen-reader">Activating organization</span>
+                            <span className="pf-v6-screen-reader">Activating tenant</span>
                           </span>
                         ) : (
                           <Label
@@ -564,7 +546,7 @@ export function ProviderAdminOrganizationsPage({
                               size="sm"
                               aria-label={`Registering ${org.name}`}
                             />
-                            <span className="pf-v6-screen-reader">Registering organization</span>
+                            <span className="pf-v6-screen-reader">Registering tenant</span>
                           </span>
                         ) : null}
                         {setupSignal && nextAction ? (
@@ -605,13 +587,7 @@ export function ProviderAdminOrganizationsPage({
                     </Td>
                     <Td isActionCell>
                       <ActionsColumn
-                        items={getOrganizationActions(
-                          org,
-                          openDetails,
-                          openIdentityProvider,
-                          openRoles,
-                          openRemove,
-                        )}
+                        items={getOrganizationActions(org, openDetails, openRemove)}
                       />
                     </Td>
                   </Tr>
@@ -630,12 +606,6 @@ export function ProviderAdminOrganizationsPage({
         onClose={handleIdpModalClose}
         onConnected={handleIdentityProviderConnected}
       />
-      <DefineOrganizationRolesModal
-        isOpen={rolesOrganization !== null}
-        organization={rolesOrganization}
-        onClose={() => setRolesOrganization(null)}
-        onConfigured={handleRolesConfigured}
-      />
       <Modal
         variant={ModalVariant.small}
         isOpen={organizationPendingRemove !== null}
@@ -644,7 +614,7 @@ export function ProviderAdminOrganizationsPage({
         aria-describedby="remove-organization-description"
       >
         <ModalHeader
-          title="Remove organization?"
+          title="Remove tenant?"
           titleIconVariant="warning"
           labelId="remove-organization-title"
         />
@@ -656,7 +626,7 @@ export function ProviderAdminOrganizationsPage({
                 provider administration. This cannot be undone.
               </>
             ) : (
-              'This organization will be permanently removed from provider administration. This cannot be undone.'
+              'This tenant will be permanently removed from provider administration. This cannot be undone.'
             )}
           </Content>
         </ModalBody>

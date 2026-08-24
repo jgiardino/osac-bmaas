@@ -60,7 +60,7 @@ export function ExternalIpPoolDetailsPage({
       titleId="external-ip-pool-details-title"
       description={
         isTenantView
-          ? "Routable addresses available for workloads in your organization."
+          ? "Routable addresses available for workloads in your tenant."
           : "Routable address pool for tenant edge exposure."
       }
       actions={
@@ -156,19 +156,19 @@ export function ExternalIpPoolDetailsPage({
             size="lg"
             className="entity-details-page__section-title"
           >
-            {isTenantView ? "Organization" : "Assignment"}
+            {isTenantView ? "Tenant" : "Assignment"}
           </Title>
           <DescriptionList
             isCompact
             className="entity-details-page__dl"
             aria-label={
-              isTenantView ? "External IP pool organization scope" : "External IP pool assignment"
+              isTenantView ? "External IP pool tenant scope" : "External IP pool assignment"
             }
           >
             {isTenantView ? (
               <>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Organization</DescriptionListTerm>
+                  <DescriptionListTerm>Tenant</DescriptionListTerm>
                   <DescriptionListDescription>
                     {scopeOrganization?.name ?? "—"}
                   </DescriptionListDescription>
@@ -176,7 +176,7 @@ export function ExternalIpPoolDetailsPage({
                 <DescriptionListGroup>
                   <DescriptionListTerm>Primary email domain</DescriptionListTerm>
                   <DescriptionListDescription>
-                    <code>{scopeOrganization?.primaryDomain || "—"}</code>
+                    {scopeOrganization?.primaryDomain || "—"}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 {organizationPools.length > 0 ? (
@@ -207,7 +207,7 @@ export function ExternalIpPoolDetailsPage({
             ) : (
               <>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Organization</DescriptionListTerm>
+                  <DescriptionListTerm>Tenant</DescriptionListTerm>
                   <DescriptionListDescription>
                     {pool.assignedOrganizationName ?? (
                       <Label color="green" isCompact>
@@ -223,11 +223,11 @@ export function ExternalIpPoolDetailsPage({
                         Primary email domain
                       </DescriptionListTerm>
                       <DescriptionListDescription>
-                        <code>{organization.primaryDomain || "—"}</code>
+                        {organization.primaryDomain || "—"}
                       </DescriptionListDescription>
                     </DescriptionListGroup>
                     <DescriptionListGroup>
-                      <DescriptionListTerm>Organization status</DescriptionListTerm>
+                      <DescriptionListTerm>Tenant status</DescriptionListTerm>
                       <DescriptionListDescription>
                         <Label
                           color={
