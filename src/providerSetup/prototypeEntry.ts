@@ -666,6 +666,7 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'administration-organizations' ||
     value === 'administration-quotas' ||
     value === 'billing-metering' ||
-    value === 'system'
+    value === 'system' ||
+    value === 'vision-model-fleet'
   )
 }

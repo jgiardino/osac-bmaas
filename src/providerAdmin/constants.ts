@@ -23,6 +23,7 @@ export type ProviderAdminNavId =
   | 'administration-quotas'
   | 'billing-metering'
   | 'system'
+  | 'vision-model-fleet'
 
 export type ProviderAdminNavItem = {
   id: ProviderAdminNavId

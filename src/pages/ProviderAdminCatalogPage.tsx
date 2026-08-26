@@ -55,6 +55,7 @@ import {
 } from '../shared/workspaceNavUrl'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import { sortByDemoCatalogOrder } from '../providerSetup/prototypeEntry'
+import { isVisionModelServingPreset } from '../vision/modelFleet'
 import type { CatalogItemStatus, ProviderCatalogDraft } from '../providerSetup/storage'
 import {
   consumeProviderVipCatalogResumeIntent,
@@ -118,6 +119,8 @@ type ProviderAdminCatalogPageProps = {
   onEditLeaveAttemptChange?: (
     attemptLeave: ((onConfirmed: () => void) => void) | null,
   ) => void
+  /** Vision-gated: open AI Grid instead of launch instance for the model serving preset. */
+  onPlaceOnGrid?: () => void
 }
 
 /** Intentional create latency before revealing the new catalog card. */
@@ -260,6 +263,20 @@ function getCatalogItemActions(
   onTogglePublish: () => void,
   onDelete: () => void,
 ): IAction[] {
+  if (isVisionModelServingPreset(item)) {
+    return [
+      {
+        title: 'View details',
+        onClick: onViewDetails,
+      },
+      {
+        title: 'Place on AI Grid',
+        onClick: onLaunch,
+        isDisabled: isPublishing,
+      },
+    ]
+  }
+
   const isUnpublished = getCatalogItemStatus(item) === 'unpublished'
   const actions: IAction[] = [
     {
@@ -323,6 +340,7 @@ export function ProviderAdminCatalogPage({
   onProjectScopeChange,
   onProjectsChange,
   onEditLeaveAttemptChange,
+  onPlaceOnGrid,
 }: ProviderAdminCatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialServiceFilters = catalogItems.map(getDraftServiceId)
@@ -1068,7 +1086,16 @@ export function ProviderAdminCatalogPage({
           onPublish={() => publishCatalogItem(drawerCatalog)}
           onUnpublish={() => openTogglePublish(drawerCatalog)}
           isPublishing={publishingCatalogItemId === drawerCatalog.catalogItemId}
-          onLaunch={() => openLaunchWizard(drawerCatalog)}
+          onLaunch={() => {
+            if (isVisionModelServingPreset(drawerCatalog) && onPlaceOnGrid) {
+              onPlaceOnGrid()
+              return
+            }
+            openLaunchWizard(drawerCatalog)
+          }}
+          onPlaceOnGrid={
+            isVisionModelServingPreset(drawerCatalog) ? onPlaceOnGrid : undefined
+          }
           onEdit={() => openEdit(drawerCatalog, { returnToDetails: true })}
           onDuplicate={() => handleDuplicate(drawerCatalog)}
           onDelete={() => openDelete(drawerCatalog)}
@@ -1194,7 +1221,13 @@ export function ProviderAdminCatalogPage({
               item,
               isPublishing,
               () => openDetails(item),
-              () => openLaunchWizard(item),
+              () => {
+                if (isVisionModelServingPreset(item) && onPlaceOnGrid) {
+                  onPlaceOnGrid()
+                  return
+                }
+                openLaunchWizard(item)
+              },
               () => openEdit(item),
               () => handleDuplicate(item),
               () => openTogglePublish(item),
@@ -1336,7 +1369,13 @@ export function ProviderAdminCatalogPage({
                 item,
                 publishingCatalogItemId === item.catalogItemId,
                 () => openDetails(item),
-                () => openLaunchWizard(item),
+                () => {
+                if (isVisionModelServingPreset(item) && onPlaceOnGrid) {
+                  onPlaceOnGrid()
+                  return
+                }
+                openLaunchWizard(item)
+              },
                 () => openEdit(item),
                 () => handleDuplicate(item),
                 () => openTogglePublish(item),

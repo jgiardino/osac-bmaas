@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { ProviderAdminShell } from '../components/provider-admin/ProviderAdminShell'
@@ -30,6 +30,14 @@ import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
+import { VisionGridContinuityAlert } from './provider-admin/vision/VisionGridContinuityAlert'
+import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
+import {
+  MODEL_FLEET_VISION_NAV_ID,
+  MODEL_FLEET_VISION_VALUE,
+  isModelFleetVision,
+  mergeVisionCatalogItems,
+} from '../vision/modelFleet'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
@@ -162,6 +170,11 @@ export function ProviderAdminWorkspacePage() {
   const catalogEditLeaveAttemptRef = useRef<((onConfirmed: () => void) => void) | null>(null)
 
   const navParam = searchParams.get('nav')
+  const visionEnabled = isModelFleetVision(searchParams)
+  const displayCatalogItems = useMemo(
+    () => mergeVisionCatalogItems(catalogItems, visionEnabled),
+    [catalogItems, visionEnabled],
+  )
 
   useLayoutEffect(() => {
     const requestedNav = normalizeProviderNavParam(navParam)
@@ -196,6 +209,21 @@ export function ProviderAdminWorkspacePage() {
     }
     // Only react when `nav` changes — not when `item=` opens catalog details.
   }, [navParam, setSearchParams])
+
+  useLayoutEffect(() => {
+    if (activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+      return
+    }
+    if (searchParams.get('vision') === MODEL_FLEET_VISION_VALUE) {
+      return
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('vision', MODEL_FLEET_VISION_VALUE)
+      next.set('nav', MODEL_FLEET_VISION_NAV_ID)
+      return next
+    }, { replace: true })
+  }, [activeNavId, searchParams, setSearchParams])
 
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
@@ -420,7 +448,7 @@ export function ProviderAdminWorkspacePage() {
   }
 
   const renderPostSetupContent = () => {
-    if (catalogItems.length === 0) {
+    if (catalogItems.length === 0 && activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
       return (
         <ProviderAdminOverviewPage />
       )
@@ -479,7 +507,7 @@ export function ProviderAdminWorkspacePage() {
       case 'catalog':
         return (
           <ProviderAdminCatalogPage
-            catalogItems={catalogItems}
+            catalogItems={displayCatalogItems}
             isEntering={workspaceTransition === 'entering'}
             onCreateCatalogItem={handleCreateCatalogItem}
             onCatalogItemsChange={(items) => setCatalogItems(items ?? getProviderCatalogItems())}
@@ -495,8 +523,24 @@ export function ProviderAdminWorkspacePage() {
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
             onProjectsChange={setProjects}
+            onPlaceOnGrid={
+              visionEnabled
+                ? () => {
+                    handleNavChange(MODEL_FLEET_VISION_NAV_ID)
+                  }
+                : undefined
+            }
             onEditLeaveAttemptChange={(attemptLeave) => {
               catalogEditLeaveAttemptRef.current = attemptLeave
+            }}
+          />
+        )
+      case 'vision-model-fleet':
+        return (
+          <VisionModelFleetPage
+            onOpenCatalogPreset={(catalogItemId) => {
+              handleNavChange('catalog')
+              syncWorkspaceCatalogItemParam(setSearchParams, catalogItemId)
             }}
           />
         )
@@ -509,9 +553,19 @@ export function ProviderAdminWorkspacePage() {
       case 'genai-playground':
         return <PlaygroundPage />
       case 'genai-api-keys':
-        return <GenaiApiKeysPage />
+        return (
+          <>
+            <VisionGridContinuityAlert surface="chris" />
+            <GenaiApiKeysPage />
+          </>
+        )
       case 'ai-maas-governance':
-        return <MaaSGovernancePage />
+        return (
+          <>
+            <VisionGridContinuityAlert surface="priya" />
+            <MaaSGovernancePage />
+          </>
+        )
       case 'ai-model-catalog-settings':
         return <ModelCatalogSettingsPage />
       case 'ai-admin-api-keys':
@@ -618,6 +672,7 @@ export function ProviderAdminWorkspacePage() {
   return (
     <ProviderAdminShell
       showNavigation={setupComplete}
+      showVisionNav={visionEnabled || activeNavId === MODEL_FLEET_VISION_NAV_ID}
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       workspaceTransition={workspaceTransition}

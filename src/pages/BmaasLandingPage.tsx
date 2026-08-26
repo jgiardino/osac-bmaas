@@ -126,6 +126,11 @@ export function BmaasLandingPage() {
       statusLabel: 'Not approved yet',
     },
     {
+      label: 'AI Grid (future vision)',
+      to: '/provider/workspace?vision=model-fleet&nav=vision-model-fleet',
+      statusLabel: 'Exploratory',
+    },
+    {
       label: 'Onboarding',
       to: '/idp-manager/bluesolace',
       statusLabel: 'Not approved yet',
