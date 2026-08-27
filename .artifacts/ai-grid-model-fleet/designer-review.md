@@ -43,7 +43,7 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 
 - **Interaction model (name vs card vs pin vs full details).** Jenn is sketching this first. Do not lock click vs link vs pin until that sketch lands.
 - **Site-language on the map.** Primary cluster label as **US East · AWS** (keep `ocp-*` secondary). Logged for a later pass.
-- **Continuity into consume.** Deferred. Full details pages from AI Grid and jumping into tenant consume stay parked. **View in Catalog** remains in the kebab until that is decided. No jump to Services instance pages yet.
+- **Continuity into consume.** Deferred. Full details pages from AI Grid and jumping into tenant consume stay parked. **View in Catalog** remains in the kebab until that is decided. No jump to Services instance pages yet. The purple **AI Grid continuity** alert on MaaS governance and API keys is removed.
 - **Dashed lines / traffic.** Previous lines were not the right representation. Traffic flow is later. The Leaflet map does not draw those lines.
 - **Gateway icon.** Services uses PatternFly `GlobeRouteIcon` as a placeholder until a dedicated gateway icon is chosen.
 - **Remaining pin hues.** Light green is still `#3d7317` (not checked). Dark unavailable red is still `#ff4d4d`. Dark available green is a trial of `#87bb62`.

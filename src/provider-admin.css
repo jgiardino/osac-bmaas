@@ -5367,10 +5367,6 @@
   margin-block-start: var(--pf-t--global--spacer--md);
 }
 
-.vision-grid-continuity-alert {
-  margin-block-end: var(--pf-t--global--spacer--md);
-}
-
 #vision-grid-drawer.pf-v6-c-drawer__panel {
   display: flex;
   flex-direction: column;

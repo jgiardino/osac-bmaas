@@ -37,7 +37,6 @@ import { TenantUserCatalogPage } from './tenant-user/TenantUserCatalogPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
-import { VisionGridContinuityAlert } from './provider-admin/vision/VisionGridContinuityAlert'
 import { clearGenaiApiKeysDetailParams } from './tenant-user/genai/genaiNavParams'
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
@@ -430,12 +429,7 @@ export function TenantUserWorkspacePage() {
       case 'genai-playground':
         return <PlaygroundPage />
       case 'genai-api-keys':
-        return (
-          <>
-            <VisionGridContinuityAlert surface="chris" />
-            <GenaiApiKeysPage surface="tenant-user" />
-          </>
-        )
+        return <GenaiApiKeysPage surface="tenant-user" />
       case 'projects-teams':
         return organization ? (
           <TenantAdminProjectsTeamsPage

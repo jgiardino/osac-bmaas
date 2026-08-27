@@ -21,7 +21,6 @@ import {
   isGenaiApiKeysNavId,
 } from './tenant-user/genai/genaiNavParams'
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
-import { VisionGridContinuityAlert } from './provider-admin/vision/VisionGridContinuityAlert'
 import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import {
@@ -363,19 +362,9 @@ export function TenantAdminWorkspacePage() {
       case 'genai-playground':
         return <PlaygroundPage />
       case 'genai-api-keys':
-        return (
-          <>
-            <VisionGridContinuityAlert surface="chris" />
-            <GenaiApiKeysPage />
-          </>
-        )
+        return <GenaiApiKeysPage />
       case 'ai-maas-governance':
-        return (
-          <>
-            <VisionGridContinuityAlert surface="priya" />
-            <MaaSGovernancePage />
-          </>
-        )
+        return <MaaSGovernancePage />
       case 'ai-model-catalog-settings':
         return <ModelCatalogSettingsPage />
       case 'ai-admin-api-keys':
