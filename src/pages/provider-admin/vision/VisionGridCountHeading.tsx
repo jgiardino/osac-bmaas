@@ -4,14 +4,22 @@ type VisionGridCountHeadingProps = {
   id: string
   title: string
   count: number
+  showDivider?: boolean
 }
 
-export const VisionGridCountHeading = ({ id, title, count }: VisionGridCountHeadingProps) => (
+export const VisionGridCountHeading = ({
+  id,
+  title,
+  count,
+  showDivider = true,
+}: VisionGridCountHeadingProps) => (
   <Stack>
-    <StackItem>
-      <Divider />
-    </StackItem>
-    <StackItem className="pf-v6-u-pt-sm">
+    {showDivider ? (
+      <StackItem>
+        <Divider />
+      </StackItem>
+    ) : null}
+    <StackItem className={showDivider ? 'pf-v6-u-pt-sm' : undefined}>
       <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
         <FlexItem>
           <Title headingLevel="h3" size="md" id={id}>

@@ -11,23 +11,29 @@ import {
   StackItem,
 } from '@patternfly/react-core'
 import {
-  getVisionGateway,
+  gatewaysOnCluster,
   getVisionOrg,
   getVisionPreset,
   getVisionSite,
+  homeMaasOrigin,
+  isDeploymentMaas,
   type VisionCluster,
   type VisionDeployment,
+  type VisionGateway,
 } from '../../../vision/fleetWorld'
 import type { VisionDrawerSelection } from '../../../vision/visionDrawer'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
+import { VisionGridModelLabels } from './VisionGridModelLabels'
 
 type VisionClusterInspectorProps = {
   cluster: VisionCluster | null
   deployments: VisionDeployment[]
   highlight: VisionDrawerSelection
   onHighlightDeployment: (deploymentId: string) => void
+  onHighlightGateway: (gatewayId: VisionGateway['id']) => void
   onViewDeployment: (deploymentId: string) => void
+  onViewGateway: (gatewayId: VisionGateway['id']) => void
 }
 
 export const VisionClusterInspector = ({
@@ -35,15 +41,17 @@ export const VisionClusterInspector = ({
   deployments,
   highlight,
   onHighlightDeployment,
+  onHighlightGateway,
   onViewDeployment,
+  onViewGateway,
 }: VisionClusterInspectorProps) => {
   if (!cluster) {
     return (
       <Stack hasGutter>
         <StackItem>
           <Content component="p">
-            This cluster is hidden by the organization or gateway filter. Use Catalog or Services to
-            return to the list.
+            This cluster is hidden by the tenant filter. Use Catalog or Services to return to the
+            list.
           </Content>
         </StackItem>
       </Stack>
@@ -52,7 +60,7 @@ export const VisionClusterInspector = ({
 
   const site = getVisionSite(cluster.siteId)
   const org = getVisionOrg(cluster.orgId)
-  const gateway = getVisionGateway(cluster.gatewayId)
+  const gateways = gatewaysOnCluster(cluster.id)
   const isAvailable = cluster.health === 'available'
 
   return (
@@ -99,24 +107,50 @@ export const VisionClusterInspector = ({
             <DescriptionListTerm>Tenant</DescriptionListTerm>
             <DescriptionListDescription>{org.label}</DescriptionListDescription>
           </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Gateway</DescriptionListTerm>
-            <DescriptionListDescription>
-              {gateway.label} · {gateway.hostname}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
         </DescriptionList>
       </StackItem>
       <StackItem>
         <VisionGridCountHeading
+          id="vision-cluster-gateways"
+          title="Gateways"
+          count={gateways.length}
+        />
+      </StackItem>
+      {gateways.length === 0 ? (
+        <StackItem>
+          <Content component="p">No gateways are provisioned on this cluster.</Content>
+        </StackItem>
+      ) : (
+        gateways.map((gateway) => (
+          <StackItem key={gateway.id}>
+            <VisionGridDrawerCard
+              id={`vision-cluster-gateway-${gateway.id}`}
+              name={gateway.label}
+              secondary={gateway.hostname}
+              specRows={[{ label: 'Hostname', value: gateway.hostname }]}
+              footerRows={[{ label: 'Tenant', value: org.label }]}
+              isSelected={highlight.kind === 'gateway' && highlight.gatewayId === gateway.id}
+              onSelect={() => onHighlightGateway(gateway.id)}
+              onViewDetails={() => onViewGateway(gateway.id)}
+              badge={
+                <Label color="blue" isCompact>
+                  Gateway
+                </Label>
+              }
+            />
+          </StackItem>
+        ))
+      )}
+      <StackItem>
+        <VisionGridCountHeading
           id="vision-cluster-running-models"
-          title="Running models"
+          title="Model instances"
           count={deployments.length}
         />
       </StackItem>
       {deployments.length === 0 ? (
         <StackItem>
-          <Content component="p">No model instances running on this cluster.</Content>
+          <Content component="p">No model instances provisioned on this cluster.</Content>
         </StackItem>
       ) : (
         deployments.map((deployment) => {
@@ -138,9 +172,12 @@ export const VisionClusterInspector = ({
                 onSelect={() => onHighlightDeployment(deployment.id)}
                 onViewDetails={() => onViewDeployment(deployment.id)}
                 badge={
-                  <Label color="green" isCompact>
-                    {deployment.status}
-                  </Label>
+                  <VisionGridModelLabels
+                    idPrefix={`vision-running-${deployment.id}`}
+                    isMaas={isDeploymentMaas(deployment)}
+                    origin={homeMaasOrigin(deployment)}
+                    status={deployment.status}
+                  />
                 }
               />
             </StackItem>

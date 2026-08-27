@@ -1,15 +1,26 @@
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import {
+  VISION_GATEWAYS,
   VISION_MODEL_PRESETS,
+  clustersForGateway,
   clustersForOffering,
+  clustersForOffPlatformModel,
   clustersForPreset,
   getVisionOffering,
+  getVisionOffPlatformModel,
   getVisionPreset,
   type VisionCluster,
   type VisionDeployment,
+  type VisionGatewayId,
 } from './fleetWorld'
 
 export type VisionDrawerTab = 'catalog' | 'services'
+
+export type VisionGridObjectType = 'clusters' | 'models' | 'gateways'
+
+export const DEFAULT_VISION_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
+export const CATALOG_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
+export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models', 'gateways']
 
 export type VisionDrawerSelection =
   | { kind: 'none' }
@@ -18,13 +29,19 @@ export type VisionDrawerSelection =
   | { kind: 'deployment'; deploymentId: string }
   | { kind: 'offering'; offeringId: string }
   | { kind: 'catalog-item'; catalogItemId: string }
+  | { kind: 'gateway'; gatewayId: VisionGatewayId }
+  | { kind: 'off-platform-model'; modelId: string }
 
-export type VisionGridAccordionSection = 'clusters' | 'models'
-
-export const toggleVisionAccordion = (
-  current: VisionGridAccordionSection | null,
-  next: VisionGridAccordionSection,
-): VisionGridAccordionSection | null => (current === next ? null : next)
+export const toggleVisionObjectType = (
+  current: readonly VisionGridObjectType[],
+  type: VisionGridObjectType,
+  isSelected: boolean,
+): VisionGridObjectType[] => {
+  if (isSelected) {
+    return current.includes(type) ? [...current] : [...current, type]
+  }
+  return current.filter((entry) => entry !== type)
+}
 
 export const visionSelectionsEqual = (
   left: VisionDrawerSelection,
@@ -51,15 +68,25 @@ export const visionSelectionsEqual = (
   if (left.kind === 'catalog-item' && right.kind === 'catalog-item') {
     return left.catalogItemId === right.catalogItemId
   }
+  if (left.kind === 'gateway' && right.kind === 'gateway') {
+    return left.gatewayId === right.gatewayId
+  }
+  if (left.kind === 'off-platform-model' && right.kind === 'off-platform-model') {
+    return left.modelId === right.modelId
+  }
   return false
 }
 
 export const seedVisionDrawerSelection = (seed: {
   selectedClusterId: string | null
   selectedPresetId: string | null
+  selectedGatewayId?: VisionGatewayId | null
 }): VisionDrawerSelection => {
   if (seed.selectedClusterId) {
     return { kind: 'cluster', clusterId: seed.selectedClusterId }
+  }
+  if (seed.selectedGatewayId) {
+    return { kind: 'gateway', gatewayId: seed.selectedGatewayId }
   }
   if (seed.selectedPresetId) {
     return { kind: 'preset', presetId: seed.selectedPresetId }
@@ -97,6 +124,10 @@ export const getVisionDrawerSelectionLabel = (
         catalogItems.find((item) => item.catalogItemId === selection.catalogItemId)?.displayName ??
         selection.catalogItemId
       )
+    case 'gateway':
+      return VISION_GATEWAYS.find((gateway) => gateway.id === selection.gatewayId)?.label ?? selection.gatewayId
+    case 'off-platform-model':
+      return getVisionOffPlatformModel(selection.modelId)?.displayName ?? selection.modelId
   }
 }
 
@@ -131,6 +162,12 @@ export const relatedClusterIdsForSelection = (
         return preset ? clustersForPreset(deployments, preset.id) : []
       }
       return []
+    }
+    case 'gateway':
+      return clustersForGateway(clusters, selection.gatewayId)
+    case 'off-platform-model': {
+      const model = getVisionOffPlatformModel(selection.modelId)
+      return model ? clustersForOffPlatformModel(model, clusters) : []
     }
   }
 }

@@ -5,7 +5,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Label,
   Stack,
   StackItem,
 } from '@patternfly/react-core'
@@ -14,31 +13,42 @@ import {
   getVisionOrg,
   getVisionPreset,
   getVisionSite,
+  homeMaasOrigin,
+  isDeploymentMaas,
+  visibleGatewaysById,
   type VisionCluster,
   type VisionDeployment,
+  type VisionGateway,
 } from '../../../vision/fleetWorld'
 import type { VisionDrawerSelection } from '../../../vision/visionDrawer'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
+import { VisionGridModelLabels } from './VisionGridModelLabels'
 
 type VisionServiceModelInspectorProps = {
   deploymentId: string
   deployments: VisionDeployment[]
   clusters: VisionCluster[]
+  gateways: VisionGateway[]
   highlight: VisionDrawerSelection
   onHighlightDeployment: (deploymentId: string) => void
+  onHighlightGateway: (gatewayId: VisionGateway['id']) => void
   onViewCluster: (clusterId: string) => void
   onViewDeployment: (deploymentId: string) => void
+  onViewGateway: (gatewayId: VisionGateway['id']) => void
 }
 
 export const VisionServiceModelInspector = ({
   deploymentId,
   deployments,
   clusters,
+  gateways,
   highlight,
   onHighlightDeployment,
+  onHighlightGateway,
   onViewCluster,
   onViewDeployment,
+  onViewGateway,
 }: VisionServiceModelInspectorProps) => {
   const deployment = deployments.find((entry) => entry.id === deploymentId)
   if (!deployment) {
@@ -49,16 +59,32 @@ export const VisionServiceModelInspector = ({
 
   const preset = getVisionPreset(deployment.presetId)
   const cluster = clusters.find((entry) => entry.id === deployment.clusterId)
+  const attachedGateway = deployment.attachedGatewayId
+    ? (gateways.find((gateway) => gateway.id === deployment.attachedGatewayId) ??
+      getVisionGateway(deployment.attachedGatewayId))
+    : undefined
+  const maasGateways = visibleGatewaysById(deployment.maasGatewayIds, gateways)
+  const localMaasGateways = maasGateways.filter(
+    (gateway) => gateway.clusterId === deployment.clusterId,
+  )
+  const externalMaasGateways = maasGateways.filter(
+    (gateway) => gateway.clusterId !== deployment.clusterId,
+  )
   const others = deployments.filter(
     (entry) => entry.presetId === deployment.presetId && entry.id !== deployment.id,
   )
+  const isMaas = isDeploymentMaas(deployment)
+  const origin = homeMaasOrigin(deployment)
 
   return (
     <Stack hasGutter>
       <StackItem>
-        <Label color="green" isCompact>
-          {deployment.status}
-        </Label>
+        <VisionGridModelLabels
+          idPrefix="vision-service-model"
+          isMaas={isMaas}
+          origin={origin}
+          status={deployment.status}
+        />
       </StackItem>
       <StackItem>
         <DescriptionList isCompact aria-label="Model instance details">
@@ -91,7 +117,7 @@ export const VisionServiceModelInspector = ({
               <DescriptionListGroup>
                 <DescriptionListTerm>Site</DescriptionListTerm>
                 <DescriptionListDescription>
-                  {getVisionSite(cluster.siteId).regionLabel} · {getVisionGateway(cluster.gatewayId).label}
+                  {getVisionSite(cluster.siteId).regionLabel}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
@@ -103,6 +129,25 @@ export const VisionServiceModelInspector = ({
             </>
           ) : null}
           <DescriptionListGroup>
+            <DescriptionListTerm>Gateway on this cluster</DescriptionListTerm>
+            <DescriptionListDescription>
+              {attachedGateway ? (
+                <Button
+                  variant="link"
+                  isInline
+                  onClick={() => {
+                    onHighlightGateway(attachedGateway.id)
+                    onViewGateway(attachedGateway.id)
+                  }}
+                >
+                  {attachedGateway.label}
+                </Button>
+              ) : (
+                'None'
+              )}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
             <DescriptionListTerm>Replicas</DescriptionListTerm>
             <DescriptionListDescription>{deployment.replicas}</DescriptionListDescription>
           </DescriptionListGroup>
@@ -112,6 +157,74 @@ export const VisionServiceModelInspector = ({
           </DescriptionListGroup>
         </DescriptionList>
       </StackItem>
+      {!isMaas && attachedGateway ? (
+        <StackItem>
+          <Content component="p">
+            Connected to gateway {attachedGateway.label}. Not available as a service yet.
+          </Content>
+          <Content component="p" className="pf-v6-u-text-color-subtle">
+            Next, you will be able to make this instance available as a service by selecting a
+            gateway.
+          </Content>
+        </StackItem>
+      ) : null}
+      {!isMaas && !attachedGateway ? (
+        <StackItem>
+          <Content component="p">
+            This instance is not connected to a gateway and is not available as a service.
+          </Content>
+          <Content component="p" className="pf-v6-u-text-color-subtle">
+            Next, you will be able to make this instance available as a service by selecting a
+            gateway.
+          </Content>
+        </StackItem>
+      ) : null}
+      {isMaas ? (
+        <>
+          <StackItem>
+            <VisionGridCountHeading
+              id="vision-service-model-maas-gateways"
+              title="Available as a service on"
+              count={maasGateways.length}
+            />
+          </StackItem>
+          {localMaasGateways.length === 0 && externalMaasGateways.length === 0 ? (
+            <StackItem>
+              <Content component="p">
+                This instance is available as a service on gateways you cannot see with the current
+                tenant filter.
+              </Content>
+            </StackItem>
+          ) : (
+            [...localMaasGateways, ...externalMaasGateways].map((gateway) => {
+              const gatewayCluster = clusters.find((entry) => entry.id === gateway.clusterId)
+              const originOnGateway =
+                gateway.clusterId === deployment.clusterId ? 'internal' : 'external'
+              return (
+                <StackItem key={gateway.id}>
+                  <VisionGridDrawerCard
+                    id={`vision-service-model-maas-${gateway.id}`}
+                    name={gateway.label}
+                    secondary={gateway.hostname}
+                    specRows={[{ label: 'Cluster', value: gatewayCluster?.name ?? gateway.clusterId }]}
+                    footerRows={[{ label: 'Tenant', value: getVisionOrg(gateway.orgId).label }]}
+                    isSelected={highlight.kind === 'gateway' && highlight.gatewayId === gateway.id}
+                    onSelect={() => onHighlightGateway(gateway.id)}
+                    onViewDetails={() => onViewGateway(gateway.id)}
+                    badge={
+                      <VisionGridModelLabels
+                        idPrefix={`vision-service-model-maas-${gateway.id}`}
+                        isMaas
+                        origin={originOnGateway}
+                      />
+                    }
+                  />
+                </StackItem>
+              )
+            })
+          )}
+        </>
+      ) : null}
       <StackItem>
         <VisionGridCountHeading
           id="vision-service-model-running-on"
@@ -147,9 +260,12 @@ export const VisionServiceModelInspector = ({
                 onSelect={() => onHighlightDeployment(other.id)}
                 onViewDetails={() => onViewDeployment(other.id)}
                 badge={
-                  <Label color="green" isCompact>
-                    {other.status}
-                  </Label>
+                  <VisionGridModelLabels
+                    idPrefix={`vision-also-on-${other.id}`}
+                    isMaas={isDeploymentMaas(other)}
+                    origin={homeMaasOrigin(other)}
+                    status={other.status}
+                  />
                 }
               />
             </StackItem>

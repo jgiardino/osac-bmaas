@@ -63,6 +63,7 @@ function readStoredContrastModePreference(): ContrastModePreference {
 }
 
 type ThemePreferencesContextValue = {
+  colorScheme: ColorScheme
   colorSchemePreference: ColorSchemePreference
   setColorSchemePreference: (preference: ColorSchemePreference) => void
   contrastModePreference: ContrastModePreference
@@ -132,12 +133,13 @@ export function ThemePreferencesProvider({ children }: { children: ReactNode }) 
 
   const value = useMemo(
     () => ({
+      colorScheme,
       colorSchemePreference,
       setColorSchemePreference,
       contrastModePreference,
       setContrastModePreference,
     }),
-    [colorSchemePreference, contrastModePreference],
+    [colorScheme, colorSchemePreference, contrastModePreference],
   )
 
   return <ThemePreferencesContext.Provider value={value}>{children}</ThemePreferencesContext.Provider>

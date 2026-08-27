@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { useThemePreferences } from '../../../theme/themePreferences'
 import { getClusterLatLng, getVisionSite, type VisionCluster } from '../../../vision/fleetWorld'
 
 type VisionFleetMapProps = {
@@ -11,10 +12,41 @@ type VisionFleetMapProps = {
   onSelectCluster: (clusterId: string) => void
 }
 
-const AVAILABLE_COLOR = '#3d7317'
-const UNAVAILABLE_COLOR = '#a30000'
-const SELECTED_COLOR = '#0066cc'
+const PIN_FILL_OPACITY = 0.35
+const PIN_STROKE_OPACITY = 0.85
+
+type VisionPinPalette = {
+  available: string
+  unavailable: string
+  selected: string
+}
+
+const LIGHT_PIN: VisionPinPalette = {
+  available: '#3d7317',
+  unavailable: '#ee0000',
+  selected: '#0066cc',
+}
+
+const DARK_PIN: VisionPinPalette = {
+  available: '#87bb62',
+  unavailable: '#ff4d4d',
+  selected: '#7dc3ff',
+}
+
 const EMPTY_CENTER: L.LatLngExpression = [45, -40]
+
+const LIGHT_TILES =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+const DARK_TILES =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+const TILE_ATTRIBUTION =
+  'Tiles &copy; Esri &mdash; Esri, TomTom, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
+
+const createTileLayer = (isDark: boolean) =>
+  L.tileLayer(isDark ? DARK_TILES : LIGHT_TILES, {
+    attribution: TILE_ATTRIBUTION,
+    maxZoom: 16,
+  })
 
 export const VisionFleetMap = ({
   clusters,
@@ -23,8 +55,12 @@ export const VisionFleetMap = ({
   isolateRelatedPins,
   onSelectCluster,
 }: VisionFleetMapProps) => {
+  const { colorScheme } = useThemePreferences()
+  const isDark = colorScheme === 'dark'
+  const palette = isDark ? DARK_PIN : LIGHT_PIN
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const tilesRef = useRef<L.TileLayer | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
   const onSelectRef = useRef(onSelectCluster)
 
@@ -42,10 +78,6 @@ export const VisionFleetMap = ({
       scrollWheelZoom: true,
       attributionControl: true,
     })
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 12,
-    }).addTo(map)
     const layer = L.layerGroup().addTo(map)
     mapRef.current = map
     layerRef.current = layer
@@ -60,9 +92,24 @@ export const VisionFleetMap = ({
       observer.disconnect()
       map.remove()
       mapRef.current = null
+      tilesRef.current = null
       layerRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) {
+      return
+    }
+
+    const nextTiles = createTileLayer(isDark)
+    nextTiles.addTo(map)
+    if (tilesRef.current) {
+      map.removeLayer(tilesRef.current)
+    }
+    tilesRef.current = nextTiles
+  }, [isDark])
 
   useEffect(() => {
     const map = mapRef.current
@@ -82,20 +129,20 @@ export const VisionFleetMap = ({
       const isHighlighted = highlighted.has(cluster.id)
       const isFocus = isSelected || isHighlighted
       const dimmed = isolateRelatedPins && !isFocus
-      const color =
+      const fillColor =
         isSelected || isHighlighted
-          ? SELECTED_COLOR
+          ? palette.selected
           : cluster.health === 'available'
-            ? AVAILABLE_COLOR
-            : UNAVAILABLE_COLOR
+            ? palette.available
+            : palette.unavailable
 
       const marker = L.circleMarker(latLng, {
         radius: isFocus ? 10 : 7,
-        color,
+        color: fillColor,
         weight: isFocus ? 3 : 2,
-        fillColor: color,
-        fillOpacity: dimmed ? 0.25 : 0.9,
-        opacity: dimmed ? 0.35 : 1,
+        fillColor,
+        fillOpacity: dimmed ? PIN_FILL_OPACITY * 0.4 : PIN_FILL_OPACITY,
+        opacity: dimmed ? PIN_STROKE_OPACITY * 0.4 : PIN_STROKE_OPACITY,
       })
       marker.bindTooltip(`${cluster.name} · ${site.regionLabel} · ${cluster.platform}`, {
         direction: 'top',
@@ -114,10 +161,20 @@ export const VisionFleetMap = ({
 
     map.fitBounds(bounds.pad(0.35), { maxZoom: 6, animate: false })
     map.invalidateSize()
-  }, [clusters, highlightedClusterIds, isolateRelatedPins, selectedClusterId])
+  }, [clusters, highlightedClusterIds, isolateRelatedPins, palette, selectedClusterId])
 
   return (
-    <div className="vision-fleet-map pf-v6-u-h-100">
+    <div
+      className="vision-fleet-map pf-v6-u-h-100"
+      style={
+        {
+          '--vision-pin-available': palette.available,
+          '--vision-pin-unavailable': palette.unavailable,
+          '--vision-pin-fill-opacity': PIN_FILL_OPACITY,
+          '--vision-pin-stroke-opacity': PIN_STROKE_OPACITY,
+        } as CSSProperties
+      }
+    >
       <div ref={containerRef} className="vision-fleet-map__leaflet" aria-label="AI Grid map of clusters" />
       {clusters.length === 0 ? (
         <p className="vision-fleet-map__empty">

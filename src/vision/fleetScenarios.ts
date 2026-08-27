@@ -1,4 +1,4 @@
-import type { VisionGatewayFilter, VisionOrgFilter } from './fleetWorld'
+import type { VisionGatewayFilter, VisionGatewayId, VisionOrgFilter } from './fleetWorld'
 
 export type VisionScenarioId =
   | 'default'
@@ -13,6 +13,7 @@ export type VisionScenarioSeed = {
   gatewayFilter: VisionGatewayFilter
   selectedClusterId: string | null
   selectedPresetId: string | null
+  selectedGatewayId: VisionGatewayId | null
   emptyGrid: boolean
 }
 
@@ -22,6 +23,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
+    selectedGatewayId: null,
     emptyGrid: false,
   },
   'nsb-only': {
@@ -29,6 +31,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
+    selectedGatewayId: null,
     emptyGrid: false,
   },
   'bluesolace-only': {
@@ -36,13 +39,15 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
+    selectedGatewayId: null,
     emptyGrid: false,
   },
   'nsb-retail-gateway': {
     orgFilter: 'nsb',
-    gatewayFilter: 'nsb-retail',
+    gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
+    selectedGatewayId: 'nsb-retail',
     emptyGrid: false,
   },
   'unavailable-cluster': {
@@ -50,6 +55,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     gatewayFilter: 'all',
     selectedClusterId: 'ocp-us-east-gpu',
     selectedPresetId: null,
+    selectedGatewayId: null,
     emptyGrid: false,
   },
   'empty-grid': {
@@ -57,6 +63,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
+    selectedGatewayId: null,
     emptyGrid: true,
   },
 }

@@ -1,71 +1,85 @@
+import { useLayoutEffect, useRef } from 'react'
 import {
-  FormGroup,
   FormSelect,
   FormSelectOption,
+  ToggleGroup,
+  ToggleGroupItem,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
+  Tooltip,
 } from '@patternfly/react-core'
-import {
-  VISION_ORGS,
-  gatewaysForOrgFilter,
-  type VisionGatewayFilter,
-  type VisionOrgFilter,
-} from '../../../vision/fleetWorld'
+import { VISION_ORGS, type VisionOrgFilter } from '../../../vision/fleetWorld'
+import type { VisionDrawerTab } from '../../../vision/visionDrawer'
 
 type VisionGridFiltersProps = {
   orgFilter: VisionOrgFilter
-  gatewayFilter: VisionGatewayFilter
+  view: VisionDrawerTab
   onOrgChange: (value: VisionOrgFilter) => void
-  onGatewayChange: (value: VisionGatewayFilter) => void
+  onViewChange: (view: VisionDrawerTab) => void
 }
 
 export const VisionGridFilters = ({
   orgFilter,
-  gatewayFilter,
+  view,
   onOrgChange,
-  onGatewayChange,
+  onViewChange,
 }: VisionGridFiltersProps) => {
-  const gateways = gatewaysForOrgFilter(orgFilter)
+  const catalogTriggerRef = useRef<HTMLElement>(null)
+  const servicesTriggerRef = useRef<HTMLElement>(null)
+
+  useLayoutEffect(() => {
+    catalogTriggerRef.current = document.getElementById('vision-view-catalog')
+    servicesTriggerRef.current = document.getElementById('vision-view-services')
+  }, [])
 
   return (
-    <Toolbar id="vision-grid-toolbar" inset={{ default: 'insetMd' }}>
+    <Toolbar id="vision-grid-toolbar" hasNoPadding>
       <ToolbarContent>
         <ToolbarGroup variant="filter-group">
           <ToolbarItem>
-            <FormGroup label="Tenant" fieldId="vision-filter-org">
-              <FormSelect
-                id="vision-filter-org"
-                value={orgFilter}
-                onChange={(_event, value) => onOrgChange(value as VisionOrgFilter)}
-                aria-label="Filter by tenant"
-              >
-                <FormSelectOption value="all" label="All tenants" />
-                {VISION_ORGS.map((org) => (
-                  <FormSelectOption key={org.id} value={org.id} label={org.label} />
-                ))}
-              </FormSelect>
-            </FormGroup>
+            <FormSelect
+              id="vision-filter-org"
+              value={orgFilter}
+              onChange={(_event, value) => onOrgChange(value as VisionOrgFilter)}
+              aria-label="Filter by tenant"
+            >
+              <FormSelectOption value="all" label="All tenants" />
+              {VISION_ORGS.map((org) => (
+                <FormSelectOption key={org.id} value={org.id} label={org.label} />
+              ))}
+            </FormSelect>
           </ToolbarItem>
+        </ToolbarGroup>
+        <ToolbarGroup align={{ default: 'alignEnd' }} variant="action-group">
           <ToolbarItem>
-            <FormGroup label="Gateway" fieldId="vision-filter-gateway">
-              <FormSelect
-                id="vision-filter-gateway"
-                value={gatewayFilter}
-                onChange={(_event, value) => onGatewayChange(value as VisionGatewayFilter)}
-                aria-label="Filter by gateway"
-              >
-                <FormSelectOption value="all" label="All gateways" />
-                {gateways.map((gateway) => (
-                  <FormSelectOption
-                    key={gateway.id}
-                    value={gateway.id}
-                    label={`${gateway.label} (${gateway.hostname})`}
-                  />
-                ))}
-              </FormSelect>
-            </FormGroup>
+            <Tooltip
+              content="Browse available offerings in the catalog to launch."
+              triggerRef={catalogTriggerRef}
+              position="bottom"
+              enableFlip={false}
+            />
+            <Tooltip
+              content="Monitor and manage services across the grid."
+              triggerRef={servicesTriggerRef}
+              position="bottom"
+              enableFlip={false}
+            />
+            <ToggleGroup aria-label="Catalog or services" id="vision-view-toggle">
+              <ToggleGroupItem
+                text="Catalog"
+                buttonId="vision-view-catalog"
+                isSelected={view === 'catalog'}
+                onChange={() => onViewChange('catalog')}
+              />
+              <ToggleGroupItem
+                text="Services"
+                buttonId="vision-view-services"
+                isSelected={view === 'services'}
+                onChange={() => onViewChange('services')}
+              />
+            </ToggleGroup>
           </ToolbarItem>
         </ToolbarGroup>
       </ToolbarContent>

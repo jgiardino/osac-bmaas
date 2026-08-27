@@ -2163,13 +2163,14 @@
   position: relative;
 }
 
-.provider-admin-shell-page .pf-v6-c-page__main {
+/* Filled viewport is AI Grid only. Do not apply overflow:hidden on other Provider Admin pages. */
+.provider-admin-shell-page--filled .pf-v6-c-page__main {
   position: relative;
   min-height: 0;
   overflow: hidden;
 }
 
-.provider-admin-shell-page .pf-v6-c-page__main-section.pf-m-fill {
+.provider-admin-shell-page--filled .pf-v6-c-page__main-section.pf-m-fill {
   flex-grow: 1;
   flex-shrink: 1;
   flex-basis: 0;
@@ -2179,7 +2180,7 @@
 
 /* PF defines MaxHeight on the filled main container but not margin-block-end.
    Stretch (pf-m-fill) needs that bottom inset so rounded corners are not flush. */
-.provider-admin-shell-page .pf-v6-c-page__main-container.pf-m-fill {
+.provider-admin-shell-page--filled .pf-v6-c-page__main-container.pf-m-fill {
   margin-block-end: var(
     --pf-v6-c-page__main-container--MarginBlockEnd,
     var(--pf-t--global--spacer--md)
@@ -5228,17 +5229,29 @@
 
 .vision-fleet-map__legend-item::before {
   content: '';
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  box-sizing: border-box;
   border-radius: var(--pf-t--global--border--radius--pill);
+  background-color: color-mix(
+    in srgb,
+    var(--vision-legend-pin-color) calc(var(--vision-pin-fill-opacity) * 100%),
+    transparent
+  );
+  border: var(--pf-t--global--border--width--regular) solid
+    color-mix(
+      in srgb,
+      var(--vision-legend-pin-color) calc(var(--vision-pin-stroke-opacity) * 100%),
+      transparent
+    );
 }
 
 .vision-fleet-map__legend-item--up::before {
-  background-color: var(--pf-t--global--color--status--success--default);
+  --vision-legend-pin-color: var(--vision-pin-available);
 }
 
 .vision-fleet-map__legend-item--down::before {
-  background-color: var(--pf-t--global--color--status--danger--default);
+  --vision-legend-pin-color: var(--vision-pin-unavailable);
 }
 
 .vision-fleet-map__empty {
@@ -5368,9 +5381,18 @@
   flex-shrink: 0;
 }
 
-.vision-grid-drawer-head--tabs {
-  padding-block-end: 0;
-  padding-inline: 0;
+.vision-grid-panel-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vision-grid-panel-toolbar {
+  width: 100%;
+}
+
+.vision-grid-panel-search .pf-v6-c-search-input {
+  width: 100%;
+  min-width: 0;
 }
 
 #vision-grid-drawer .pf-v6-c-drawer__body {

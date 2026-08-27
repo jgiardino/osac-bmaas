@@ -315,6 +315,7 @@ export function ProviderAdminShell({
         }
         className={[
           showNavigation ? 'provider-admin-shell-page' : undefined,
+          isContentFilled ? 'provider-admin-shell-page--filled' : undefined,
           workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
         ]
           .filter(Boolean)

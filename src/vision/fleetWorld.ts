@@ -1,5 +1,5 @@
 export type VisionOrgId = 'nsb' | 'bluesolace'
-export type VisionGatewayId = 'nsb-retail' | 'nsb-markets' | 'bsfg-us'
+export type VisionGatewayId = 'nsb-retail' | 'nsb-markets' | 'nsb-west' | 'nsb-east' | 'bsfg-us'
 export type VisionSiteId = 'us-west-1-dc-a' | 'us-east-1-dc-b' | 'us-central-1-dc-a' | 'eu-west-1-dc-a'
 export type VisionClusterHealth = 'available' | 'unavailable'
 export type VisionOrgFilter = 'all' | VisionOrgId
@@ -13,6 +13,7 @@ export type VisionOrg = {
 export type VisionGateway = {
   id: VisionGatewayId
   orgId: VisionOrgId
+  clusterId: string
   label: string
   hostname: string
 }
@@ -67,11 +68,23 @@ export type VisionDeployment = {
   presetId: string
   clusterId: string
   orgId: VisionOrgId
-  gatewayId: VisionGatewayId
+  attachedGatewayId: VisionGatewayId | null
+  maasGatewayIds: VisionGatewayId[]
   status: 'Ready' | 'Starting'
   replicas: string
   reqPerMin: number
 }
+
+export type VisionOffPlatformModel = {
+  id: string
+  displayName: string
+  stableName: string
+  servedBy: string
+  orgId: VisionOrgId
+  gatewayIds: VisionGatewayId[]
+}
+
+export type VisionMaasOrigin = 'internal' | 'external'
 
 export type VisionServingPath = {
   id: string
@@ -91,18 +104,35 @@ export const VISION_GATEWAYS: VisionGateway[] = [
   {
     id: 'nsb-retail',
     orgId: 'nsb',
+    clusterId: 'ocp-eu-west-1',
     label: 'nsb-retail',
     hostname: 'nsb.eu-west.vertexa.example',
   },
   {
     id: 'nsb-markets',
     orgId: 'nsb',
+    clusterId: 'ocp-us-east-1',
     label: 'nsb-markets',
     hostname: 'nsb.us-east.vertexa.example',
   },
   {
+    id: 'nsb-east',
+    orgId: 'nsb',
+    clusterId: 'ocp-us-east-1',
+    label: 'nsb-east',
+    hostname: 'nsb.us-east-edge.vertexa.example',
+  },
+  {
+    id: 'nsb-west',
+    orgId: 'nsb',
+    clusterId: 'ocp-us-west-1',
+    label: 'nsb-west',
+    hostname: 'nsb.us-west.vertexa.example',
+  },
+  {
     id: 'bsfg-us',
     orgId: 'bluesolace',
+    clusterId: 'ocp-us-central-1',
     label: 'bsfg-us',
     hostname: 'bsfg.us-central.vertexa.example',
   },
@@ -225,7 +255,7 @@ export const createInitialClusters = (): VisionCluster[] => [
     name: 'ocp-us-west-1',
     siteId: 'us-west-1-dc-a',
     orgId: 'nsb',
-    gatewayId: 'nsb-markets',
+    gatewayId: 'nsb-west',
     platform: 'Azure',
     region: 'westus',
     health: 'available',
@@ -242,7 +272,7 @@ export const createInitialClusters = (): VisionCluster[] => [
     name: 'ocp-us-west-gpu',
     siteId: 'us-west-1-dc-a',
     orgId: 'nsb',
-    gatewayId: 'nsb-markets',
+    gatewayId: 'nsb-west',
     platform: 'Azure',
     region: 'westus',
     health: 'unavailable',
@@ -259,7 +289,7 @@ export const createInitialClusters = (): VisionCluster[] => [
     name: 'ocp-us-east-1',
     siteId: 'us-east-1-dc-b',
     orgId: 'nsb',
-    gatewayId: 'nsb-retail',
+    gatewayId: 'nsb-markets',
     platform: 'AWS',
     region: 'us-east-1',
     health: 'available',
@@ -276,7 +306,7 @@ export const createInitialClusters = (): VisionCluster[] => [
     name: 'ocp-us-east-gpu',
     siteId: 'us-east-1-dc-b',
     orgId: 'nsb',
-    gatewayId: 'nsb-retail',
+    gatewayId: 'nsb-markets',
     platform: 'AWS',
     region: 'us-east-1',
     health: 'unavailable',
@@ -347,7 +377,8 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-3b',
     clusterId: 'ocp-us-east-1',
     orgId: 'nsb',
-    gatewayId: 'nsb-retail',
+    attachedGatewayId: 'nsb-markets',
+    maasGatewayIds: ['nsb-markets', 'nsb-retail'],
     status: 'Ready',
     replicas: '2× · 1 GPU',
     reqPerMin: 16.4,
@@ -357,7 +388,8 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-3b',
     clusterId: 'ocp-eu-west-1',
     orgId: 'nsb',
-    gatewayId: 'nsb-retail',
+    attachedGatewayId: 'nsb-retail',
+    maasGatewayIds: ['nsb-retail'],
     status: 'Ready',
     replicas: '2× · 1 GPU',
     reqPerMin: 9.3,
@@ -367,7 +399,8 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'mistral-7b',
     clusterId: 'ocp-us-west-1',
     orgId: 'nsb',
-    gatewayId: 'nsb-markets',
+    attachedGatewayId: 'nsb-west',
+    maasGatewayIds: [],
     status: 'Ready',
     replicas: '1× · 1 GPU',
     reqPerMin: 2.1,
@@ -377,7 +410,8 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'llama-4-scout',
     clusterId: 'ocp-us-central-1',
     orgId: 'bluesolace',
-    gatewayId: 'bsfg-us',
+    attachedGatewayId: 'bsfg-us',
+    maasGatewayIds: ['bsfg-us'],
     status: 'Ready',
     replicas: '1× · 4 GPU',
     reqPerMin: 6.5,
@@ -387,10 +421,22 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-8b',
     clusterId: 'ocp-eu-west-2',
     orgId: 'bluesolace',
-    gatewayId: 'bsfg-us',
+    attachedGatewayId: null,
+    maasGatewayIds: [],
     status: 'Ready',
     replicas: '1× · 1 GPU',
     reqPerMin: 1.2,
+  },
+]
+
+export const VISION_OFF_PLATFORM_MODELS: VisionOffPlatformModel[] = [
+  {
+    id: 'ext-bedrock-titan',
+    displayName: 'Titan Text Express',
+    stableName: 'titan-express',
+    servedBy: 'Amazon Bedrock',
+    orgId: 'nsb',
+    gatewayIds: ['nsb-retail', 'nsb-markets'],
   },
 ]
 
@@ -420,6 +466,87 @@ export const createInitialPaths = (): VisionServingPath[] => [
     isLive: true,
   },
 ]
+
+export const getVisionOffPlatformModel = (id: string): VisionOffPlatformModel | undefined =>
+  VISION_OFF_PLATFORM_MODELS.find((entry) => entry.id === id)
+
+export const gatewaysOnCluster = (clusterId: string): VisionGateway[] =>
+  VISION_GATEWAYS.filter((gateway) => gateway.clusterId === clusterId)
+
+export const offPlatformModelsForOrgFilter = (
+  orgFilter: VisionOrgFilter,
+): VisionOffPlatformModel[] => {
+  if (orgFilter === 'all') {
+    return VISION_OFF_PLATFORM_MODELS
+  }
+  return VISION_OFF_PLATFORM_MODELS.filter((model) => model.orgId === orgFilter)
+}
+
+export const isDeploymentMaas = (deployment: VisionDeployment): boolean =>
+  deployment.maasGatewayIds.length > 0
+
+export const maasOriginOnGateway = (
+  deployment: VisionDeployment,
+  gateway: VisionGateway,
+): VisionMaasOrigin | null => {
+  if (!deployment.maasGatewayIds.includes(gateway.id)) {
+    return null
+  }
+  return deployment.clusterId === gateway.clusterId ? 'internal' : 'external'
+}
+
+export const homeMaasOrigin = (deployment: VisionDeployment): VisionMaasOrigin | null => {
+  if (!isDeploymentMaas(deployment)) {
+    return null
+  }
+  return deployment.maasGatewayIds.some((gatewayId) => {
+    const gateway = VISION_GATEWAYS.find((entry) => entry.id === gatewayId)
+    return gateway?.clusterId === deployment.clusterId
+  })
+    ? 'internal'
+    : 'external'
+}
+
+export const formatInstanceCount = (count: number): string =>
+  count === 1 ? '1 instance' : `${count} instances`
+
+export const visibleOffPlatformModels = (
+  orgFilter: VisionOrgFilter,
+  visibleGateways: VisionGateway[],
+): VisionOffPlatformModel[] => {
+  const visibleIds = new Set(visibleGateways.map((gateway) => gateway.id))
+  return offPlatformModelsForOrgFilter(orgFilter).filter((model) =>
+    model.gatewayIds.some((gatewayId) => visibleIds.has(gatewayId)),
+  )
+}
+
+export const deploymentsOnGatewayAsMaas = (
+  deployments: VisionDeployment[],
+  gatewayId: VisionGatewayId,
+): VisionDeployment[] =>
+  deployments.filter((deployment) => deployment.maasGatewayIds.includes(gatewayId))
+
+export const offPlatformModelsOnGateway = (
+  models: VisionOffPlatformModel[],
+  gatewayId: VisionGatewayId,
+): VisionOffPlatformModel[] => models.filter((model) => model.gatewayIds.includes(gatewayId))
+
+export const visibleGatewaysById = (
+  gatewayIds: VisionGatewayId[],
+  visibleGateways: VisionGateway[],
+): VisionGateway[] => visibleGateways.filter((gateway) => gatewayIds.includes(gateway.id))
+
+export const clustersForOffPlatformModel = (
+  model: VisionOffPlatformModel,
+  clusters: VisionCluster[],
+): string[] => {
+  const clusterIds = model.gatewayIds
+    .map((gatewayId) => VISION_GATEWAYS.find((gateway) => gateway.id === gatewayId)?.clusterId)
+    .filter((clusterId): clusterId is string => Boolean(clusterId))
+  return [...new Set(clusterIds)].filter((clusterId) =>
+    clusters.some((cluster) => cluster.id === clusterId),
+  )
+}
 
 export const getVisionOrg = (id: VisionOrgId): VisionOrg => {
   const org = VISION_ORGS.find((entry) => entry.id === id)
@@ -492,7 +619,7 @@ export const deploymentMatchesFilters = (
   if (orgFilter !== 'all' && deployment.orgId !== orgFilter) {
     return false
   }
-  if (gatewayFilter !== 'all' && deployment.gatewayId !== gatewayFilter) {
+  if (gatewayFilter !== 'all' && deployment.attachedGatewayId !== gatewayFilter) {
     return false
   }
   return true
@@ -567,6 +694,14 @@ export const clustersForOffering = (
   return clusters.filter((cluster) => cluster.gpuCount > 0).map((cluster) => cluster.id)
 }
 
+export const clustersForGateway = (clusters: VisionCluster[], gatewayId: VisionGatewayId): string[] => {
+  const gateway = VISION_GATEWAYS.find((entry) => entry.id === gatewayId)
+  if (!gateway) {
+    return []
+  }
+  return clusters.some((cluster) => cluster.id === gateway.clusterId) ? [gateway.clusterId] : []
+}
+
 export const createClusterFromOffering = (
   offering: VisionClusterOffering,
   siteId: VisionSiteId,
@@ -601,16 +736,20 @@ export const createClusterFromOffering = (
 export const createDeploymentOnCluster = (
   preset: VisionModelPreset,
   cluster: VisionCluster,
-): VisionDeployment => ({
-  id: `dep-${preset.id}-${cluster.id}-${Date.now()}`,
-  presetId: preset.id,
-  clusterId: cluster.id,
-  orgId: cluster.orgId,
-  gatewayId: cluster.gatewayId,
-  status: 'Ready',
-  replicas: `1× · ${preset.gpuRequirement}`,
-  reqPerMin: 0.8,
-})
+): VisionDeployment => {
+  const localGateway = gatewaysOnCluster(cluster.id)[0]
+  return {
+    id: `dep-${preset.id}-${cluster.id}-${Date.now()}`,
+    presetId: preset.id,
+    clusterId: cluster.id,
+    orgId: cluster.orgId,
+    attachedGatewayId: localGateway?.id ?? null,
+    maasGatewayIds: [],
+    status: 'Ready',
+    replicas: `1× · ${preset.gpuRequirement}`,
+    reqPerMin: 0.8,
+  }
+}
 
 export const ensureServingPath = (
   paths: VisionServingPath[],

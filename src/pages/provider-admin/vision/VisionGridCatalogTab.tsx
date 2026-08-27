@@ -1,9 +1,4 @@
-import { useState } from 'react'
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionToggle,
   Content,
   DescriptionList,
   DescriptionListDescription,
@@ -12,16 +7,18 @@ import {
   Flex,
   FlexItem,
   Label,
-  SearchInput,
   Stack,
   StackItem,
 } from '@patternfly/react-core'
 import type { ProviderCatalogDraft } from '../../../providerSetup/storage'
 import { CATALOG_SERVICE_LABELS, formatRateCardSummary } from '../../../providerSetup/templateDemo'
 import {
+  formatInstanceCount,
   getVisionOrg,
   getVisionPreset,
   getVisionSite,
+  homeMaasOrigin,
+  isDeploymentMaas,
   type VisionCluster,
   type VisionDeployment,
 } from '../../../vision/fleetWorld'
@@ -31,19 +28,20 @@ import {
   type VisionCatalogClusterRow,
   type VisionCatalogModelRow,
 } from '../../../vision/visionCatalogRows'
-import {
-  toggleVisionAccordion,
-  type VisionDrawerSelection,
-  type VisionGridAccordionSection,
-} from '../../../vision/visionDrawer'
+import type { VisionDrawerSelection, VisionGridObjectType } from '../../../vision/visionDrawer'
 import { getVisionCatalogKebabItems } from './visionGridCatalogActions'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
+import { VisionGridModelLabels } from './VisionGridModelLabels'
+
+const CATALOG_TYPE_MODELS = 'Models'
 
 type VisionGridCatalogTabProps = {
   mode: 'list' | 'detail'
   selection: VisionDrawerSelection
   highlight: VisionDrawerSelection
+  objectTypes: readonly VisionGridObjectType[]
+  search: string
   catalogItems: ProviderCatalogDraft[]
   deployments: VisionDeployment[]
   clusters: VisionCluster[]
@@ -106,6 +104,8 @@ export const VisionGridCatalogTab = ({
   mode,
   selection,
   highlight,
+  objectTypes,
+  search,
   catalogItems,
   deployments,
   clusters,
@@ -119,8 +119,6 @@ export const VisionGridCatalogTab = ({
   onAddOffering,
   onOpenCatalogItem,
 }: VisionGridCatalogTabProps) => {
-  const [openSection, setOpenSection] = useState<VisionGridAccordionSection | null>('clusters')
-  const [search, setSearch] = useState('')
   const modelRows = buildVisionCatalogModelRows(catalogItems)
   const clusterRows = buildVisionCatalogClusterRows(catalogItems)
   const selectedModel = modelRows.find((row) => isModelRowSelected(row, selection))
@@ -136,6 +134,8 @@ export const VisionGridCatalogTab = ({
   const visibleClusterRows = clusterRows.filter((row) =>
     matchesQuery(row.displayName, row.catalogItemId),
   )
+  const showClusters = objectTypes.includes('clusters')
+  const showModels = objectTypes.includes('models')
 
   if (mode === 'detail') {
     if (selectedModel) {
@@ -164,135 +164,131 @@ export const VisionGridCatalogTab = ({
     )
   }
 
+  if (!showClusters && !showModels) {
+    return <Content component="p">Select a type to show catalog items.</Content>
+  }
+
   return (
     <Stack hasGutter>
-      <StackItem>
-        <Content component="p">Browse available offerings in the catalog to launch.</Content>
-      </StackItem>
-      <StackItem>
-        <SearchInput
-          id="vision-catalog-search"
-          placeholder="Search catalog items"
-          value={search}
-          onChange={(_event, value) => setSearch(value)}
-          onClear={() => setSearch('')}
-          aria-label="Search catalog items"
-        />
-      </StackItem>
-      <StackItem>
-        <Accordion headingLevel="h2" id="vision-catalog-accordion">
-          <AccordionItem isExpanded={openSection === 'clusters'}>
-            <AccordionToggle
-              id="vision-catalog-clusters-toggle"
-              onClick={() => setOpenSection((current) => toggleVisionAccordion(current, 'clusters'))}
-            >
-              Clusters
-            </AccordionToggle>
-            <AccordionContent id="vision-catalog-clusters-content">
-              <Stack hasGutter>
-                {visibleClusterRows.length === 0 ? (
-                  <StackItem>
-                    <Content component="p">No clusters in the catalog.</Content>
-                  </StackItem>
-                ) : (
-                  visibleClusterRows.map((row) => (
-                    <StackItem key={row.id}>
-                      <VisionGridDrawerCard
-                        id={`vision-catalog-cluster-${row.id}`}
-                        name={row.displayName}
-                        secondary={row.catalogItemId}
-                        specRows={row.specRows}
-                        footerRows={[{ label: 'Rate', value: row.rate }]}
-                        isSelected={isClusterRowSelected(row, highlight)}
-                        onSelect={() => onHighlightCatalogItem(row.catalogItemId)}
-                        onViewDetails={() => onViewCatalogItem(row.catalogItemId)}
-                        badge={
-                          <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                            <FlexItem>
-                              <Label color="blue" isCompact>
-                                {CATALOG_SERVICE_LABELS.cluster}
-                              </Label>
-                            </FlexItem>
-                            <FlexItem>
-                              <Label color={row.status === 'live' ? 'green' : 'grey'} isCompact>
-                                {row.status === 'live' ? 'Live' : 'Unpublished'}
-                              </Label>
-                            </FlexItem>
-                          </Flex>
-                        }
-                        kebabItems={getVisionCatalogKebabItems(
-                          { kind: 'catalog-item', catalogItemId: row.catalogItemId },
-                          catalogItems,
-                          onPlacePreset,
-                          onAddOffering,
-                          onOpenCatalogItem,
-                        )}
-                      />
-                    </StackItem>
-                  ))
-                )}
-              </Stack>
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem isExpanded={openSection === 'models'}>
-            <AccordionToggle
-              id="vision-catalog-models-toggle"
-              onClick={() => setOpenSection((current) => toggleVisionAccordion(current, 'models'))}
-            >
-              Models
-            </AccordionToggle>
-            <AccordionContent id="vision-catalog-models-content">
-              <Stack hasGutter>
-                {visibleModelRows.length === 0 ? (
-                  <StackItem>
-                    <Content component="p">No models in the catalog.</Content>
-                  </StackItem>
-                ) : (
-                  visibleModelRows.map((row) => (
-                    <StackItem key={row.id}>
-                      <VisionGridDrawerCard
-                        id={`vision-catalog-model-${row.id}`}
-                        name={row.displayName}
-                        secondary={row.catalogItemId}
-                        specRows={row.specRows}
-                        footerRows={[{ label: 'Rate', value: row.rate }]}
-                        isSelected={isModelRowSelected(row, highlight)}
-                        onSelect={() =>
-                          highlightModelRow(row, onHighlightPreset, onHighlightCatalogItem)
-                        }
-                        onViewDetails={() => viewModelRow(row, onViewPreset, onViewCatalogItem)}
-                        badge={
-                          <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                            <FlexItem>
-                              <Label color="blue" isCompact>
-                                {CATALOG_SERVICE_LABELS.models}
-                              </Label>
-                            </FlexItem>
-                            <FlexItem>
-                              <Label color={row.status === 'live' ? 'green' : 'grey'} isCompact>
-                                {row.status === 'live' ? 'Live' : 'Unpublished'}
-                              </Label>
-                            </FlexItem>
-                          </Flex>
-                        }
-                        kebabItems={getVisionCatalogKebabItems(
-                          row.presetId
-                            ? { kind: 'preset', presetId: row.presetId }
-                            : { kind: 'catalog-item', catalogItemId: row.catalogItemId },
-                          catalogItems,
-                          onPlacePreset,
-                          onAddOffering,
-                          onOpenCatalogItem,
-                        )}
-                      />
-                    </StackItem>
-                  ))
-                )}
-              </Stack>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </StackItem>
+      {showClusters ? (
+        <StackItem id="vision-catalog-clusters-content">
+          <Stack hasGutter>
+            <StackItem>
+              <VisionGridCountHeading
+                id="vision-catalog-clusters-toggle"
+                title="Clusters"
+                count={visibleClusterRows.length}
+                showDivider={false}
+              />
+            </StackItem>
+            {visibleClusterRows.length === 0 ? (
+              <StackItem>
+                <Content component="p">No clusters in the catalog.</Content>
+              </StackItem>
+            ) : (
+              visibleClusterRows.map((row) => (
+                <StackItem key={row.id}>
+                  <VisionGridDrawerCard
+                    id={`vision-catalog-cluster-${row.id}`}
+                    name={row.displayName}
+                    secondary={row.catalogItemId}
+                    specRows={row.specRows}
+                    footerRows={[{ label: 'Rate', value: row.rate }]}
+                    isSelected={isClusterRowSelected(row, highlight)}
+                    onSelect={() => onHighlightCatalogItem(row.catalogItemId)}
+                    onViewDetails={() => onViewCatalogItem(row.catalogItemId)}
+                    badge={
+                      <Flex spaceItems={{ default: 'spaceItemsSm' }}>
+                        <FlexItem>
+                          <Label color="blue" isCompact>
+                            {CATALOG_SERVICE_LABELS.cluster}
+                          </Label>
+                        </FlexItem>
+                        <FlexItem>
+                          <Label color="grey" isCompact>
+                            {formatInstanceCount(0)}
+                          </Label>
+                        </FlexItem>
+                      </Flex>
+                    }
+                    kebabItems={getVisionCatalogKebabItems(
+                      { kind: 'catalog-item', catalogItemId: row.catalogItemId },
+                      catalogItems,
+                      onPlacePreset,
+                      onAddOffering,
+                      onOpenCatalogItem,
+                    )}
+                  />
+                </StackItem>
+              ))
+            )}
+          </Stack>
+        </StackItem>
+      ) : null}
+      {showModels ? (
+        <StackItem id="vision-catalog-models-content">
+          <Stack hasGutter>
+            <StackItem>
+              <VisionGridCountHeading
+                id="vision-catalog-models-toggle"
+                title="Models"
+                count={visibleModelRows.length}
+                showDivider={showClusters}
+              />
+            </StackItem>
+            {visibleModelRows.length === 0 ? (
+              <StackItem>
+                <Content component="p">No models in the catalog.</Content>
+              </StackItem>
+            ) : (
+              visibleModelRows.map((row) => (
+                <StackItem key={row.id}>
+                  <VisionGridDrawerCard
+                    id={`vision-catalog-model-${row.id}`}
+                    name={row.displayName}
+                    secondary={row.catalogItemId}
+                    specRows={row.specRows}
+                    footerRows={[{ label: 'Rate', value: row.rate }]}
+                    isSelected={isModelRowSelected(row, highlight)}
+                    onSelect={() =>
+                      highlightModelRow(row, onHighlightPreset, onHighlightCatalogItem)
+                    }
+                    onViewDetails={() => viewModelRow(row, onViewPreset, onViewCatalogItem)}
+                    badge={
+                      <Flex spaceItems={{ default: 'spaceItemsSm' }}>
+                        <FlexItem>
+                          <Label color="blue" isCompact>
+                            {CATALOG_TYPE_MODELS}
+                          </Label>
+                        </FlexItem>
+                        <FlexItem>
+                          <Label color="grey" isCompact>
+                            {formatInstanceCount(
+                              row.presetId
+                                ? deployments.filter((deployment) => deployment.presetId === row.presetId)
+                                    .length
+                                : 0,
+                            )}
+                          </Label>
+                        </FlexItem>
+                      </Flex>
+                    }
+                    kebabItems={getVisionCatalogKebabItems(
+                      row.presetId
+                        ? { kind: 'preset', presetId: row.presetId }
+                        : { kind: 'catalog-item', catalogItemId: row.catalogItemId },
+                      catalogItems,
+                      onPlacePreset,
+                      onAddOffering,
+                      onOpenCatalogItem,
+                    )}
+                  />
+                </StackItem>
+              ))
+            )}
+          </Stack>
+        </StackItem>
+      ) : null}
     </Stack>
   )
 }
@@ -328,12 +324,12 @@ const VisionCatalogModelDetail = ({
         <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
             <Label color="blue" isCompact>
-              {CATALOG_SERVICE_LABELS.models}
+              {CATALOG_TYPE_MODELS}
             </Label>
           </FlexItem>
           <FlexItem>
-            <Label color={row.status === 'live' ? 'green' : 'grey'} isCompact>
-                {row.status === 'live' ? 'Live' : 'Unpublished'}
+            <Label color="grey" isCompact>
+              {formatInstanceCount(instances.length)}
             </Label>
           </FlexItem>
         </Flex>
@@ -409,9 +405,12 @@ const VisionCatalogModelDetail = ({
                 onSelect={() => onHighlightDeployment(deployment.id)}
                 onViewDetails={() => onViewDeployment(deployment.id)}
                 badge={
-                  <Label color="green" isCompact>
-                    {deployment.status}
-                  </Label>
+                  <VisionGridModelLabels
+                    idPrefix={`vision-catalog-instance-${deployment.id}`}
+                    isMaas={isDeploymentMaas(deployment)}
+                    origin={homeMaasOrigin(deployment)}
+                    status={deployment.status}
+                  />
                 }
               />
             </StackItem>
@@ -443,8 +442,8 @@ const VisionCatalogClusterDetail = ({
             </Label>
           </FlexItem>
           <FlexItem>
-            <Label color={row.status === 'live' ? 'green' : 'grey'} isCompact>
-                {row.status === 'live' ? 'Live' : 'Unpublished'}
+            <Label color="grey" isCompact>
+              {formatInstanceCount(0)}
             </Label>
           </FlexItem>
         </Flex>

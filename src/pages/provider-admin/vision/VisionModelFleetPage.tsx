@@ -27,9 +27,9 @@ import {
   getVisionOffering,
   getVisionPreset,
   summarizeFleet,
+  visibleOffPlatformModels,
   type VisionCluster,
   type VisionDeployment,
-  type VisionGatewayFilter,
   type VisionGatewayId,
   type VisionOrgFilter,
   type VisionOrgId,
@@ -39,10 +39,12 @@ import {
 import {
   relatedClusterIdsForSelection,
   seedVisionDrawerSelection,
+  SERVICES_OBJECT_TYPES,
+  toggleVisionObjectType,
   visionSelectionsEqual,
   type VisionDrawerSelection,
   type VisionDrawerTab,
-  type VisionGridAccordionSection,
+  type VisionGridObjectType,
 } from '../../../vision/visionDrawer'
 import { catalogItemVisibleForTenant } from '../../../vision/visionCatalogRows'
 import { VisionAddClusterModal } from './VisionAddClusterModal'
@@ -73,7 +75,6 @@ export const VisionModelFleetPage = ({
     seed.emptyGrid ? [] : createInitialPaths(),
   )
   const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>(seed.orgFilter)
-  const [gatewayFilter, setGatewayFilter] = useState<VisionGatewayFilter>(seed.gatewayFilter)
   const [highlight, setHighlight] = useState<VisionDrawerSelection>(() =>
     seedVisionDrawerSelection(seed),
   )
@@ -81,28 +82,34 @@ export const VisionModelFleetPage = ({
     seedVisionDrawerSelection(seed),
   )
   const [drawerTab, setDrawerTab] = useState<VisionDrawerTab>(() =>
-    seed.selectedClusterId ? 'services' : 'catalog',
+    seed.selectedClusterId || seed.selectedGatewayId ? 'services' : 'catalog',
   )
-  const [servicesSection, setServicesSection] = useState<VisionGridAccordionSection | null>(
-    'clusters',
-  )
+  const [objectTypes, setObjectTypes] = useState<VisionGridObjectType[]>(() => [
+    ...SERVICES_OBJECT_TYPES,
+  ])
+  const [listSearch, setListSearch] = useState('')
   const [placePresetId, setPlacePresetId] = useState<string | null>(null)
   const [addOfferingId, setAddOfferingId] = useState<string | null>(null)
 
   const visibleClusters = useMemo(
-    () => clusters.filter((cluster) => clusterMatchesFilters(cluster, orgFilter, gatewayFilter)),
-    [clusters, gatewayFilter, orgFilter],
+    () => clusters.filter((cluster) => clusterMatchesFilters(cluster, orgFilter, 'all')),
+    [clusters, orgFilter],
   )
   const visibleDeployments = useMemo(
     () =>
       deployments.filter((deployment) =>
-        deploymentMatchesFilters(deployment, orgFilter, gatewayFilter),
+        deploymentMatchesFilters(deployment, orgFilter, 'all'),
       ),
-    [deployments, gatewayFilter, orgFilter],
+    [deployments, orgFilter],
   )
   const visibleCatalogItems = useMemo(
     () => catalogItems.filter((item) => catalogItemVisibleForTenant(item, orgFilter)),
     [catalogItems, orgFilter],
+  )
+  const visibleGateways = useMemo(() => gatewaysForOrgFilter(orgFilter), [orgFilter])
+  const visibleOffPlatform = useMemo(
+    () => visibleOffPlatformModels(orgFilter, visibleGateways),
+    [orgFilter, visibleGateways],
   )
   const summary = useMemo(
     () => summarizeFleet(visibleClusters, visibleDeployments),
@@ -113,6 +120,14 @@ export const VisionModelFleetPage = ({
       ? (visibleClusters.find((cluster) => cluster.id === detail.clusterId) ??
         clusters.find((cluster) => cluster.id === detail.clusterId) ??
         null)
+      : null
+  const selectedGateway =
+    detail.kind === 'gateway'
+      ? (visibleGateways.find((gateway) => gateway.id === detail.gatewayId) ?? null)
+      : null
+  const selectedOffPlatform =
+    detail.kind === 'off-platform-model'
+      ? (visibleOffPlatform.find((model) => model.id === detail.modelId) ?? null)
       : null
   const clusterDeployments = selectedCluster
     ? deploymentsOnCluster(visibleDeployments, selectedCluster.id)
@@ -155,12 +170,17 @@ export const VisionModelFleetPage = ({
     }
   }
 
-  const handleOrgChange = (value: VisionOrgFilter) => {
-    setOrgFilter(value)
-    const allowed = gatewaysForOrgFilter(value)
-    if (gatewayFilter !== 'all' && !allowed.some((gateway) => gateway.id === gatewayFilter)) {
-      setGatewayFilter('all')
-    }
+  const handleViewChange = (nextTab: VisionDrawerTab) => {
+    setDrawerTab(nextTab)
+    setDetail({ kind: 'none' })
+    setListSearch('')
+  }
+
+  const showServicesType = (type: VisionGridObjectType) => {
+    setDrawerTab('services')
+    setDetail({ kind: 'none' })
+    setObjectTypes([type])
+    setListSearch('')
   }
 
   const clearDetail = () => {
@@ -218,8 +238,7 @@ export const VisionModelFleetPage = ({
 
     const fallbackOrg: VisionOrgId = orgFilter === 'all' ? 'nsb' : orgFilter
     const allowedGateways = gatewaysForOrgFilter(fallbackOrg)
-    const gatewayId: VisionGatewayId =
-      gatewayFilter === 'all' ? (allowedGateways[0]?.id ?? 'nsb-retail') : gatewayFilter
+    const gatewayId: VisionGatewayId = allowedGateways[0]?.id ?? 'nsb-retail'
 
     const created = createClusterFromOffering(offering, siteId, fallbackOrg, gatewayId, clusters)
     setClusters((current) => [...current, created])
@@ -229,17 +248,12 @@ export const VisionModelFleetPage = ({
 
   return (
     <>
-      <PageSection
-        padding={{ default: 'noPadding' }}
-        aria-label="Tenant and gateway filters"
-      >
+      <PageSection aria-label="Tenant and catalog or services view">
         <VisionGridFilters
           orgFilter={orgFilter}
-          gatewayFilter={gatewayFilter}
-          onOrgChange={handleOrgChange}
-          onGatewayChange={(value) => {
-            setGatewayFilter(value)
-          }}
+          view={drawerTab}
+          onOrgChange={setOrgFilter}
+          onViewChange={handleViewChange}
         />
       </PageSection>
       <PageSection
@@ -249,6 +263,11 @@ export const VisionModelFleetPage = ({
         className="pf-v6-u-min-height"
         aria-label="AI Grid map and drawer"
       >
+        <Stack className="pf-v6-u-h-100">
+          <StackItem>
+            <Divider inset={{ default: 'insetNone' }} />
+          </StackItem>
+          <StackItem isFilled className="pf-v6-u-min-height">
         <Drawer isExpanded isInline isStatic className="pf-v6-u-h-100" id="vision-grid-layout">
           <DrawerContent
             className="pf-v6-u-h-100 pf-v6-u-min-height"
@@ -265,18 +284,24 @@ export const VisionModelFleetPage = ({
               >
                 <VisionGridPanel
                   tab={drawerTab}
-                  onTabChange={(nextTab) => {
-                    setDrawerTab(nextTab)
-                    setDetail({ kind: 'none' })
-                  }}
                   selection={detail}
                   highlight={highlight}
+                  objectTypes={objectTypes}
+                  onObjectTypeToggle={(type, isSelected) => {
+                    setObjectTypes((current) => toggleVisionObjectType(current, type, isSelected))
+                  }}
+                  search={listSearch}
+                  onSearchChange={setListSearch}
                   onClearSelection={clearDetail}
                   catalogItems={visibleCatalogItems}
                   selectedCluster={selectedCluster}
+                  selectedGateway={selectedGateway}
+                  selectedOffPlatform={selectedOffPlatform}
                   deployments={visibleDeployments}
                   clusterDeployments={clusterDeployments}
                   clusters={visibleClusters}
+                  gateways={visibleGateways}
+                  offPlatformModels={visibleOffPlatform}
                   onHighlightPreset={(presetId) => toggleHighlight({ kind: 'preset', presetId })}
                   onHighlightCatalogItem={(catalogItemId) =>
                     toggleHighlight({ kind: 'catalog-item', catalogItemId })
@@ -286,6 +311,12 @@ export const VisionModelFleetPage = ({
                   }
                   onHighlightDeployment={(deploymentId) =>
                     toggleHighlight({ kind: 'deployment', deploymentId })
+                  }
+                  onHighlightGateway={(gatewayId) =>
+                    toggleHighlight({ kind: 'gateway', gatewayId })
+                  }
+                  onHighlightOffPlatform={(modelId) =>
+                    toggleHighlight({ kind: 'off-platform-model', modelId })
                   }
                   onViewPreset={(presetId) => openDetails({ kind: 'preset', presetId })}
                   onViewCatalogItem={(catalogItemId) =>
@@ -297,11 +328,15 @@ export const VisionModelFleetPage = ({
                   onViewDeployment={(deploymentId) =>
                     openDetails({ kind: 'deployment', deploymentId }, 'services')
                   }
+                  onViewGateway={(gatewayId) =>
+                    openDetails({ kind: 'gateway', gatewayId }, 'services')
+                  }
+                  onViewOffPlatform={(modelId) =>
+                    openDetails({ kind: 'off-platform-model', modelId }, 'services')
+                  }
                   onPlacePreset={setPlacePresetId}
                   onAddOffering={setAddOfferingId}
                   onOpenCatalogItem={onOpenCatalogPreset}
-                  openSection={servicesSection}
-                  onOpenSection={setServicesSection}
                 />
               </DrawerPanelContent>
             }
@@ -321,22 +356,16 @@ export const VisionModelFleetPage = ({
                   <Divider />
                   <VisionFleetSummary
                     summary={summary}
-                    onActiveModelsClick={() => {
-                      setDrawerTab('services')
-                      setDetail({ kind: 'none' })
-                      setServicesSection('models')
-                    }}
-                    onActiveClustersClick={() => {
-                      setDrawerTab('services')
-                      setDetail({ kind: 'none' })
-                      setServicesSection('clusters')
-                    }}
+                    onActiveModelsClick={() => showServicesType('models')}
+                    onActiveClustersClick={() => showServicesType('clusters')}
                   />
                 </StackItem>
               </Stack>
             </DrawerContentBody>
           </DrawerContent>
         </Drawer>
+          </StackItem>
+        </Stack>
       </PageSection>
 
       <VisionPlaceModelModal
