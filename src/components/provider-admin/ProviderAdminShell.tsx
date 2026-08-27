@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
@@ -59,6 +59,7 @@ type ProviderAdminShellProps = {
   activeNavId?: ProviderAdminNavId
   onNavChange?: (navId: ProviderAdminNavId) => void
   workspaceTransition?: WorkspaceTransition
+  isContentFilled?: boolean
 }
 
 export function ProviderAdminShell({
@@ -68,6 +69,7 @@ export function ProviderAdminShell({
   activeNavId = 'overview',
   onNavChange,
   workspaceTransition = 'idle',
+  isContentFilled = false,
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
@@ -300,6 +302,17 @@ export function ProviderAdminShell({
         masthead={header}
         sidebar={sidebar}
         isManagedSidebar={showNavigation}
+        isContentFilled={isContentFilled}
+        style={
+          isContentFilled
+            ? ({
+                '--pf-v6-c-page__main-container--MaxHeight':
+                  'calc(100% - var(--pf-t--global--spacer--md))',
+                '--pf-v6-c-page__main-container--MarginBlockEnd':
+                  'var(--pf-t--global--spacer--md)',
+              } as CSSProperties)
+            : undefined
+        }
         className={[
           showNavigation ? 'provider-admin-shell-page' : undefined,
           workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
@@ -307,22 +320,26 @@ export function ProviderAdminShell({
           .filter(Boolean)
           .join(' ')}
       >
-        <PageSection
-          isWidthLimited={!showNavigation}
-          isCenterAligned={!showNavigation}
-          className="provider-admin-shell__main"
-        >
-          {workspaceTransition !== 'idle' ? (
-            <div
-              className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
-              aria-live="polite"
-              aria-busy="true"
-            >
-              <Spinner size="xl" aria-label="Publishing catalog item" />
-            </div>
-          ) : null}
-          <div className="provider-admin-shell__content">{children}</div>
-        </PageSection>
+        {workspaceTransition !== 'idle' ? (
+          <div
+            className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <Spinner size="xl" aria-label="Publishing catalog item" />
+          </div>
+        ) : null}
+        {isContentFilled ? (
+          children
+        ) : (
+          <PageSection
+            isWidthLimited={!showNavigation}
+            isCenterAligned={!showNavigation}
+            className="provider-admin-shell__main"
+          >
+            <div className="provider-admin-shell__content">{children}</div>
+          </PageSection>
+        )}
       </Page>
       <UserPreferencesModal
         isOpen={isPreferencesModalOpen}

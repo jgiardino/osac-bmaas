@@ -1,172 +1,193 @@
-import { Button, Label, Title } from '@patternfly/react-core'
+import { AngleLeftIcon } from '@patternfly/react-icons/dist/esm/icons/angle-left-icon'
 import {
-  VISION_CLUSTER_OFFERINGS,
-  VISION_MODEL_PRESETS,
-  getVisionOrg,
-  type VisionCluster,
-  type VisionDeployment,
-} from '../../../vision/fleetWorld'
-import { VisionClusterInspector } from './VisionClusterInspector'
+  Button,
+  DrawerHead,
+  DrawerPanelBody,
+  Flex,
+  FlexItem,
+  Stack,
+  StackItem,
+  Tab,
+  TabTitleText,
+  Tabs,
+  Title,
+} from '@patternfly/react-core'
+import type { ProviderCatalogDraft } from '../../../providerSetup/storage'
+import type { VisionCluster, VisionDeployment } from '../../../vision/fleetWorld'
+import {
+  getVisionDrawerSelectionLabel,
+  type VisionDrawerSelection,
+  type VisionDrawerTab,
+  type VisionGridAccordionSection,
+} from '../../../vision/visionDrawer'
+import { getVisionCatalogKebabItems } from './visionGridCatalogActions'
+import { VisionGridCatalogTab } from './VisionGridCatalogTab'
+import { VisionGridKebab } from './VisionGridKebab'
+import { VisionGridServicesTab } from './VisionGridServicesTab'
 
 type VisionGridPanelProps = {
-  selectedPresetId: string | null
-  selectedOfferingId: string | null
+  tab: VisionDrawerTab
+  onTabChange: (tab: VisionDrawerTab) => void
+  selection: VisionDrawerSelection
+  highlight: VisionDrawerSelection
+  onClearSelection: () => void
+  catalogItems: ProviderCatalogDraft[]
   selectedCluster: VisionCluster | null
   deployments: VisionDeployment[]
   clusterDeployments: VisionDeployment[]
   clusters: VisionCluster[]
-  onSelectPreset: (presetId: string) => void
-  onSelectOffering: (offeringId: string) => void
+  onHighlightPreset: (presetId: string) => void
+  onHighlightCatalogItem: (catalogItemId: string) => void
+  onHighlightCluster: (clusterId: string) => void
+  onHighlightDeployment: (deploymentId: string) => void
+  onViewPreset: (presetId: string) => void
+  onViewCatalogItem: (catalogItemId: string) => void
+  onViewCluster: (clusterId: string) => void
+  onViewDeployment: (deploymentId: string) => void
   onPlacePreset: (presetId: string) => void
   onAddOffering: (offeringId: string) => void
-  onOpenCatalogPreset: (catalogItemId: string) => void
+  onOpenCatalogItem: (catalogItemId: string) => void
+  openSection: VisionGridAccordionSection | null
+  onOpenSection: (section: VisionGridAccordionSection | null) => void
 }
 
 export const VisionGridPanel = ({
-  selectedPresetId,
-  selectedOfferingId,
+  tab,
+  onTabChange,
+  selection,
+  highlight,
+  onClearSelection,
+  catalogItems,
   selectedCluster,
   deployments,
   clusterDeployments,
   clusters,
-  onSelectPreset,
-  onSelectOffering,
+  onHighlightPreset,
+  onHighlightCatalogItem,
+  onHighlightCluster,
+  onHighlightDeployment,
+  onViewPreset,
+  onViewCatalogItem,
+  onViewCluster,
+  onViewDeployment,
   onPlacePreset,
   onAddOffering,
-  onOpenCatalogPreset,
+  onOpenCatalogItem,
+  openSection,
+  onOpenSection,
 }: VisionGridPanelProps) => {
-  const deployedByPreset = VISION_MODEL_PRESETS.map((preset) => {
-    const placed = deployments.filter((deployment) => deployment.presetId === preset.id)
-    return { preset, placed }
-  }).filter((entry) => entry.placed.length > 0)
+  const isDetail = selection.kind !== 'none'
+  const detailLabel =
+    getVisionDrawerSelectionLabel(selection, clusters, catalogItems, deployments) ?? 'Details'
+  const listLabel = tab === 'catalog' ? 'Catalog' : 'Services'
+  const kebabItems =
+    isDetail && tab === 'catalog'
+      ? getVisionCatalogKebabItems(
+          selection,
+          catalogItems,
+          onPlacePreset,
+          onAddOffering,
+          onOpenCatalogItem,
+        )
+      : []
+  const catalogTab = (
+    <VisionGridCatalogTab
+      mode={isDetail ? 'detail' : 'list'}
+      selection={selection}
+      highlight={highlight}
+      catalogItems={catalogItems}
+      deployments={deployments}
+      clusters={clusters}
+      onHighlightPreset={onHighlightPreset}
+      onHighlightCatalogItem={onHighlightCatalogItem}
+      onHighlightDeployment={onHighlightDeployment}
+      onViewPreset={onViewPreset}
+      onViewCatalogItem={onViewCatalogItem}
+      onViewDeployment={onViewDeployment}
+      onPlacePreset={onPlacePreset}
+      onAddOffering={onAddOffering}
+      onOpenCatalogItem={onOpenCatalogItem}
+    />
+  )
+  const servicesTab = (
+    <VisionGridServicesTab
+      mode={isDetail ? 'detail' : 'list'}
+      selection={selection}
+      highlight={highlight}
+      selectedCluster={selectedCluster}
+      clusterDeployments={clusterDeployments}
+      deployments={deployments}
+      clusters={clusters}
+      openSection={openSection}
+      onOpenSection={onOpenSection}
+      onHighlightCluster={onHighlightCluster}
+      onHighlightDeployment={onHighlightDeployment}
+      onViewCluster={onViewCluster}
+      onViewDeployment={onViewDeployment}
+    />
+  )
 
   return (
-    <div className="vision-grid-panel">
-      <section className="vision-grid-panel__section" aria-labelledby="vision-presets-title">
-        <Title headingLevel="h2" size="md" id="vision-presets-title">
-          Model presets
-        </Title>
-        <p className="vision-grid-panel__hint">
-          Select a preset to highlight its clusters. Use Place to choose where it runs.
-        </p>
-        <ul className="vision-grid-panel__list">
-          {VISION_MODEL_PRESETS.map((preset) => {
-            const isSelected = selectedPresetId === preset.id
-            return (
-              <li key={preset.id}>
-                <div
-                  className={[
-                    'vision-grid-panel__card',
-                    'vision-grid-panel__card--action',
-                    isSelected ? 'vision-grid-panel__card--selected' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                >
-                  <button
-                    type="button"
-                    className="vision-grid-panel__card-button"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectPreset(preset.id)}
+    <>
+      <DrawerHead className={isDetail ? undefined : 'vision-grid-drawer-head--tabs'}>
+        {isDetail ? (
+          <Flex
+            justifyContent={{ default: 'justifyContentSpaceBetween' }}
+            alignItems={{ default: 'alignItemsFlexStart' }}
+            flexWrap={{ default: 'nowrap' }}
+          >
+            <FlexItem grow={{ default: 'grow' }}>
+              <Stack>
+                <StackItem>
+                  <Button
+                    variant="link"
+                    isInline
+                    icon={<AngleLeftIcon />}
+                    onClick={onClearSelection}
+                    id="vision-grid-back"
                   >
-                    <span className="vision-grid-panel__card-name">{preset.displayName}</span>
-                    <span className="vision-grid-panel__card-meta">
-                      {preset.stableName} · {preset.gpuRequirement}
-                    </span>
-                  </button>
-                  <div className="vision-grid-panel__card-actions">
-                    <Button variant="secondary" size="sm" onClick={() => onPlacePreset(preset.id)}>
-                      Place
-                    </Button>
-                    {preset.catalogItemId ? (
-                      <Button
-                        variant="link"
-                        isInline
-                        size="sm"
-                        onClick={() => onOpenCatalogPreset(preset.catalogItemId as string)}
-                      >
-                        Catalog
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-
-      <section className="vision-grid-panel__section" aria-labelledby="vision-offerings-title">
-        <Title headingLevel="h2" size="md" id="vision-offerings-title">
-          Cluster offerings
-        </Title>
-        <p className="vision-grid-panel__hint">Spin up the clusters models will run on.</p>
-        <ul className="vision-grid-panel__list">
-          {VISION_CLUSTER_OFFERINGS.map((offering) => {
-            const isSelected = selectedOfferingId === offering.id
-            return (
-              <li key={offering.id}>
-                <div
-                  className={[
-                    'vision-grid-panel__card',
-                    'vision-grid-panel__card--action',
-                    isSelected ? 'vision-grid-panel__card--selected' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                >
-                  <button
-                    type="button"
-                    className="vision-grid-panel__card-button"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectOffering(offering.id)}
-                  >
-                    <span className="vision-grid-panel__card-name">{offering.name}</span>
-                    <span className="vision-grid-panel__card-meta">{offering.summary}</span>
-                  </button>
-                  <div className="vision-grid-panel__card-actions">
-                    <Button variant="secondary" size="sm" onClick={() => onAddOffering(offering.id)}>
-                      Add cluster
-                    </Button>
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-
-      <section className="vision-grid-panel__section" aria-labelledby="vision-deployed-title">
-        <Title headingLevel="h2" size="md" id="vision-deployed-title">
-          Deployed on the grid
-        </Title>
-        {deployedByPreset.length === 0 ? (
-          <p className="vision-grid-panel__hint">No models placed in the current filter.</p>
+                    {listLabel}
+                  </Button>
+                </StackItem>
+                <StackItem>
+                  <Title headingLevel="h2" size="lg" id="vision-grid-detail-title">
+                    {detailLabel}
+                  </Title>
+                </StackItem>
+              </Stack>
+            </FlexItem>
+            {kebabItems.length > 0 ? (
+              <FlexItem>
+                <VisionGridKebab
+                  id="vision-grid-detail-actions"
+                  label={`Actions for ${detailLabel}`}
+                  items={kebabItems}
+                />
+              </FlexItem>
+            ) : null}
+          </Flex>
         ) : (
-          <ul className="vision-grid-panel__list">
-            {deployedByPreset.map(({ preset, placed }) => {
-              const clusterNames = placed
-                .map((deployment) => clusters.find((cluster) => cluster.id === deployment.clusterId)?.name)
-                .filter(Boolean)
-                .join(', ')
-              const orgLabel = getVisionOrg(placed[0].orgId).label
-              return (
-                <li key={preset.id} className="vision-grid-panel__card">
-                  <span className="vision-grid-panel__card-name">{preset.stableName}</span>
-                  <span className="vision-grid-panel__card-meta">
-                    {orgLabel} · {clusterNames}
-                  </span>
-                  <Label color="green" isCompact>
-                    {placed.length} cluster{placed.length === 1 ? '' : 's'}
-                  </Label>
-                </li>
-              )
-            })}
-          </ul>
+          <Tabs
+            activeKey={tab}
+            onSelect={(_event, eventKey) => onTabChange(eventKey as VisionDrawerTab)}
+            id="vision-grid-drawer-tabs"
+            aria-label="Catalog and services"
+            isFilled
+          >
+            <Tab
+              eventKey="catalog"
+              title={<TabTitleText>Catalog</TabTitleText>}
+              id="vision-grid-catalog-tab"
+            />
+            <Tab
+              eventKey="services"
+              title={<TabTitleText>Services</TabTitleText>}
+              id="vision-grid-services-tab"
+            />
+          </Tabs>
         )}
-      </section>
-
-      <VisionClusterInspector cluster={selectedCluster} deployments={clusterDeployments} />
-    </div>
+      </DrawerHead>
+      <DrawerPanelBody>{tab === 'catalog' ? catalogTab : servicesTab}</DrawerPanelBody>
+    </>
   )
 }

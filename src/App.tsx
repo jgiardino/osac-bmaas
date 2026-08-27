@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ConceptualDesignSticker } from './components/ConceptualDesignSticker'
+import { PrototypeBar } from './components/uxd-prototype-bar/PrototypeBar'
+import './components/uxd-prototype-bar/prototype-bar.css'
 import { BmaasLandingPage } from './pages/BmaasLandingPage'
 import { IdpManagerSetupPage } from './pages/IdpManagerSetupPage'
 import { IdpManagerWorkspacePage } from './pages/IdpManagerWorkspacePage'
@@ -26,6 +28,7 @@ function RedirectNorthstarIdpManager() {
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <PrototypeBar />
       <ConceptualDesignSticker />
       <Routes>
         <Route path="/" element={<BmaasLandingPage />} />

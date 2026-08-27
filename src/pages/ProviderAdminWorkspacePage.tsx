@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { ProviderAdminShell } from '../components/provider-admin/ProviderAdminShell'
@@ -538,6 +538,8 @@ export function ProviderAdminWorkspacePage() {
       case 'vision-model-fleet':
         return (
           <VisionModelFleetPage
+            key={searchParams.get('scenario') || 'default'}
+            catalogItems={displayCatalogItems}
             onOpenCatalogPreset={(catalogItemId) => {
               handleNavChange('catalog')
               syncWorkspaceCatalogItemParam(setSearchParams, catalogItemId)
@@ -664,9 +666,7 @@ export function ProviderAdminWorkspacePage() {
       )
     }
 
-    return (
-      <div key={navContentKey}>{renderPostSetupContent()}</div>
-    )
+    return <Fragment key={navContentKey}>{renderPostSetupContent()}</Fragment>
   }
 
   return (
@@ -676,6 +676,7 @@ export function ProviderAdminWorkspacePage() {
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       workspaceTransition={workspaceTransition}
+      isContentFilled={setupComplete && activeNavId === MODEL_FLEET_VISION_NAV_ID}
     >
       {renderWorkspaceContent()}
     </ProviderAdminShell>

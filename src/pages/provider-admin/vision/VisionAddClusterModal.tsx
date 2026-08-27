@@ -40,11 +40,11 @@ export const VisionAddClusterModal = ({
       onClose={onClose}
       aria-labelledby="vision-add-cluster-title"
     >
-      <ModalHeader title="Add cluster" labelId="vision-add-cluster-title" />
+      <ModalHeader title="Launch instance" labelId="vision-add-cluster-title" />
       <ModalBody>
         <Content component="p">
-          Spin up <strong>{offering?.name ?? 'a cluster'}</strong> at a site. Models can be placed
-          on it after it is available.
+          Launch <strong>{offering?.name ?? 'a cluster'}</strong> at a site. Models can be placed on
+          it after it is available.
         </Content>
         <Form className="vision-place-on-sites-form">
           <FormGroup label="Site" fieldId="vision-add-cluster-site" isRequired>
@@ -67,7 +67,7 @@ export const VisionAddClusterModal = ({
       </ModalBody>
       <ModalFooter>
         <Button variant="primary" onClick={() => onAdd(siteId)}>
-          Add to grid
+          Launch instance
         </Button>
         <Button variant="link" onClick={onClose}>
           Cancel

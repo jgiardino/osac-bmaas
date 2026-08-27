@@ -21,6 +21,8 @@ export type VisionSite = {
   id: VisionSiteId
   label: string
   regionLabel: string
+  lat: number
+  lng: number
   x: number
   y: number
 }
@@ -107,10 +109,42 @@ export const VISION_GATEWAYS: VisionGateway[] = [
 ]
 
 export const VISION_SITES: VisionSite[] = [
-  { id: 'us-west-1-dc-a', label: 'us-west-1-dc-a', regionLabel: 'US West', x: 16, y: 40 },
-  { id: 'us-east-1-dc-b', label: 'us-east-1-dc-b', regionLabel: 'US East', x: 34, y: 38 },
-  { id: 'us-central-1-dc-a', label: 'us-central-1-dc-a', regionLabel: 'US Central', x: 26, y: 36 },
-  { id: 'eu-west-1-dc-a', label: 'eu-west-1-dc-a', regionLabel: 'EU West', x: 58, y: 34 },
+  {
+    id: 'us-west-1-dc-a',
+    label: 'us-west-1-dc-a',
+    regionLabel: 'US West',
+    lat: 37.3382,
+    lng: -121.8863,
+    x: 16,
+    y: 40,
+  },
+  {
+    id: 'us-east-1-dc-b',
+    label: 'us-east-1-dc-b',
+    regionLabel: 'US East',
+    lat: 39.0438,
+    lng: -77.4874,
+    x: 34,
+    y: 38,
+  },
+  {
+    id: 'us-central-1-dc-a',
+    label: 'us-central-1-dc-a',
+    regionLabel: 'US Central',
+    lat: 41.8781,
+    lng: -87.6298,
+    x: 26,
+    y: 36,
+  },
+  {
+    id: 'eu-west-1-dc-a',
+    label: 'eu-west-1-dc-a',
+    regionLabel: 'EU West',
+    lat: 53.3498,
+    lng: -6.2603,
+    x: 58,
+    y: 34,
+  },
 ]
 
 export const VISION_MODEL_PRESETS: VisionModelPreset[] = [
@@ -403,6 +437,18 @@ export const getVisionGateway = (id: VisionGatewayId): VisionGateway => {
   return gateway
 }
 
+export const getClusterLatLng = (
+  cluster: VisionCluster,
+  all: VisionCluster[],
+): [number, number] => {
+  const site = getVisionSite(cluster.siteId)
+  const offset = all
+    .filter((entry) => entry.siteId === cluster.siteId)
+    .findIndex((entry) => entry.id === cluster.id)
+  const index = Math.max(0, offset)
+  return [site.lat - (index % 2) * 0.32, site.lng + index * 0.42]
+}
+
 export const getVisionSite = (id: VisionSiteId): VisionSite => {
   const site = VISION_SITES.find((entry) => entry.id === id)
   if (!site) {
@@ -509,6 +555,17 @@ export const clustersForPreset = (
   presetId: string,
 ): string[] =>
   deployments.filter((deployment) => deployment.presetId === presetId).map((deployment) => deployment.clusterId)
+
+export const clustersForOffering = (
+  clusters: VisionCluster[],
+  offering: VisionClusterOffering,
+): string[] => {
+  if (offering.gpuCount === 0) {
+    return clusters.filter((cluster) => cluster.gpuCount === 0).map((cluster) => cluster.id)
+  }
+
+  return clusters.filter((cluster) => cluster.gpuCount > 0).map((cluster) => cluster.id)
+}
 
 export const createClusterFromOffering = (
   offering: VisionClusterOffering,

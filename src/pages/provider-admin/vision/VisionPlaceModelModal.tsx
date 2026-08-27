@@ -53,7 +53,7 @@ export const VisionPlaceModelModal = ({
       onClose={onClose}
       aria-labelledby="vision-place-model-title"
     >
-      <ModalHeader title="Place model" labelId="vision-place-model-title" />
+      <ModalHeader title="Place on AI Grid" labelId="vision-place-model-title" />
       <ModalBody>
         <Content component="p">
           Choose clusters for <strong>{preset?.displayName ?? 'this preset'}</strong>. This is a
@@ -86,7 +86,7 @@ export const VisionPlaceModelModal = ({
           isDisabled={selectedIds.length === 0}
           onClick={() => onPlace(selectedIds)}
         >
-          Place on grid
+          Place on AI Grid
         </Button>
         <Button variant="link" onClick={onClose}>
           Cancel

@@ -1,0 +1,54 @@
+{
+  "id": "ai-grid-model-fleet",
+  "title": "AI Grid fleet home (OSAC future vision)",
+  "jiraBaseUrl": "https://issues.example.com/browse/",
+  "sources": [
+    {
+      "kind": "description",
+      "label": "Feature description"
+    },
+    {
+      "kind": "description",
+      "key": "ai-grid-model-fleet",
+      "label": "Myriam Geo Dashboard PRD + vision brief",
+      "url": "https://docs.google.com/document/d/1qfFN0btT5yHv4GpzKO0rns0JM_6pEo_3LNiYhdv9MPE/edit?tab=t.106c1grgcg3q"
+    }
+  ],
+  "views": {
+    "prototype": "http://127.0.0.1:5184",
+    "eval": "/evals/ai-grid-model-fleet/"
+  },
+  "scenarios": [
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "default",
+      "name": "Full managed fleet",
+      "default": true
+    },
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "nsb-only",
+      "name": "North Summit Bank only"
+    },
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "bluesolace-only",
+      "name": "BlueSolace only"
+    },
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "nsb-retail-gateway",
+      "name": "NSB retail gateway"
+    },
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "unavailable-cluster",
+      "name": "Unavailable cluster selected"
+    },
+    {
+      "route": "/provider/workspace?vision=model-fleet&nav=vision-model-fleet",
+      "id": "empty-grid",
+      "name": "Empty grid"
+    }
+  ]
+}

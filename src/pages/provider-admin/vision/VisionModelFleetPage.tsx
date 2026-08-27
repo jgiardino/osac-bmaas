@@ -1,5 +1,17 @@
-import { useMemo, useState } from 'react'
-import { ProviderAdminWorkspacePageHeader } from '../../../components/provider-admin/ProviderAdminWorkspacePageHeader'
+import { useMemo, useState, type CSSProperties } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerContentBody,
+  DrawerPanelContent,
+  Divider,
+  PageSection,
+  Stack,
+  StackItem,
+} from '@patternfly/react-core'
+import type { ProviderCatalogDraft } from '../../../providerSetup/storage'
+import { getVisionScenarioSeed } from '../../../vision/fleetScenarios'
 import {
   clusterMatchesFilters,
   clustersForPreset,
@@ -14,7 +26,6 @@ import {
   gatewaysForOrgFilter,
   getVisionOffering,
   getVisionPreset,
-  pathMatchesFilters,
   summarizeFleet,
   type VisionCluster,
   type VisionDeployment,
@@ -25,6 +36,15 @@ import {
   type VisionServingPath,
   type VisionSiteId,
 } from '../../../vision/fleetWorld'
+import {
+  relatedClusterIdsForSelection,
+  seedVisionDrawerSelection,
+  visionSelectionsEqual,
+  type VisionDrawerSelection,
+  type VisionDrawerTab,
+  type VisionGridAccordionSection,
+} from '../../../vision/visionDrawer'
+import { catalogItemVisibleForTenant } from '../../../vision/visionCatalogRows'
 import { VisionAddClusterModal } from './VisionAddClusterModal'
 import { VisionFleetMap } from './VisionFleetMap'
 import { VisionFleetSummary } from './VisionFleetSummary'
@@ -33,19 +53,39 @@ import { VisionGridPanel } from './VisionGridPanel'
 import { VisionPlaceModelModal } from './VisionPlaceModelModal'
 
 type VisionModelFleetPageProps = {
+  catalogItems: ProviderCatalogDraft[]
   onOpenCatalogPreset: (catalogItemId: string) => void
 }
 
-export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPageProps) => {
-  const [clusters, setClusters] = useState<VisionCluster[]>(() => createInitialClusters())
-  const [deployments, setDeployments] = useState<VisionDeployment[]>(() => createInitialDeployments())
-  const [paths, setPaths] = useState<VisionServingPath[]>(() => createInitialPaths())
-  const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>('all')
-  const [gatewayFilter, setGatewayFilter] = useState<VisionGatewayFilter>('all')
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>('ocp-us-east-1')
-  const [selectedPathId, setSelectedPathId] = useState<string | null>(null)
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>('granite-3b')
-  const [selectedOfferingId, setSelectedOfferingId] = useState<string | null>(null)
+export const VisionModelFleetPage = ({
+  catalogItems,
+  onOpenCatalogPreset,
+}: VisionModelFleetPageProps) => {
+  const [searchParams] = useSearchParams()
+  const seed = getVisionScenarioSeed(searchParams)
+  const [clusters, setClusters] = useState<VisionCluster[]>(() =>
+    seed.emptyGrid ? [] : createInitialClusters(),
+  )
+  const [deployments, setDeployments] = useState<VisionDeployment[]>(() =>
+    seed.emptyGrid ? [] : createInitialDeployments(),
+  )
+  const [paths, setPaths] = useState<VisionServingPath[]>(() =>
+    seed.emptyGrid ? [] : createInitialPaths(),
+  )
+  const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>(seed.orgFilter)
+  const [gatewayFilter, setGatewayFilter] = useState<VisionGatewayFilter>(seed.gatewayFilter)
+  const [highlight, setHighlight] = useState<VisionDrawerSelection>(() =>
+    seedVisionDrawerSelection(seed),
+  )
+  const [detail, setDetail] = useState<VisionDrawerSelection>(() =>
+    seedVisionDrawerSelection(seed),
+  )
+  const [drawerTab, setDrawerTab] = useState<VisionDrawerTab>(() =>
+    seed.selectedClusterId ? 'services' : 'catalog',
+  )
+  const [servicesSection, setServicesSection] = useState<VisionGridAccordionSection | null>(
+    'clusters',
+  )
   const [placePresetId, setPlacePresetId] = useState<string | null>(null)
   const [addOfferingId, setAddOfferingId] = useState<string | null>(null)
 
@@ -60,28 +100,41 @@ export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPa
       ),
     [deployments, gatewayFilter, orgFilter],
   )
-  const visiblePaths = useMemo(
-    () =>
-      paths.filter((path) => pathMatchesFilters(path, clusters, orgFilter, gatewayFilter)),
-    [clusters, gatewayFilter, orgFilter, paths],
+  const visibleCatalogItems = useMemo(
+    () => catalogItems.filter((item) => catalogItemVisibleForTenant(item, orgFilter)),
+    [catalogItems, orgFilter],
   )
   const summary = useMemo(
     () => summarizeFleet(visibleClusters, visibleDeployments),
     [visibleClusters, visibleDeployments],
   )
   const selectedCluster =
-    visibleClusters.find((cluster) => cluster.id === selectedClusterId) ??
-    visibleClusters[0] ??
-    null
-  const resolvedPathId = visiblePaths.some((path) => path.id === selectedPathId)
-    ? selectedPathId
-    : null
+    detail.kind === 'cluster'
+      ? (visibleClusters.find((cluster) => cluster.id === detail.clusterId) ??
+        clusters.find((cluster) => cluster.id === detail.clusterId) ??
+        null)
+      : null
   const clusterDeployments = selectedCluster
     ? deploymentsOnCluster(visibleDeployments, selectedCluster.id)
     : []
-  const highlightedClusterIds = selectedPresetId
-    ? clustersForPreset(visibleDeployments, selectedPresetId)
-    : []
+  const relatedClusterIds = relatedClusterIdsForSelection(
+    highlight,
+    visibleClusters,
+    visibleDeployments,
+    visibleCatalogItems,
+  )
+  const selectedDeployment =
+    highlight.kind === 'deployment'
+      ? (visibleDeployments.find((entry) => entry.id === highlight.deploymentId) ?? null)
+      : null
+  const selectedClusterId =
+    highlight.kind === 'cluster'
+      ? highlight.clusterId
+      : (selectedDeployment?.clusterId ?? null)
+  const highlightedClusterIds =
+    highlight.kind === 'cluster' || highlight.kind === 'deployment' ? [] : relatedClusterIds
+  const isolateRelatedPins =
+    relatedClusterIds.length > 0 && relatedClusterIds.length < visibleClusters.length
   const placePreset = placePresetId ? (getVisionPreset(placePresetId) ?? null) : null
   const addOffering = addOfferingId ? (getVisionOffering(addOfferingId) ?? null) : null
   const initiallySelectedForPlace = placePresetId
@@ -90,13 +143,28 @@ export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPa
       )
     : []
 
+  const toggleHighlight = (next: VisionDrawerSelection) => {
+    setHighlight((current) => (visionSelectionsEqual(current, next) ? { kind: 'none' } : next))
+  }
+
+  const openDetails = (next: VisionDrawerSelection, tab?: VisionDrawerTab) => {
+    setHighlight(next)
+    setDetail(next)
+    if (tab) {
+      setDrawerTab(tab)
+    }
+  }
+
   const handleOrgChange = (value: VisionOrgFilter) => {
     setOrgFilter(value)
     const allowed = gatewaysForOrgFilter(value)
     if (gatewayFilter !== 'all' && !allowed.some((gateway) => gateway.id === gatewayFilter)) {
       setGatewayFilter('all')
     }
-    setSelectedPathId(null)
+  }
+
+  const clearDetail = () => {
+    setDetail({ kind: 'none' })
   }
 
   const placeOnClusters = (presetId: string, clusterIds: string[]) => {
@@ -126,14 +194,20 @@ export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPa
 
     setDeployments(nextDeployments)
     setPaths(nextPaths)
-    setSelectedPresetId(presetId)
-    setSelectedClusterId(clusterIds[clusterIds.length - 1] ?? selectedClusterId)
+    setHighlight({ kind: 'preset', presetId })
+    setDetail({ kind: 'preset', presetId })
     setPlacePresetId(null)
   }
 
-  const handleSelectCluster = (clusterId: string) => {
-    setSelectedClusterId(clusterId)
-    setSelectedPathId(null)
+  const handlePinCluster = (clusterId: string) => {
+    const next: VisionDrawerSelection = { kind: 'cluster', clusterId }
+    if (detail.kind === 'cluster' && detail.clusterId === clusterId) {
+      setDetail({ kind: 'none' })
+      setHighlight({ kind: 'none' })
+      setDrawerTab('services')
+      return
+    }
+    openDetails(next, 'services')
   }
 
   const handleAddCluster = (siteId: VisionSiteId) => {
@@ -145,75 +219,125 @@ export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPa
     const fallbackOrg: VisionOrgId = orgFilter === 'all' ? 'nsb' : orgFilter
     const allowedGateways = gatewaysForOrgFilter(fallbackOrg)
     const gatewayId: VisionGatewayId =
-      gatewayFilter === 'all'
-        ? (allowedGateways[0]?.id ?? 'nsb-retail')
-        : gatewayFilter
+      gatewayFilter === 'all' ? (allowedGateways[0]?.id ?? 'nsb-retail') : gatewayFilter
 
     const created = createClusterFromOffering(offering, siteId, fallbackOrg, gatewayId, clusters)
     setClusters((current) => [...current, created])
-    setSelectedClusterId(created.id)
-    setSelectedOfferingId(null)
+    openDetails({ kind: 'cluster', clusterId: created.id }, 'services')
     setAddOfferingId(null)
   }
 
   return (
-    <div className="provider-admin-workspace-page vision-model-fleet">
-      <ProviderAdminWorkspacePageHeader
-        kicker="Provider workspace"
-        title="AI Grid"
-        lede="Geographic view of clusters and models Vertexa manages. Filter by organization or gateway. Place presets or spin up clusters without leaving this console."
-      />
-
-      <VisionGridFilters
-        orgFilter={orgFilter}
-        gatewayFilter={gatewayFilter}
-        onOrgChange={handleOrgChange}
-        onGatewayChange={(value) => {
-          setGatewayFilter(value)
-          setSelectedPathId(null)
-        }}
-      />
-
-      <div className="vision-model-fleet__canvas">
-        <div className="vision-model-fleet__map-column">
-          <VisionFleetMap
-            clusters={visibleClusters}
-            paths={visiblePaths}
-            selectedClusterId={selectedCluster?.id ?? null}
-            selectedPathId={resolvedPathId}
-            highlightedClusterIds={highlightedClusterIds}
-            onSelectCluster={handleSelectCluster}
-            onSelectPath={(pathId) => {
-              setSelectedPathId(pathId)
-              const path = paths.find((entry) => entry.id === pathId)
-              if (path) {
-                setSelectedPresetId(path.presetId)
-                setSelectedClusterId(path.toClusterId)
-              }
-            }}
-          />
-          <VisionFleetSummary summary={summary} />
-        </div>
-        <VisionGridPanel
-          selectedPresetId={selectedPresetId}
-          selectedOfferingId={selectedOfferingId}
-          selectedCluster={selectedCluster}
-          deployments={visibleDeployments}
-          clusterDeployments={clusterDeployments}
-          clusters={visibleClusters}
-          onSelectPreset={(presetId) => {
-            setSelectedPresetId((current) => (current === presetId ? null : presetId))
-            setSelectedOfferingId(null)
+    <>
+      <PageSection
+        padding={{ default: 'noPadding' }}
+        aria-label="Tenant and gateway filters"
+      >
+        <VisionGridFilters
+          orgFilter={orgFilter}
+          gatewayFilter={gatewayFilter}
+          onOrgChange={handleOrgChange}
+          onGatewayChange={(value) => {
+            setGatewayFilter(value)
           }}
-          onSelectOffering={(offeringId) => {
-            setSelectedOfferingId((current) => (current === offeringId ? null : offeringId))
-            setSelectedPresetId(null)
-          }}
-          onPlacePreset={setPlacePresetId}
-          onAddOffering={setAddOfferingId}
-          onOpenCatalogPreset={onOpenCatalogPreset}
         />
-      </div>
+      </PageSection>
+      <PageSection
+        isFilled
+        padding={{ default: 'noPadding' }}
+        hasBodyWrapper={false}
+        className="pf-v6-u-min-height"
+        aria-label="AI Grid map and drawer"
+      >
+        <Drawer isExpanded isInline isStatic className="pf-v6-u-h-100" id="vision-grid-layout">
+          <DrawerContent
+            className="pf-v6-u-h-100 pf-v6-u-min-height"
+            panelContent={
+              <DrawerPanelContent
+                widths={{ default: 'width_33' }}
+                id="vision-grid-drawer"
+                style={
+                  {
+                    '--pf-v6-c-drawer__panel--MaxHeight': '100%',
+                    overflow: 'hidden',
+                  } as CSSProperties
+                }
+              >
+                <VisionGridPanel
+                  tab={drawerTab}
+                  onTabChange={(nextTab) => {
+                    setDrawerTab(nextTab)
+                    setDetail({ kind: 'none' })
+                  }}
+                  selection={detail}
+                  highlight={highlight}
+                  onClearSelection={clearDetail}
+                  catalogItems={visibleCatalogItems}
+                  selectedCluster={selectedCluster}
+                  deployments={visibleDeployments}
+                  clusterDeployments={clusterDeployments}
+                  clusters={visibleClusters}
+                  onHighlightPreset={(presetId) => toggleHighlight({ kind: 'preset', presetId })}
+                  onHighlightCatalogItem={(catalogItemId) =>
+                    toggleHighlight({ kind: 'catalog-item', catalogItemId })
+                  }
+                  onHighlightCluster={(clusterId) =>
+                    toggleHighlight({ kind: 'cluster', clusterId })
+                  }
+                  onHighlightDeployment={(deploymentId) =>
+                    toggleHighlight({ kind: 'deployment', deploymentId })
+                  }
+                  onViewPreset={(presetId) => openDetails({ kind: 'preset', presetId })}
+                  onViewCatalogItem={(catalogItemId) =>
+                    openDetails({ kind: 'catalog-item', catalogItemId })
+                  }
+                  onViewCluster={(clusterId) =>
+                    openDetails({ kind: 'cluster', clusterId }, 'services')
+                  }
+                  onViewDeployment={(deploymentId) =>
+                    openDetails({ kind: 'deployment', deploymentId }, 'services')
+                  }
+                  onPlacePreset={setPlacePresetId}
+                  onAddOffering={setAddOfferingId}
+                  onOpenCatalogItem={onOpenCatalogPreset}
+                  openSection={servicesSection}
+                  onOpenSection={setServicesSection}
+                />
+              </DrawerPanelContent>
+            }
+          >
+            <DrawerContentBody className="pf-v6-u-h-100 pf-v6-u-min-height">
+              <Stack className="pf-v6-u-h-100">
+                <StackItem isFilled className="pf-v6-u-min-height">
+                  <VisionFleetMap
+                    clusters={visibleClusters}
+                    selectedClusterId={selectedClusterId}
+                    highlightedClusterIds={highlightedClusterIds}
+                    isolateRelatedPins={isolateRelatedPins}
+                    onSelectCluster={handlePinCluster}
+                  />
+                </StackItem>
+                <StackItem>
+                  <Divider />
+                  <VisionFleetSummary
+                    summary={summary}
+                    onActiveModelsClick={() => {
+                      setDrawerTab('services')
+                      setDetail({ kind: 'none' })
+                      setServicesSection('models')
+                    }}
+                    onActiveClustersClick={() => {
+                      setDrawerTab('services')
+                      setDetail({ kind: 'none' })
+                      setServicesSection('clusters')
+                    }}
+                  />
+                </StackItem>
+              </Stack>
+            </DrawerContentBody>
+          </DrawerContent>
+        </Drawer>
+      </PageSection>
 
       <VisionPlaceModelModal
         key={placePresetId ?? 'place-closed'}
@@ -235,6 +359,6 @@ export const VisionModelFleetPage = ({ onOpenCatalogPreset }: VisionModelFleetPa
         onClose={() => setAddOfferingId(null)}
         onAdd={handleAddCluster}
       />
-    </div>
+    </>
   )
 }
