@@ -1,36 +1,50 @@
 import {
-  Button,
   Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  Flex,
+  FlexItem,
   Stack,
   StackItem,
 } from '@patternfly/react-core'
 import {
-  getVisionGateway,
+  formatModelCount,
   getVisionOrg,
   getVisionPreset,
-  getVisionSite,
-  homeMaasOrigin,
   isDeploymentMaas,
-  visibleGatewaysById,
+  modelsOnGatewayCount,
   type VisionCluster,
   type VisionDeployment,
   type VisionGateway,
+  type VisionOffPlatformModel,
 } from '../../../vision/fleetWorld'
 import type { VisionDrawerSelection } from '../../../vision/visionDrawer'
+import { VisionGridClusterCard } from './VisionGridClusterCard'
+import { VisionGridClusterIdLabel } from './VisionGridClusterIdLabel'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
-import { VisionGridModelLabels } from './VisionGridModelLabels'
+import { VisionGridGatewayKindLabels } from './VisionGridGatewayKindLabels'
+import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
+import { VisionGridModelListBadge } from './VisionGridModelListBadge'
+import { VisionGridStatusLabel } from './VisionGridStatusLabel'
+import { VisionGridUnassignedLabel } from './VisionGridUnassignedLabel'
+import { visionFleetModelSpecNodes } from './visionFleetModelSpec'
+import {
+  gatewayRelationsForDeployment,
+  visionAdminScopeFooter,
+  visionClusterDisplayName,
+} from './visionGridServiceMeta'
 
 type VisionServiceModelInspectorProps = {
   deploymentId: string
   deployments: VisionDeployment[]
+  offPlatformModels: VisionOffPlatformModel[]
   clusters: VisionCluster[]
   gateways: VisionGateway[]
   highlight: VisionDrawerSelection
+  onHighlightCluster: (clusterId: string) => void
   onHighlightDeployment: (deploymentId: string) => void
   onHighlightGateway: (gatewayId: VisionGateway['id']) => void
   onViewCluster: (clusterId: string) => void
@@ -41,9 +55,11 @@ type VisionServiceModelInspectorProps = {
 export const VisionServiceModelInspector = ({
   deploymentId,
   deployments,
+  offPlatformModels,
   clusters,
   gateways,
   highlight,
+  onHighlightCluster,
   onHighlightDeployment,
   onHighlightGateway,
   onViewCluster,
@@ -59,116 +75,85 @@ export const VisionServiceModelInspector = ({
 
   const preset = getVisionPreset(deployment.presetId)
   const cluster = clusters.find((entry) => entry.id === deployment.clusterId)
-  const attachedGateway = deployment.attachedGatewayId
-    ? (gateways.find((gateway) => gateway.id === deployment.attachedGatewayId) ??
-      getVisionGateway(deployment.attachedGatewayId))
-    : undefined
-  const maasGateways = visibleGatewaysById(deployment.maasGatewayIds, gateways)
-  const localMaasGateways = maasGateways.filter(
-    (gateway) => gateway.clusterId === deployment.clusterId,
-  )
-  const externalMaasGateways = maasGateways.filter(
-    (gateway) => gateway.clusterId !== deployment.clusterId,
-  )
+  const relations = gatewayRelationsForDeployment(deployment, gateways)
   const others = deployments.filter(
     (entry) => entry.presetId === deployment.presetId && entry.id !== deployment.id,
   )
   const isMaas = isDeploymentMaas(deployment)
-  const origin = homeMaasOrigin(deployment)
 
   return (
     <Stack hasGutter>
       <StackItem>
-        <VisionGridModelLabels
-          idPrefix="vision-service-model"
-          isMaas={isMaas}
-          origin={origin}
-          status={deployment.status}
-        />
+        <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+          <FlexItem>
+            <VisionGridStatusLabel id="vision-service-model-status" status={deployment.status} />
+          </FlexItem>
+        </Flex>
       </StackItem>
       <StackItem>
         <DescriptionList isCompact aria-label="Model instance details">
           <DescriptionListGroup>
-            <DescriptionListTerm>Offering</DescriptionListTerm>
+            <DescriptionListTerm>Display name</DescriptionListTerm>
             <DescriptionListDescription>
               {preset?.displayName ?? deployment.presetId}
             </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
-            <DescriptionListTerm>Stable name</DescriptionListTerm>
+            <DescriptionListTerm>Model ID</DescriptionListTerm>
             <DescriptionListDescription>
-              {preset?.stableName ?? deployment.presetId}
+              {preset?.modelId ?? deployment.presetId}
             </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
-            <DescriptionListTerm>Cluster</DescriptionListTerm>
-            <DescriptionListDescription>
-              {cluster ? (
-                <Button variant="link" isInline onClick={() => onViewCluster(cluster.id)}>
-                  {cluster.name}
-                </Button>
-              ) : (
-                deployment.clusterId
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          {cluster ? (
-            <>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Site</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {getVisionSite(cluster.siteId).regionLabel}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>Tenant</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {getVisionOrg(cluster.orgId).label}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            </>
-          ) : null}
-          <DescriptionListGroup>
-            <DescriptionListTerm>Gateway on this cluster</DescriptionListTerm>
-            <DescriptionListDescription>
-              {attachedGateway ? (
-                <Button
-                  variant="link"
-                  isInline
-                  onClick={() => {
-                    onHighlightGateway(attachedGateway.id)
-                    onViewGateway(attachedGateway.id)
-                  }}
-                >
-                  {attachedGateway.label}
-                </Button>
-              ) : (
-                'None'
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Replicas</DescriptionListTerm>
+            <DescriptionListTerm>Size</DescriptionListTerm>
             <DescriptionListDescription>{deployment.replicas}</DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
             <DescriptionListTerm>Traffic</DescriptionListTerm>
             <DescriptionListDescription>{deployment.reqPerMin} req/min</DescriptionListDescription>
           </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Tenant</DescriptionListTerm>
+            <DescriptionListDescription>{getVisionOrg(deployment.orgId).label}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Project</DescriptionListTerm>
+            <DescriptionListDescription>{deployment.projectName}</DescriptionListDescription>
+          </DescriptionListGroup>
         </DescriptionList>
       </StackItem>
-      {!isMaas && attachedGateway ? (
+      <StackItem>
+        <VisionGridCountHeading
+          id="vision-service-model-cluster"
+          title="Cluster"
+          count={cluster ? 1 : 0}
+        />
+      </StackItem>
+      {cluster ? (
         <StackItem>
-          <Content component="p">
-            Connected to gateway {attachedGateway.label}. Not available as a service yet.
-          </Content>
+          <VisionGridClusterCard
+            id={`vision-service-model-cluster-${cluster.id}`}
+            cluster={cluster}
+            isSelected={highlight.kind === 'cluster' && highlight.clusterId === cluster.id}
+            onSelect={() => onHighlightCluster(cluster.id)}
+            onViewDetails={() => onViewCluster(cluster.id)}
+          />
+        </StackItem>
+      ) : (
+        <StackItem>
+          <Content component="p">{deployment.clusterId}</Content>
+        </StackItem>
+      )}
+      {!isMaas && relations.length > 0 ? (
+        <StackItem>
+          <Content component="p">Connected to a gateway. Not published as MaaS yet.</Content>
           <Content component="p" className="pf-v6-u-text-color-subtle">
             Next, you will be able to make this instance available as a service by selecting a
             gateway.
           </Content>
         </StackItem>
       ) : null}
-      {!isMaas && !attachedGateway ? (
+      {!isMaas && relations.length === 0 ? (
         <StackItem>
           <Content component="p">
             This instance is not connected to a gateway and is not available as a service.
@@ -179,56 +164,68 @@ export const VisionServiceModelInspector = ({
           </Content>
         </StackItem>
       ) : null}
-      {isMaas ? (
-        <>
-          <StackItem>
-            <VisionGridCountHeading
-              id="vision-service-model-maas-gateways"
-              title="Available as a service on"
-              count={maasGateways.length}
-            />
-          </StackItem>
-          {localMaasGateways.length === 0 && externalMaasGateways.length === 0 ? (
-            <StackItem>
-              <Content component="p">
-                This instance is available as a service on gateways you cannot see with the current
-                tenant filter.
-              </Content>
-            </StackItem>
-          ) : (
-            [...localMaasGateways, ...externalMaasGateways].map((gateway) => {
-              const gatewayCluster = clusters.find((entry) => entry.id === gateway.clusterId)
-              const originOnGateway =
-                gateway.clusterId === deployment.clusterId ? 'internal' : 'external'
-              return (
-                <StackItem key={gateway.id}>
-                  <VisionGridDrawerCard
-                    id={`vision-service-model-maas-${gateway.id}`}
-                    name={gateway.label}
-                    secondary={gateway.hostname}
-                    specRows={[{ label: 'Cluster', value: gatewayCluster?.name ?? gateway.clusterId }]}
-                    footerRows={[{ label: 'Tenant', value: getVisionOrg(gateway.orgId).label }]}
-                    isSelected={highlight.kind === 'gateway' && highlight.gatewayId === gateway.id}
-                    onSelect={() => onHighlightGateway(gateway.id)}
-                    onViewDetails={() => onViewGateway(gateway.id)}
-                    badge={
-                      <VisionGridModelLabels
-                        idPrefix={`vision-service-model-maas-${gateway.id}`}
-                        isMaas
-                        origin={originOnGateway}
-                      />
-                    }
+      <StackItem>
+        <VisionGridCountHeading
+          id="vision-service-model-maas-gateways"
+          title="Gateway"
+          count={relations.length}
+        />
+      </StackItem>
+      {relations.length === 0 ? (
+        <StackItem>
+          <VisionGridUnassignedLabel id="vision-service-model-unassigned" />
+        </StackItem>
+      ) : (
+        relations.map((relation) => {
+          return (
+            <StackItem key={relation.gateway.id}>
+              <VisionGridDrawerCard
+                id={`vision-service-model-maas-${relation.gateway.id}`}
+                name={relation.gateway.label}
+                secondary={relation.gateway.hostname}
+                specNodes={[
+                  ...(relation.origin === 'other-cluster'
+                    ? [
+                        {
+                          label: 'Cluster',
+                          value: (
+                            <VisionGridClusterIdLabel
+                              id={`vision-service-model-maas-${relation.gateway.id}-cluster`}
+                              clusterId={relation.gateway.clusterId}
+                              variant="filled"
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
+                  {
+                    label: 'Models',
+                    value: formatModelCount(
+                      modelsOnGatewayCount(deployments, offPlatformModels, relation.gateway.id),
+                    ),
+                  },
+                ]}
+                footerRows={[{ label: 'Tenant', value: getVisionOrg(relation.gateway.orgId).label }]}
+                isSelected={
+                  highlight.kind === 'gateway' && highlight.gatewayId === relation.gateway.id
+                }
+                onSelect={() => onHighlightGateway(relation.gateway.id)}
+                onViewDetails={() => onViewGateway(relation.gateway.id)}
+                badge={
+                  <VisionGridGatewayKindLabels
+                    idPrefix={`vision-service-model-maas-${relation.gateway.id}`}
+                    relation={relation}
                   />
-                </StackItem>
-              )
-            })
-          )}
-        </>
-      ) : null}
+                }
+              />
+            </StackItem>
+          )
+        })
+      )}
       <StackItem>
         <VisionGridCountHeading
           id="vision-service-model-running-on"
-          title="Also placed on"
+          title="Other instances"
           count={others.length}
         />
       </StackItem>
@@ -238,32 +235,31 @@ export const VisionServiceModelInspector = ({
         </StackItem>
       ) : (
         others.map((other) => {
-          const otherCluster = clusters.find((entry) => entry.id === other.clusterId)
-          if (!otherCluster) {
-            return null
-          }
-          const site = getVisionSite(otherCluster.siteId)
-          const org = getVisionOrg(otherCluster.orgId)
+          const org = getVisionOrg(other.orgId)
           return (
             <StackItem key={other.id}>
               <VisionGridDrawerCard
                 id={`vision-also-on-${other.id}`}
-                name={`${preset?.stableName ?? other.presetId} on ${otherCluster.name}`}
-                secondary={preset?.displayName}
-                specRows={[
-                  { label: 'Model', value: preset?.stableName ?? other.presetId },
-                  { label: 'Size', value: other.replicas },
-                  { label: 'Site', value: site.regionLabel },
-                ]}
-                footerRows={[{ label: 'Tenant', value: org.label }]}
+                name={preset?.displayName ?? other.presetId}
+                secondary={preset?.modelId ?? other.presetId}
+                specNodes={visionFleetModelSpecNodes({
+                  idPrefix: `vision-also-on-${other.id}`,
+                  clusterName: visionClusterDisplayName(other.clusterId, clusters),
+                  size: other.replicas,
+                })}
+                extra={
+                  <VisionGridGatewayRelationList
+                    idPrefix={`vision-also-on-${other.id}`}
+                    relations={gatewayRelationsForDeployment(other, gateways)}
+                  />
+                }
+                footerRows={visionAdminScopeFooter(org.label, other.projectName)}
                 isSelected={highlight.kind === 'deployment' && highlight.deploymentId === other.id}
                 onSelect={() => onHighlightDeployment(other.id)}
                 onViewDetails={() => onViewDeployment(other.id)}
                 badge={
-                  <VisionGridModelLabels
+                  <VisionGridModelListBadge
                     idPrefix={`vision-also-on-${other.id}`}
-                    isMaas={isDeploymentMaas(other)}
-                    origin={homeMaasOrigin(other)}
                     status={other.status}
                   />
                 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { TenantShell } from '../components/tenant/TenantShell'
@@ -23,6 +23,7 @@ import {
 import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
+import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
@@ -43,7 +44,7 @@ import {
   type ProjectScopeId,
 } from '../tenantUser/projectScope'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
-import { activateProviderRegisteredOrganizationBySlug, getProviderCatalogDraft } from '../providerSetup/storage'
+import { activateProviderRegisteredOrganizationBySlug, getProviderCatalogDraft, getProviderCatalogItems } from '../providerSetup/storage'
 import {
   addTenantUserInstance,
   ensureTenantDemoInstances,
@@ -56,6 +57,13 @@ import {
   type TenantInstance,
 } from '../tenantUser/instances'
 import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROVISIONING_MS } from '../tenantUser/launchInstanceWizard'
+import {
+  MODEL_FLEET_VISION_NAV_ID,
+  MODEL_FLEET_VISION_VALUE,
+  isModelFleetVision,
+  mergeVisionCatalogItems,
+} from '../vision/modelFleet'
+import { visionOrgIdForTenantSlug } from '../vision/fleetWorld'
 
 const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
   Record<TenantAdminNavId, { title: string; description: string }>
@@ -64,6 +72,7 @@ const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
 function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
   return (
     value === 'overview' ||
+    value === 'vision-model-fleet' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
@@ -171,6 +180,14 @@ export function TenantAdminWorkspacePage() {
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
   const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
+  const visionEnabled = isModelFleetVision(searchParams)
+  const navItems = useMemo(() => {
+    if (!visionEnabled && activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+      return TENANT_ADMIN_NAV_ITEMS
+    }
+    const [overview, ...rest] = TENANT_ADMIN_NAV_ITEMS
+    return [overview, { id: MODEL_FLEET_VISION_NAV_ID, label: 'AI Grid' }, ...rest]
+  }, [activeNavId, visionEnabled])
 
   useLayoutEffect(() => {
     if (!isValidTenant) {
@@ -197,11 +214,27 @@ export function TenantAdminWorkspacePage() {
     syncWorkspaceNavParam(setSearchParams, getTenantActiveNav(tenant), { replace: true })
   }, [isValidTenant, searchParams, setSearchParams, tenant])
 
+  useLayoutEffect(() => {
+    if (activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+      return
+    }
+    if (searchParams.get('vision') === MODEL_FLEET_VISION_VALUE) {
+      return
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('vision', MODEL_FLEET_VISION_VALUE)
+      next.set('nav', activeNavId)
+      return next
+    }, { replace: true })
+  }, [activeNavId, searchParams, setSearchParams])
+
   if (!isValidTenant) {
     return <Navigate to="/" replace />
   }
 
   const catalogDraft = getProviderCatalogDraft()
+  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems(), visionEnabled)
   const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northstar
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
@@ -325,6 +358,18 @@ export function TenantAdminWorkspacePage() {
     }
 
     switch (activeNavId) {
+      case 'vision-model-fleet':
+        return (
+          <VisionModelFleetPage
+            key={searchParams.get('scenario') || 'default'}
+            catalogItems={displayCatalogItems}
+            lockedOrgId={visionOrgIdForTenantSlug(tenant)}
+            onOpenCatalogPreset={(catalogItemId) => {
+              handleNavChange('catalog')
+              syncWorkspaceCatalogItemParam(setSearchParams, catalogItemId)
+            }}
+          />
+        )
       case 'services-baremetal':
       case 'services-clusters':
       case 'services-models':
@@ -472,12 +517,17 @@ export function TenantAdminWorkspacePage() {
     <TenantShell
       role="tenant-admin"
       displayName={displayName}
-      navItems={TENANT_ADMIN_NAV_ITEMS}
+      navItems={navItems}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
+      isContentFilled={activeNavId === MODEL_FLEET_VISION_NAV_ID}
     >
-      <div key={navContentKey}>{renderWorkspaceContent()}</div>
+      {activeNavId === MODEL_FLEET_VISION_NAV_ID ? (
+        renderWorkspaceContent()
+      ) : (
+        <div key={navContentKey}>{renderWorkspaceContent()}</div>
+      )}
     </TenantShell>
   )
 }

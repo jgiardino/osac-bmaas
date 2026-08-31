@@ -39,20 +39,20 @@ export const VisionFleetSummary = ({
       <DescriptionListDescription>{summary.tokensPerSec}</DescriptionListDescription>
     </DescriptionListGroup>
     <DescriptionListGroup>
-      <DescriptionListTerm>Active models</DescriptionListTerm>
-      <DescriptionListDescription>
+      <DescriptionListTerm>
         <Button variant="link" isInline onClick={onActiveModelsClick} id="vision-active-models">
-          {summary.activeModels}
+          Active models
         </Button>
-      </DescriptionListDescription>
+      </DescriptionListTerm>
+      <DescriptionListDescription>{summary.activeModels}</DescriptionListDescription>
     </DescriptionListGroup>
     <DescriptionListGroup>
-      <DescriptionListTerm>Active clusters</DescriptionListTerm>
-      <DescriptionListDescription>
+      <DescriptionListTerm>
         <Button variant="link" isInline onClick={onActiveClustersClick} id="vision-active-clusters">
-          {summary.activeClusters}
+          Active clusters
         </Button>
-      </DescriptionListDescription>
+      </DescriptionListTerm>
+      <DescriptionListDescription>{summary.activeClusters}</DescriptionListDescription>
     </DescriptionListGroup>
   </DescriptionList>
 )

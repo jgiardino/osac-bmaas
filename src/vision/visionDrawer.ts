@@ -13,6 +13,7 @@ import {
   type VisionDeployment,
   type VisionGatewayId,
 } from './fleetWorld'
+import { provisionedClustersForCatalogItem } from './visionCatalogRows'
 
 export type VisionDrawerTab = 'catalog' | 'services'
 
@@ -20,7 +21,7 @@ export type VisionGridObjectType = 'clusters' | 'models' | 'gateways'
 
 export const DEFAULT_VISION_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
 export const CATALOG_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
-export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models', 'gateways']
+export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'gateways', 'models']
 
 export type VisionDrawerSelection =
   | { kind: 'none' }
@@ -114,8 +115,8 @@ export const getVisionDrawerSelectionLabel = (
       }
       const preset = getVisionPreset(deployment.presetId)
       const cluster = clusters.find((entry) => entry.id === deployment.clusterId)
-      const modelName = preset?.stableName ?? deployment.presetId
-      return cluster ? `${modelName} on ${cluster.name}` : modelName
+      const displayName = preset?.displayName ?? deployment.presetId
+      return cluster ? `${displayName} on ${cluster.name}` : displayName
     }
     case 'offering':
       return getVisionOffering(selection.offeringId)?.name ?? selection.offeringId
@@ -160,6 +161,11 @@ export const relatedClusterIdsForSelection = (
       if (item.serviceId === 'models') {
         const preset = VISION_MODEL_PRESETS.find((entry) => entry.catalogItemId === item.catalogItemId)
         return preset ? clustersForPreset(deployments, preset.id) : []
+      }
+      if (item.serviceId === 'cluster') {
+        return provisionedClustersForCatalogItem(item.catalogItemId, catalogItems, clusters).map(
+          (cluster) => cluster.id,
+        )
       }
       return []
     }

@@ -63,6 +63,7 @@ export const VisionFleetMap = ({
   const tilesRef = useRef<L.TileLayer | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
   const onSelectRef = useRef(onSelectCluster)
+  const fittedClusterKeyRef = useRef('')
 
   useEffect(() => {
     onSelectRef.current = onSelectCluster
@@ -94,6 +95,7 @@ export const VisionFleetMap = ({
       mapRef.current = null
       tilesRef.current = null
       layerRef.current = null
+      fittedClusterKeyRef.current = ''
     }
   }, [])
 
@@ -121,6 +123,7 @@ export const VisionFleetMap = ({
     layer.clearLayers()
     const highlighted = new Set(highlightedClusterIds)
     const bounds = L.latLngBounds([])
+    const clusterKey = clusters.map((cluster) => cluster.id).join('|')
 
     clusters.forEach((cluster) => {
       const site = getVisionSite(cluster.siteId)
@@ -156,11 +159,14 @@ export const VisionFleetMap = ({
 
     if (clusters.length === 0) {
       map.setView(EMPTY_CENTER, 3)
+      fittedClusterKeyRef.current = ''
       return
     }
 
-    map.fitBounds(bounds.pad(0.35), { maxZoom: 6, animate: false })
-    map.invalidateSize()
+    if (fittedClusterKeyRef.current !== clusterKey) {
+      map.fitBounds(bounds.pad(0.35), { maxZoom: 6, animate: false })
+      fittedClusterKeyRef.current = clusterKey
+    }
   }, [clusters, highlightedClusterIds, isolateRelatedPins, palette, selectedClusterId])
 
   return (

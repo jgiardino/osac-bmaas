@@ -18,6 +18,7 @@ type VisionGridFiltersProps = {
   view: VisionDrawerTab
   onOrgChange: (value: VisionOrgFilter) => void
   onViewChange: (view: VisionDrawerTab) => void
+  showTenantFilter?: boolean
 }
 
 export const VisionGridFilters = ({
@@ -25,6 +26,7 @@ export const VisionGridFilters = ({
   view,
   onOrgChange,
   onViewChange,
+  showTenantFilter = true,
 }: VisionGridFiltersProps) => {
   const catalogTriggerRef = useRef<HTMLElement>(null)
   const servicesTriggerRef = useRef<HTMLElement>(null)
@@ -37,21 +39,23 @@ export const VisionGridFilters = ({
   return (
     <Toolbar id="vision-grid-toolbar" hasNoPadding>
       <ToolbarContent>
-        <ToolbarGroup variant="filter-group">
-          <ToolbarItem>
-            <FormSelect
-              id="vision-filter-org"
-              value={orgFilter}
-              onChange={(_event, value) => onOrgChange(value as VisionOrgFilter)}
-              aria-label="Filter by tenant"
-            >
-              <FormSelectOption value="all" label="All tenants" />
-              {VISION_ORGS.map((org) => (
-                <FormSelectOption key={org.id} value={org.id} label={org.label} />
-              ))}
-            </FormSelect>
-          </ToolbarItem>
-        </ToolbarGroup>
+        {showTenantFilter ? (
+          <ToolbarGroup variant="filter-group">
+            <ToolbarItem>
+              <FormSelect
+                id="vision-filter-org"
+                value={orgFilter}
+                onChange={(_event, value) => onOrgChange(value as VisionOrgFilter)}
+                aria-label="Filter by tenant"
+              >
+                <FormSelectOption value="all" label="All tenants" />
+                {VISION_ORGS.map((org) => (
+                  <FormSelectOption key={org.id} value={org.id} label={org.label} />
+                ))}
+              </FormSelect>
+            </ToolbarItem>
+          </ToolbarGroup>
+        ) : null}
         <ToolbarGroup align={{ default: 'alignEnd' }} variant="action-group">
           <ToolbarItem>
             <Tooltip
@@ -59,12 +63,16 @@ export const VisionGridFilters = ({
               triggerRef={catalogTriggerRef}
               position="bottom"
               enableFlip={false}
+              maxWidth="calc(8ch + 3rem)"
+              className="vision-grid-view-tooltip"
             />
             <Tooltip
               content="Monitor and manage services across the grid."
               triggerRef={servicesTriggerRef}
               position="bottom"
               enableFlip={false}
+              maxWidth="calc(8ch + 3rem)"
+              className="vision-grid-view-tooltip"
             />
             <ToggleGroup aria-label="Catalog or services" id="vision-view-toggle">
               <ToggleGroupItem

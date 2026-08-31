@@ -1,4 +1,6 @@
 import {
+  CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   resolveCatalogSpecRows,
   resolveClusterCatalogHighlightRows,
   type CatalogSpecRow,
@@ -11,7 +13,7 @@ import {
   type ProviderCatalogDraft,
 } from '../providerSetup/storage'
 import { formatRateCardSummary } from '../providerSetup/templateDemo'
-import { VISION_MODEL_PRESETS, type VisionOrgFilter } from './fleetWorld'
+import { VISION_MODEL_PRESETS, type VisionCluster, type VisionOrgFilter } from './fleetWorld'
 
 export type VisionCatalogModelRow = {
   id: string
@@ -87,3 +89,21 @@ export const buildVisionCatalogClusterRows = (
       catalogItemId: item.catalogItemId,
       status: getCatalogItemStatus(item),
     }))
+
+/** Seed clusters belong to the demo node-sets SKU. If Catalog has only one cluster item, all clusters count as its instances. */
+export const provisionedClustersForCatalogItem = (
+  catalogItemId: string,
+  catalogItems: ProviderCatalogDraft[],
+  clusters: VisionCluster[],
+): VisionCluster[] => {
+  const clusterItems = catalogItems.filter((item) => item.serviceId === 'cluster')
+  if (clusterItems.length === 0) {
+    return []
+  }
+  const isSoleClusterItem =
+    clusterItems.length === 1 && clusterItems[0].catalogItemId === catalogItemId
+  const isDemoNodeSets =
+    catalogItemId === CLUSTER_NODE_SETS_CATALOG_ITEM_ID ||
+    catalogItemId === LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID
+  return isSoleClusterItem || isDemoNodeSets ? clusters : []
+}

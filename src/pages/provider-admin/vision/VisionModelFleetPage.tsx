@@ -57,11 +57,13 @@ import { VisionPlaceModelModal } from './VisionPlaceModelModal'
 type VisionModelFleetPageProps = {
   catalogItems: ProviderCatalogDraft[]
   onOpenCatalogPreset: (catalogItemId: string) => void
+  lockedOrgId?: VisionOrgId
 }
 
 export const VisionModelFleetPage = ({
   catalogItems,
   onOpenCatalogPreset,
+  lockedOrgId,
 }: VisionModelFleetPageProps) => {
   const [searchParams] = useSearchParams()
   const seed = getVisionScenarioSeed(searchParams)
@@ -74,16 +76,16 @@ export const VisionModelFleetPage = ({
   const [paths, setPaths] = useState<VisionServingPath[]>(() =>
     seed.emptyGrid ? [] : createInitialPaths(),
   )
-  const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>(seed.orgFilter)
+  const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>(
+    lockedOrgId ?? seed.orgFilter,
+  )
   const [highlight, setHighlight] = useState<VisionDrawerSelection>(() =>
     seedVisionDrawerSelection(seed),
   )
   const [detail, setDetail] = useState<VisionDrawerSelection>(() =>
     seedVisionDrawerSelection(seed),
   )
-  const [drawerTab, setDrawerTab] = useState<VisionDrawerTab>(() =>
-    seed.selectedClusterId || seed.selectedGatewayId ? 'services' : 'catalog',
-  )
+  const [drawerTab, setDrawerTab] = useState<VisionDrawerTab>('services')
   const [objectTypes, setObjectTypes] = useState<VisionGridObjectType[]>(() => [
     ...SERVICES_OBJECT_TYPES,
   ])
@@ -108,12 +110,12 @@ export const VisionModelFleetPage = ({
   )
   const visibleGateways = useMemo(() => gatewaysForOrgFilter(orgFilter), [orgFilter])
   const visibleOffPlatform = useMemo(
-    () => visibleOffPlatformModels(orgFilter, visibleGateways),
-    [orgFilter, visibleGateways],
+    () => visibleOffPlatformModels(orgFilter),
+    [orgFilter],
   )
   const summary = useMemo(
-    () => summarizeFleet(visibleClusters, visibleDeployments),
-    [visibleClusters, visibleDeployments],
+    () => summarizeFleet(visibleClusters, visibleDeployments, visibleOffPlatform),
+    [visibleClusters, visibleDeployments, visibleOffPlatform],
   )
   const selectedCluster =
     detail.kind === 'cluster'
@@ -254,6 +256,7 @@ export const VisionModelFleetPage = ({
           view={drawerTab}
           onOrgChange={setOrgFilter}
           onViewChange={handleViewChange}
+          showTenantFilter={!lockedOrgId}
         />
       </PageSection>
       <PageSection

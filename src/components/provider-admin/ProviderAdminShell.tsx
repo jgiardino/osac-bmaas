@@ -180,14 +180,16 @@ export function ProviderAdminShell({
               Overview
             </NavItem>
             {showVisionNav ? (
-              <NavItem
-                itemId="vision-model-fleet"
-                isActive={activeNavId === 'vision-model-fleet'}
-                to="#"
-                preventDefault
-              >
-                AI Grid
-              </NavItem>
+              <>
+                <NavItem
+                  itemId="vision-model-fleet"
+                  isActive={activeNavId === 'vision-model-fleet'}
+                  to="#"
+                  preventDefault
+                >
+                  AI Grid
+                </NavItem>
+              </>
             ) : null}
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
               Catalog

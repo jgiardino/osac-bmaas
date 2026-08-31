@@ -1,5 +1,6 @@
 export type TenantAdminNavId =
   | 'overview'
+  | 'vision-model-fleet'
   | 'catalog'
   | 'services-baremetal'
   | 'services-clusters'

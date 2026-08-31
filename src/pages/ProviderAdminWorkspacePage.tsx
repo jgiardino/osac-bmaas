@@ -219,7 +219,7 @@ export function ProviderAdminWorkspacePage() {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       next.set('vision', MODEL_FLEET_VISION_VALUE)
-      next.set('nav', MODEL_FLEET_VISION_NAV_ID)
+      next.set('nav', activeNavId)
       return next
     }, { replace: true })
   }, [activeNavId, searchParams, setSearchParams])
@@ -447,7 +447,10 @@ export function ProviderAdminWorkspacePage() {
   }
 
   const renderPostSetupContent = () => {
-    if (catalogItems.length === 0 && activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+    if (
+      catalogItems.length === 0 &&
+      activeNavId !== MODEL_FLEET_VISION_NAV_ID
+    ) {
       return (
         <ProviderAdminOverviewPage />
       )
@@ -661,7 +664,10 @@ export function ProviderAdminWorkspacePage() {
   return (
     <ProviderAdminShell
       showNavigation={setupComplete}
-      showVisionNav={visionEnabled || activeNavId === MODEL_FLEET_VISION_NAV_ID}
+      showVisionNav={
+        visionEnabled ||
+        activeNavId === MODEL_FLEET_VISION_NAV_ID
+      }
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       workspaceTransition={workspaceTransition}

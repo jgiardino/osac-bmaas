@@ -11,24 +11,33 @@ import {
   StackItem,
 } from '@patternfly/react-core'
 import {
-  gatewaysOnCluster,
   getVisionOrg,
   getVisionPreset,
   getVisionSite,
-  homeMaasOrigin,
-  isDeploymentMaas,
+  modelsOnGatewayCount,
   type VisionCluster,
   type VisionDeployment,
   type VisionGateway,
+  type VisionOffPlatformModel,
 } from '../../../vision/fleetWorld'
 import type { VisionDrawerSelection } from '../../../vision/visionDrawer'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
-import { VisionGridModelLabels } from './VisionGridModelLabels'
+import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
+import { VisionGridModelListBadge } from './VisionGridModelListBadge'
+import { visionFleetModelSpecNodes } from './visionFleetModelSpec'
+import {
+  gatewayRelationsForDeployment,
+  visionAdminScopeFooter,
+  visionGatewayListSpecRows,
+} from './visionGridServiceMeta'
 
 type VisionClusterInspectorProps = {
   cluster: VisionCluster | null
   deployments: VisionDeployment[]
+  fleetDeployments: VisionDeployment[]
+  offPlatformModels: VisionOffPlatformModel[]
+  gateways: VisionGateway[]
   highlight: VisionDrawerSelection
   onHighlightDeployment: (deploymentId: string) => void
   onHighlightGateway: (gatewayId: VisionGateway['id']) => void
@@ -39,6 +48,9 @@ type VisionClusterInspectorProps = {
 export const VisionClusterInspector = ({
   cluster,
   deployments,
+  fleetDeployments,
+  offPlatformModels,
+  gateways: visibleGateways,
   highlight,
   onHighlightDeployment,
   onHighlightGateway,
@@ -60,7 +72,7 @@ export const VisionClusterInspector = ({
 
   const site = getVisionSite(cluster.siteId)
   const org = getVisionOrg(cluster.orgId)
-  const gateways = gatewaysOnCluster(cluster.id)
+  const gateways = visibleGateways.filter((gateway) => gateway.clusterId === cluster.id)
   const isAvailable = cluster.health === 'available'
 
   return (
@@ -127,16 +139,14 @@ export const VisionClusterInspector = ({
               id={`vision-cluster-gateway-${gateway.id}`}
               name={gateway.label}
               secondary={gateway.hostname}
-              specRows={[{ label: 'Hostname', value: gateway.hostname }]}
+              specRows={visionGatewayListSpecRows({
+                modelCount: modelsOnGatewayCount(fleetDeployments, offPlatformModels, gateway.id),
+                includeCluster: false,
+              })}
               footerRows={[{ label: 'Tenant', value: org.label }]}
               isSelected={highlight.kind === 'gateway' && highlight.gatewayId === gateway.id}
               onSelect={() => onHighlightGateway(gateway.id)}
               onViewDetails={() => onViewGateway(gateway.id)}
-              badge={
-                <Label color="blue" isCompact>
-                  Gateway
-                </Label>
-              }
             />
           </StackItem>
         ))
@@ -159,23 +169,30 @@ export const VisionClusterInspector = ({
             <StackItem key={deployment.id}>
               <VisionGridDrawerCard
                 id={`vision-running-${deployment.id}`}
-                name={preset?.stableName ?? deployment.presetId}
-                secondary={preset?.displayName}
-                specRows={[
-                  { label: 'Model', value: preset?.stableName ?? deployment.presetId },
-                  { label: 'Size', value: deployment.replicas },
-                ]}
-                footerRows={[{ label: 'Traffic', value: `${deployment.reqPerMin} req/min` }]}
+                name={preset?.displayName ?? deployment.presetId}
+                secondary={preset?.modelId ?? deployment.presetId}
+                specNodes={visionFleetModelSpecNodes({
+                  idPrefix: `vision-running-${deployment.id}`,
+                  clusterName: cluster.name,
+                  size: deployment.replicas,
+                  includeCluster: false,
+                })}
+                extra={
+                  <VisionGridGatewayRelationList
+                    idPrefix={`vision-running-${deployment.id}`}
+                    relations={gatewayRelationsForDeployment(deployment, visibleGateways)}
+                    clusterReveal="other-only"
+                  />
+                }
+                footerRows={visionAdminScopeFooter(org.label, deployment.projectName)}
                 isSelected={
                   highlight.kind === 'deployment' && highlight.deploymentId === deployment.id
                 }
                 onSelect={() => onHighlightDeployment(deployment.id)}
                 onViewDetails={() => onViewDeployment(deployment.id)}
                 badge={
-                  <VisionGridModelLabels
+                  <VisionGridModelListBadge
                     idPrefix={`vision-running-${deployment.id}`}
-                    isMaas={isDeploymentMaas(deployment)}
-                    origin={homeMaasOrigin(deployment)}
                     status={deployment.status}
                   />
                 }

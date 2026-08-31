@@ -169,6 +169,11 @@ export function BmaasLandingPage() {
           to: '/tenant-admin/northstar/workspace?nav=catalog',
           statusLabel: 'Not approved yet',
         },
+        {
+          label: 'AI Grid (future vision)',
+          to: '/tenant-admin/northstar/workspace?vision=model-fleet&nav=vision-model-fleet',
+          statusLabel: 'Exploratory',
+        },
       ],
     },
     {

@@ -321,7 +321,7 @@ export const CATALOG_SERVICE_OFFERINGS: CatalogServiceOffering[] = [
 export const CATALOG_SERVICE_LABELS: Record<CatalogServiceId, string> = {
   baremetal: 'Bare Metal',
   cluster: 'Cluster',
-  models: 'MaaS',
+  models: 'Model',
   'virtual-machine': 'Virtual Machine',
 }
 

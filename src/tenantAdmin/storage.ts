@@ -100,9 +100,10 @@ const LEGACY_TENANT_ADMIN_NAV_IDS: Record<string, TenantAdminNavId> = {
   'my-instances': 'services-baremetal',
 }
 
-const VALID_TENANT_ADMIN_NAV_IDS = new Set<TenantAdminNavId>(
-  getTenantAdminLeafNavItems().map((item) => item.id),
-)
+const VALID_TENANT_ADMIN_NAV_IDS = new Set<TenantAdminNavId>([
+  ...getTenantAdminLeafNavItems().map((item) => item.id),
+  'vision-model-fleet',
+])
 
 function normalizeTenantAdminNavId(value: string | null): TenantAdminNavId {
   if (!value) {

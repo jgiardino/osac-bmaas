@@ -6,6 +6,29 @@
   --pf-v6-c-page__main-container--BorderColor: transparent;
 }
 
+/* Filled viewport is AI Grid only. */
+.tenant-shell-page--filled .pf-v6-c-page__main {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tenant-shell-page--filled .pf-v6-c-page__main-section.pf-m-fill {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tenant-shell-page--filled .pf-v6-c-page__main-container.pf-m-fill {
+  margin-block-end: var(
+    --pf-v6-c-page__main-container--MarginBlockEnd,
+    var(--pf-t--global--spacer--md)
+  );
+  overflow: hidden;
+}
+
 .tenant-shell-page__main.osac-page-main-section.pf-v6-c-page__main-section {
   --pf-v6-c-page__main-section--PaddingInlineStart: calc(
     var(--pf-t--global--spacer--lg) + var(--pf-t--global--spacer--xs)

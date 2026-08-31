@@ -49,7 +49,8 @@ export type VisionCluster = {
 export type VisionModelPreset = {
   id: string
   displayName: string
-  stableName: string
+  /** Same field as RHOAI model id — the identifier used in API calls. */
+  modelId: string
   catalogItemId: string | null
   gpuRequirement: string
 }
@@ -68,6 +69,7 @@ export type VisionDeployment = {
   presetId: string
   clusterId: string
   orgId: VisionOrgId
+  projectName: string
   attachedGatewayId: VisionGatewayId | null
   maasGatewayIds: VisionGatewayId[]
   status: 'Ready' | 'Starting'
@@ -75,16 +77,22 @@ export type VisionDeployment = {
   reqPerMin: number
 }
 
+/** External model CR. Lives in a project on a cluster; serving is a remote provider. */
 export type VisionOffPlatformModel = {
   id: string
   displayName: string
-  stableName: string
+  modelId: string
   servedBy: string
   orgId: VisionOrgId
+  projectName: string
+  clusterId: string
   gatewayIds: VisionGatewayId[]
 }
 
-export type VisionMaasOrigin = 'internal' | 'external'
+export type VisionMaasOrigin = 'this-cluster' | 'other-cluster'
+
+export const visionProjectForOrg = (orgId: VisionOrgId): string =>
+  orgId === 'nsb' ? 'ml-project' : 'bsfg-models'
 
 export type VisionServingPath = {
   id: string
@@ -181,35 +189,35 @@ export const VISION_MODEL_PRESETS: VisionModelPreset[] = [
   {
     id: 'granite-3b',
     displayName: 'Granite 3B instruct',
-    stableName: 'granite-3b',
+    modelId: 'granite-3b',
     catalogItemId: 'cat-granite-3b-instruct',
     gpuRequirement: '1 GPU',
   },
   {
     id: 'granite-8b',
     displayName: 'Granite 8B instruct',
-    stableName: 'granite-8b',
+    modelId: 'granite-8b',
     catalogItemId: null,
     gpuRequirement: '1 GPU',
   },
   {
     id: 'llama-4-scout',
     displayName: 'Llama 4 Scout',
-    stableName: 'llama-4-scout',
+    modelId: 'llama-4-scout',
     catalogItemId: null,
     gpuRequirement: '4 GPU',
   },
   {
     id: 'mistral-7b',
     displayName: 'Mistral 7B',
-    stableName: 'mistral-7b',
+    modelId: 'mistral-7b',
     catalogItemId: null,
     gpuRequirement: '1 GPU',
   },
   {
     id: 'gemma-3-4b',
     displayName: 'Gemma 3 4B',
-    stableName: 'gemma-3-4b',
+    modelId: 'gemma-3-4b',
     catalogItemId: null,
     gpuRequirement: '1 GPU',
   },
@@ -377,6 +385,7 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-3b',
     clusterId: 'ocp-us-east-1',
     orgId: 'nsb',
+    projectName: visionProjectForOrg('nsb'),
     attachedGatewayId: 'nsb-markets',
     maasGatewayIds: ['nsb-markets', 'nsb-retail'],
     status: 'Ready',
@@ -388,6 +397,7 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-3b',
     clusterId: 'ocp-eu-west-1',
     orgId: 'nsb',
+    projectName: visionProjectForOrg('nsb'),
     attachedGatewayId: 'nsb-retail',
     maasGatewayIds: ['nsb-retail'],
     status: 'Ready',
@@ -399,6 +409,7 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'mistral-7b',
     clusterId: 'ocp-us-west-1',
     orgId: 'nsb',
+    projectName: visionProjectForOrg('nsb'),
     attachedGatewayId: 'nsb-west',
     maasGatewayIds: [],
     status: 'Ready',
@@ -410,6 +421,7 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'llama-4-scout',
     clusterId: 'ocp-us-central-1',
     orgId: 'bluesolace',
+    projectName: visionProjectForOrg('bluesolace'),
     attachedGatewayId: 'bsfg-us',
     maasGatewayIds: ['bsfg-us'],
     status: 'Ready',
@@ -421,6 +433,7 @@ export const createInitialDeployments = (): VisionDeployment[] => [
     presetId: 'granite-8b',
     clusterId: 'ocp-eu-west-2',
     orgId: 'bluesolace',
+    projectName: visionProjectForOrg('bluesolace'),
     attachedGatewayId: null,
     maasGatewayIds: [],
     status: 'Ready',
@@ -433,10 +446,22 @@ export const VISION_OFF_PLATFORM_MODELS: VisionOffPlatformModel[] = [
   {
     id: 'ext-bedrock-titan',
     displayName: 'Titan Text Express',
-    stableName: 'titan-express',
+    modelId: 'titan-express',
     servedBy: 'Amazon Bedrock',
     orgId: 'nsb',
-    gatewayIds: ['nsb-retail', 'nsb-markets'],
+    projectName: visionProjectForOrg('nsb'),
+    clusterId: 'ocp-us-east-1',
+    gatewayIds: ['nsb-markets', 'nsb-retail'],
+  },
+  {
+    id: 'ext-anthropic-claude',
+    displayName: 'Claude Sonnet 4',
+    modelId: 'claude-sonnet-4',
+    servedBy: 'Anthropic',
+    orgId: 'nsb',
+    projectName: visionProjectForOrg('nsb'),
+    clusterId: 'ocp-us-east-1',
+    gatewayIds: [],
   },
 ]
 
@@ -492,7 +517,7 @@ export const maasOriginOnGateway = (
   if (!deployment.maasGatewayIds.includes(gateway.id)) {
     return null
   }
-  return deployment.clusterId === gateway.clusterId ? 'internal' : 'external'
+  return deployment.clusterId === gateway.clusterId ? 'this-cluster' : 'other-cluster'
 }
 
 export const homeMaasOrigin = (deployment: VisionDeployment): VisionMaasOrigin | null => {
@@ -503,8 +528,8 @@ export const homeMaasOrigin = (deployment: VisionDeployment): VisionMaasOrigin |
     const gateway = VISION_GATEWAYS.find((entry) => entry.id === gatewayId)
     return gateway?.clusterId === deployment.clusterId
   })
-    ? 'internal'
-    : 'external'
+    ? 'this-cluster'
+    : 'other-cluster'
 }
 
 export const formatInstanceCount = (count: number): string =>
@@ -512,13 +537,7 @@ export const formatInstanceCount = (count: number): string =>
 
 export const visibleOffPlatformModels = (
   orgFilter: VisionOrgFilter,
-  visibleGateways: VisionGateway[],
-): VisionOffPlatformModel[] => {
-  const visibleIds = new Set(visibleGateways.map((gateway) => gateway.id))
-  return offPlatformModelsForOrgFilter(orgFilter).filter((model) =>
-    model.gatewayIds.some((gatewayId) => visibleIds.has(gatewayId)),
-  )
-}
+): VisionOffPlatformModel[] => offPlatformModelsForOrgFilter(orgFilter)
 
 export const deploymentsOnGatewayAsMaas = (
   deployments: VisionDeployment[],
@@ -531,6 +550,19 @@ export const offPlatformModelsOnGateway = (
   gatewayId: VisionGatewayId,
 ): VisionOffPlatformModel[] => models.filter((model) => model.gatewayIds.includes(gatewayId))
 
+export const modelsOnGatewayCount = (
+  deployments: VisionDeployment[],
+  offPlatformModels: VisionOffPlatformModel[],
+  gatewayId: VisionGatewayId,
+): number =>
+  deployments.filter(
+    (deployment) =>
+      deployment.maasGatewayIds.includes(gatewayId) || deployment.attachedGatewayId === gatewayId,
+  ).length + offPlatformModels.filter((model) => model.gatewayIds.includes(gatewayId)).length
+
+export const formatModelCount = (count: number): string =>
+  count === 1 ? '1 model' : `${count} models`
+
 export const visibleGatewaysById = (
   gatewayIds: VisionGatewayId[],
   visibleGateways: VisionGateway[],
@@ -539,14 +571,7 @@ export const visibleGatewaysById = (
 export const clustersForOffPlatformModel = (
   model: VisionOffPlatformModel,
   clusters: VisionCluster[],
-): string[] => {
-  const clusterIds = model.gatewayIds
-    .map((gatewayId) => VISION_GATEWAYS.find((gateway) => gateway.id === gatewayId)?.clusterId)
-    .filter((clusterId): clusterId is string => Boolean(clusterId))
-  return [...new Set(clusterIds)].filter((clusterId) =>
-    clusters.some((cluster) => cluster.id === clusterId),
-  )
-}
+): string[] => (clusters.some((cluster) => cluster.id === model.clusterId) ? [model.clusterId] : [])
 
 export const getVisionOrg = (id: VisionOrgId): VisionOrg => {
   const org = VISION_ORGS.find((entry) => entry.id === id)
@@ -653,6 +678,7 @@ export type VisionFleetSummary = {
 export const summarizeFleet = (
   clusters: VisionCluster[],
   deployments: VisionDeployment[],
+  offPlatformModels: VisionOffPlatformModel[] = [],
 ): VisionFleetSummary => {
   const available = clusters.filter((cluster) => cluster.health === 'available')
   const totalGpus = available.reduce((sum, cluster) => sum + cluster.gpuCount, 0)
@@ -660,17 +686,19 @@ export const summarizeFleet = (
     (sum, cluster) => sum + cluster.gpuCount * cluster.gpuUtilPercent,
     0,
   )
-  const uniqueModels = new Set(deployments.map((deployment) => deployment.presetId))
   const reqPerMin = deployments.reduce((sum, deployment) => sum + deployment.reqPerMin, 0)
 
   return {
     totalGpus,
     gpuUtilPercent: totalGpus === 0 ? 0 : Math.round(weightedUtil / totalGpus),
     tokensPerSec: Math.round(reqPerMin * 0.4 * 10) / 10,
-    activeModels: uniqueModels.size,
+    activeModels: deployments.length + offPlatformModels.length,
     activeClusters: available.length,
   }
 }
+
+export const visionOrgIdForTenantSlug = (slug: string): VisionOrgId =>
+  slug === 'evergreen' ? 'bluesolace' : 'nsb'
 
 export const deploymentsOnCluster = (
   deployments: VisionDeployment[],
@@ -743,6 +771,7 @@ export const createDeploymentOnCluster = (
     presetId: preset.id,
     clusterId: cluster.id,
     orgId: cluster.orgId,
+    projectName: visionProjectForOrg(cluster.orgId),
     attachedGatewayId: localGateway?.id ?? null,
     maasGatewayIds: [],
     status: 'Ready',

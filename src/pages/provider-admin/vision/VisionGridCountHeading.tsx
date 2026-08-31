@@ -3,7 +3,7 @@ import { Badge, Divider, Flex, FlexItem, Stack, StackItem, Title } from '@patter
 type VisionGridCountHeadingProps = {
   id: string
   title: string
-  count: number
+  count?: number
   showDivider?: boolean
 }
 
@@ -26,9 +26,11 @@ export const VisionGridCountHeading = ({
             {title}
           </Title>
         </FlexItem>
-        <FlexItem>
-          <Badge isRead>{count}</Badge>
-        </FlexItem>
+        {count === undefined ? null : (
+          <FlexItem>
+            <Badge isRead>{count}</Badge>
+          </FlexItem>
+        )}
       </Flex>
     </StackItem>
   </Stack>

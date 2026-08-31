@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
@@ -54,6 +54,7 @@ type TenantShellProps = {
   onNavChange?: (navId: string) => void
   disabledNavIds?: string[]
   isOnboardingLayout?: boolean
+  isContentFilled?: boolean
 }
 
 const roleLabels: Record<TenantShellRole, string> = {
@@ -74,6 +75,7 @@ export function TenantShell({
   onNavChange,
   disabledNavIds = [],
   isOnboardingLayout = false,
+  isContentFilled = false,
 }: TenantShellProps) {
   const navigate = useNavigate()
   const flattenedNavItems =
@@ -272,20 +274,36 @@ export function TenantShell({
         masthead={masthead}
         sidebar={showNavigation ? sidebar : undefined}
         isManagedSidebar={showNavigation}
+        isContentFilled={isContentFilled}
+        style={
+          isContentFilled
+            ? ({
+                '--pf-v6-c-page__main-container--MaxHeight':
+                  'calc(100% - var(--pf-t--global--spacer--md))',
+                '--pf-v6-c-page__main-container--MarginBlockEnd':
+                  'var(--pf-t--global--spacer--md)',
+              } as CSSProperties)
+            : undefined
+        }
         className={[
           'tenant-shell-page',
           isOnboardingLayout ? 'tenant-shell-page--onboarding' : undefined,
+          isContentFilled ? 'tenant-shell-page--filled' : undefined,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        <PageSection
-          isWidthLimited={isOnboardingLayout}
-          isCenterAligned={isOnboardingLayout}
-          className="tenant-shell-page__main osac-page-main-section"
-        >
-          {children}
-        </PageSection>
+        {isContentFilled ? (
+          children
+        ) : (
+          <PageSection
+            isWidthLimited={isOnboardingLayout}
+            isCenterAligned={isOnboardingLayout}
+            className="tenant-shell-page__main osac-page-main-section"
+          >
+            {children}
+          </PageSection>
+        )}
       </Page>
       <UserPreferencesModal
         isOpen={isPreferencesModalOpen}

@@ -16,25 +16,31 @@ import {
   formatInstanceCount,
   getVisionOrg,
   getVisionPreset,
-  getVisionSite,
-  homeMaasOrigin,
-  isDeploymentMaas,
   type VisionCluster,
   type VisionDeployment,
+  type VisionGateway,
 } from '../../../vision/fleetWorld'
 import {
   buildVisionCatalogClusterRows,
   buildVisionCatalogModelRows,
+  provisionedClustersForCatalogItem,
   type VisionCatalogClusterRow,
   type VisionCatalogModelRow,
 } from '../../../vision/visionCatalogRows'
 import type { VisionDrawerSelection, VisionGridObjectType } from '../../../vision/visionDrawer'
 import { getVisionCatalogKebabItems } from './visionGridCatalogActions'
+import { VisionGridClusterCard } from './VisionGridClusterCard'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
+import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
 import { VisionGridModelLabels } from './VisionGridModelLabels'
-
-const CATALOG_TYPE_MODELS = 'Models'
+import { VisionGridModelListBadge } from './VisionGridModelListBadge'
+import { visionFleetModelSpecNodes } from './visionFleetModelSpec'
+import {
+  gatewayRelationsForDeployment,
+  visionAdminScopeFooter,
+  visionClusterDisplayName,
+} from './visionGridServiceMeta'
 
 type VisionGridCatalogTabProps = {
   mode: 'list' | 'detail'
@@ -45,11 +51,14 @@ type VisionGridCatalogTabProps = {
   catalogItems: ProviderCatalogDraft[]
   deployments: VisionDeployment[]
   clusters: VisionCluster[]
+  gateways: VisionGateway[]
   onHighlightPreset: (presetId: string) => void
   onHighlightCatalogItem: (catalogItemId: string) => void
+  onHighlightCluster: (clusterId: string) => void
   onHighlightDeployment: (deploymentId: string) => void
   onViewPreset: (presetId: string) => void
   onViewCatalogItem: (catalogItemId: string) => void
+  onViewCluster: (clusterId: string) => void
   onViewDeployment: (deploymentId: string) => void
   onPlacePreset: (presetId: string) => void
   onAddOffering: (offeringId: string) => void
@@ -109,11 +118,14 @@ export const VisionGridCatalogTab = ({
   catalogItems,
   deployments,
   clusters,
+  gateways,
   onHighlightPreset,
   onHighlightCatalogItem,
+  onHighlightCluster,
   onHighlightDeployment,
   onViewPreset,
   onViewCatalogItem,
+  onViewCluster,
   onViewDeployment,
   onPlacePreset,
   onAddOffering,
@@ -145,6 +157,7 @@ export const VisionGridCatalogTab = ({
           catalogItems={catalogItems}
           deployments={deployments}
           clusters={clusters}
+          gateways={gateways}
           highlight={highlight}
           onHighlightDeployment={onHighlightDeployment}
           onViewDeployment={onViewDeployment}
@@ -156,6 +169,10 @@ export const VisionGridCatalogTab = ({
         <VisionCatalogClusterDetail
           row={selectedCluster}
           catalogItems={catalogItems}
+          clusters={clusters}
+          highlight={highlight}
+          onHighlightCluster={onHighlightCluster}
+          onViewCluster={onViewCluster}
         />
       )
     }
@@ -186,41 +203,48 @@ export const VisionGridCatalogTab = ({
                 <Content component="p">No clusters in the catalog.</Content>
               </StackItem>
             ) : (
-              visibleClusterRows.map((row) => (
-                <StackItem key={row.id}>
-                  <VisionGridDrawerCard
-                    id={`vision-catalog-cluster-${row.id}`}
-                    name={row.displayName}
-                    secondary={row.catalogItemId}
-                    specRows={row.specRows}
-                    footerRows={[{ label: 'Rate', value: row.rate }]}
-                    isSelected={isClusterRowSelected(row, highlight)}
-                    onSelect={() => onHighlightCatalogItem(row.catalogItemId)}
-                    onViewDetails={() => onViewCatalogItem(row.catalogItemId)}
-                    badge={
-                      <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                        <FlexItem>
-                          <Label color="blue" isCompact>
-                            {CATALOG_SERVICE_LABELS.cluster}
-                          </Label>
-                        </FlexItem>
-                        <FlexItem>
-                          <Label color="grey" isCompact>
-                            {formatInstanceCount(0)}
-                          </Label>
-                        </FlexItem>
-                      </Flex>
-                    }
-                    kebabItems={getVisionCatalogKebabItems(
-                      { kind: 'catalog-item', catalogItemId: row.catalogItemId },
-                      catalogItems,
-                      onPlacePreset,
-                      onAddOffering,
-                      onOpenCatalogItem,
-                    )}
-                  />
-                </StackItem>
-              ))
+              visibleClusterRows.map((row) => {
+                const instanceCount = provisionedClustersForCatalogItem(
+                  row.catalogItemId,
+                  catalogItems,
+                  clusters,
+                ).length
+                return (
+                  <StackItem key={row.id}>
+                    <VisionGridDrawerCard
+                      id={`vision-catalog-cluster-${row.id}`}
+                      name={row.displayName}
+                      secondary={row.catalogItemId}
+                      specRows={row.specRows}
+                      footerRows={[{ label: 'Rate', value: row.rate }]}
+                      isSelected={isClusterRowSelected(row, highlight)}
+                      onSelect={() => onHighlightCatalogItem(row.catalogItemId)}
+                      onViewDetails={() => onViewCatalogItem(row.catalogItemId)}
+                      badge={
+                        <Flex spaceItems={{ default: 'spaceItemsSm' }}>
+                          <FlexItem>
+                            <Label color="blue" isCompact>
+                              {CATALOG_SERVICE_LABELS.cluster}
+                            </Label>
+                          </FlexItem>
+                          <FlexItem>
+                            <Label color="grey" isCompact>
+                              {formatInstanceCount(instanceCount)}
+                            </Label>
+                          </FlexItem>
+                        </Flex>
+                      }
+                      kebabItems={getVisionCatalogKebabItems(
+                        { kind: 'catalog-item', catalogItemId: row.catalogItemId },
+                        catalogItems,
+                        onPlacePreset,
+                        onAddOffering,
+                        onOpenCatalogItem,
+                      )}
+                    />
+                  </StackItem>
+                )
+              })
             )}
           </Stack>
         </StackItem>
@@ -255,23 +279,16 @@ export const VisionGridCatalogTab = ({
                     }
                     onViewDetails={() => viewModelRow(row, onViewPreset, onViewCatalogItem)}
                     badge={
-                      <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                        <FlexItem>
-                          <Label color="blue" isCompact>
-                            {CATALOG_TYPE_MODELS}
-                          </Label>
-                        </FlexItem>
-                        <FlexItem>
-                          <Label color="grey" isCompact>
-                            {formatInstanceCount(
-                              row.presetId
-                                ? deployments.filter((deployment) => deployment.presetId === row.presetId)
-                                    .length
-                                : 0,
-                            )}
-                          </Label>
-                        </FlexItem>
-                      </Flex>
+                      <VisionGridModelLabels
+                        idPrefix={`vision-catalog-model-${row.id}`}
+                        typeLabel={CATALOG_SERVICE_LABELS.models}
+                        instanceCountLabel={formatInstanceCount(
+                          row.presetId
+                            ? deployments.filter((deployment) => deployment.presetId === row.presetId)
+                                .length
+                            : 0,
+                        )}
+                      />
                     }
                     kebabItems={getVisionCatalogKebabItems(
                       row.presetId
@@ -298,6 +315,7 @@ type VisionCatalogModelDetailProps = {
   catalogItems: ProviderCatalogDraft[]
   deployments: VisionDeployment[]
   clusters: VisionCluster[]
+  gateways: VisionGateway[]
   highlight: VisionDrawerSelection
   onHighlightDeployment: (deploymentId: string) => void
   onViewDeployment: (deploymentId: string) => void
@@ -308,6 +326,7 @@ const VisionCatalogModelDetail = ({
   catalogItems,
   deployments,
   clusters,
+  gateways,
   highlight,
   onHighlightDeployment,
   onViewDeployment,
@@ -323,14 +342,11 @@ const VisionCatalogModelDetail = ({
       <StackItem>
         <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
-            <Label color="blue" isCompact>
-              {CATALOG_TYPE_MODELS}
-            </Label>
-          </FlexItem>
-          <FlexItem>
-            <Label color="grey" isCompact>
-              {formatInstanceCount(instances.length)}
-            </Label>
+            <VisionGridModelLabels
+              idPrefix="vision-catalog-model-detail"
+              typeLabel={CATALOG_SERVICE_LABELS.models}
+              instanceCountLabel={formatInstanceCount(instances.length)}
+            />
           </FlexItem>
         </Flex>
       </StackItem>
@@ -338,8 +354,8 @@ const VisionCatalogModelDetail = ({
         <DescriptionList isCompact aria-label={`${row.displayName} details`}>
           {preset ? (
             <DescriptionListGroup>
-              <DescriptionListTerm>Stable name</DescriptionListTerm>
-              <DescriptionListDescription>{preset.stableName}</DescriptionListDescription>
+              <DescriptionListTerm>Model ID</DescriptionListTerm>
+              <DescriptionListDescription>{preset.modelId}</DescriptionListDescription>
             </DescriptionListGroup>
           ) : null}
           {catalogItem?.instanceTypeLabel ? (
@@ -380,35 +396,33 @@ const VisionCatalogModelDetail = ({
         </StackItem>
       ) : (
         instances.map((deployment) => {
-          const cluster = clusters.find((entry) => entry.id === deployment.clusterId)
-          if (!cluster) {
-            return null
-          }
-          const site = getVisionSite(cluster.siteId)
-          const org = getVisionOrg(cluster.orgId)
-          const presetName = preset?.stableName ?? deployment.presetId
+          const org = getVisionOrg(deployment.orgId)
           return (
             <StackItem key={deployment.id}>
               <VisionGridDrawerCard
                 id={`vision-catalog-instance-${deployment.id}`}
-                name={`${presetName} on ${cluster.name}`}
-                secondary={preset?.displayName}
-                specRows={[
-                  { label: 'Model', value: presetName },
-                  { label: 'Size', value: deployment.replicas },
-                  { label: 'Site', value: site.regionLabel },
-                ]}
-                footerRows={[{ label: 'Tenant', value: org.label }]}
+                name={preset?.displayName ?? deployment.presetId}
+                secondary={preset?.modelId ?? deployment.presetId}
+                specNodes={visionFleetModelSpecNodes({
+                  idPrefix: `vision-catalog-instance-${deployment.id}`,
+                  clusterName: visionClusterDisplayName(deployment.clusterId, clusters),
+                  size: deployment.replicas,
+                })}
+                extra={
+                  <VisionGridGatewayRelationList
+                    idPrefix={`vision-catalog-instance-${deployment.id}`}
+                    relations={gatewayRelationsForDeployment(deployment, gateways)}
+                  />
+                }
+                footerRows={visionAdminScopeFooter(org.label, deployment.projectName)}
                 isSelected={
                   highlight.kind === 'deployment' && highlight.deploymentId === deployment.id
                 }
                 onSelect={() => onHighlightDeployment(deployment.id)}
                 onViewDetails={() => onViewDeployment(deployment.id)}
                 badge={
-                  <VisionGridModelLabels
+                  <VisionGridModelListBadge
                     idPrefix={`vision-catalog-instance-${deployment.id}`}
-                    isMaas={isDeploymentMaas(deployment)}
-                    origin={homeMaasOrigin(deployment)}
                     status={deployment.status}
                   />
                 }
@@ -424,13 +438,22 @@ const VisionCatalogModelDetail = ({
 type VisionCatalogClusterDetailProps = {
   row: VisionCatalogClusterRow
   catalogItems: ProviderCatalogDraft[]
+  clusters: VisionCluster[]
+  highlight: VisionDrawerSelection
+  onHighlightCluster: (clusterId: string) => void
+  onViewCluster: (clusterId: string) => void
 }
 
 const VisionCatalogClusterDetail = ({
   row,
   catalogItems,
+  clusters,
+  highlight,
+  onHighlightCluster,
+  onViewCluster,
 }: VisionCatalogClusterDetailProps) => {
   const catalogItem = catalogItems.find((item) => item.catalogItemId === row.catalogItemId)
+  const instances = provisionedClustersForCatalogItem(row.catalogItemId, catalogItems, clusters)
 
   return (
     <Stack hasGutter>
@@ -443,7 +466,7 @@ const VisionCatalogClusterDetail = ({
           </FlexItem>
           <FlexItem>
             <Label color="grey" isCompact>
-              {formatInstanceCount(0)}
+              {formatInstanceCount(instances.length)}
             </Label>
           </FlexItem>
         </Flex>
@@ -486,11 +509,31 @@ const VisionCatalogClusterDetail = ({
         </StackItem>
       ) : null}
       <StackItem>
-        <Content component="p">
-          This cluster offering is not mapped to specific grid instances yet. Use Launch instance to
-          place a cluster on a site.
-        </Content>
+        <VisionGridCountHeading
+          id="vision-catalog-cluster-instances"
+          title="Instances"
+          count={instances.length}
+        />
       </StackItem>
+      {instances.length === 0 ? (
+        <StackItem>
+          <Content component="p">
+            No clusters of this offering are provisioned in the current filter.
+          </Content>
+        </StackItem>
+      ) : (
+        instances.map((cluster) => (
+          <StackItem key={cluster.id}>
+            <VisionGridClusterCard
+              id={`vision-catalog-cluster-instance-${cluster.id}`}
+              cluster={cluster}
+              isSelected={highlight.kind === 'cluster' && highlight.clusterId === cluster.id}
+              onSelect={() => onHighlightCluster(cluster.id)}
+              onViewDetails={() => onViewCluster(cluster.id)}
+            />
+          </StackItem>
+        ))
+      )}
     </Stack>
   )
 }
