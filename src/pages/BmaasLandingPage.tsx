@@ -9,7 +9,6 @@ import {
   Flex,
   FlexItem,
   Icon,
-  Label,
   Stack,
   StackItem,
   Title,
@@ -28,7 +27,6 @@ import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 type PrototypeLink = {
   label: string
   to: string
-  statusLabel?: string
 }
 
 type RoleBlockProps = {
@@ -77,11 +75,6 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
                   <RouterButton variant="link" isInline to={link.to}>
                     {link.label}
                   </RouterButton>
-                  {link.statusLabel ? (
-                    <Label color="orange" isCompact>
-                      {link.statusLabel}
-                    </Label>
-                  ) : null}
                 </Flex>
               </StackItem>
             ))}
@@ -123,17 +116,18 @@ export function BmaasLandingPage() {
     {
       label: 'Catalog',
       to: '/provider/workspace?nav=catalog',
-      statusLabel: 'Not approved yet',
     },
     {
       label: 'AI Grid (future vision)',
       to: '/provider/workspace?vision=model-fleet&nav=vision-model-fleet',
-      statusLabel: 'Exploratory',
     },
     {
-      label: 'Onboarding',
+      label: 'Projects',
+      to: '/provider/workspace?nav=projects-teams',
+    },
+    {
+      label: 'Tenant onboarding (IdP Manager)',
       to: '/idp-manager/bluesolace',
-      statusLabel: 'Not approved yet',
     },
   ]
 
@@ -161,18 +155,20 @@ export function BmaasLandingPage() {
       description: 'Configure tenant resources, users, quotas, and shared services.',
       icon: <UserIcon />,
       actions: (
-        <SingleEnterActions to="/tenant-admin/northstar" ariaLabel="Enter Tenant Admin demo" />
+        <SingleEnterActions to="/tenant-admin/northsummit" ariaLabel="Enter Tenant Admin demo" />
       ),
       prototypeLinks: [
         {
           label: 'Catalog',
-          to: '/tenant-admin/northstar/workspace?nav=catalog',
-          statusLabel: 'Not approved yet',
+          to: '/tenant-admin/northsummit/workspace?nav=catalog',
+        },
+        {
+          label: 'Projects',
+          to: '/tenant-admin/northsummit/workspace?nav=projects-teams',
         },
         {
           label: 'AI Grid (future vision)',
-          to: '/tenant-admin/northstar/workspace?vision=model-fleet&nav=vision-model-fleet',
-          statusLabel: 'Exploratory',
+          to: '/tenant-admin/northsummit/workspace?vision=model-fleet&nav=vision-model-fleet',
         },
       ],
     },
@@ -182,13 +178,16 @@ export function BmaasLandingPage() {
       description: 'Provision and manage Bare Metal, Cluster, VM, and Models workloads.',
       icon: <UsersIcon />,
       actions: (
-        <SingleEnterActions to="/tenant-user/northstar" ariaLabel="Enter Tenant User demo" />
+        <SingleEnterActions to="/tenant-user/northsummit" ariaLabel="Enter Tenant User demo" />
       ),
       prototypeLinks: [
         {
           label: 'Catalog',
-          to: '/tenant-user/northstar/workspace?nav=catalog',
-          statusLabel: 'Not approved yet',
+          to: '/tenant-user/northsummit/workspace?nav=catalog',
+        },
+        {
+          label: 'Projects',
+          to: '/tenant-user/northsummit/workspace?nav=projects-teams',
         },
       ],
     },

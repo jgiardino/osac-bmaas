@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
 import {
+  Breadcrumb,
+  BreadcrumbItem,
   Button,
   Content,
   EmptyState,
@@ -32,6 +34,8 @@ import {
 } from '../../idpManager/identityProviders'
 import {
   identityProviderProtocolLabel,
+  resolveOrganizationIdentityProviders,
+  type IdentityProviderConnectedBy,
   type OrganizationIdentityProvider,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
@@ -39,11 +43,17 @@ import {
 type IdpManagerIdentityProviderPageProps = {
   organization: RegisteredOrganization
   onOrganizationChange: (organization: RegisteredOrganization) => void
+  onBackToTenants?: () => void
+  onBackToTenantDetails?: () => void
+  identityProviderConnectedBy: IdentityProviderConnectedBy
 }
 
 export function IdpManagerIdentityProviderPage({
   organization,
   onOrganizationChange,
+  onBackToTenants,
+  onBackToTenantDetails,
+  identityProviderConnectedBy,
 }: IdpManagerIdentityProviderPageProps) {
   const [isWizardOpen, setIsWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<OrganizationIdentityProvider | null>(
@@ -55,7 +65,7 @@ export function IdpManagerIdentityProviderPage({
   const [selectedProtocol, setSelectedProtocol] =
     useState<IdentityProviderProtocolFilter>('all')
   const [selectedStatus, setSelectedStatus] = useState<IdentityProviderStatusFilter>('all')
-  const providers = organization.identityProviders ?? []
+  const providers = resolveOrganizationIdentityProviders(organization)
 
   const filteredProviders = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
@@ -143,6 +153,18 @@ export function IdpManagerIdentityProviderPage({
         isOpen
         organization={organization}
         editingProvider={editingProvider}
+        connectedBy={identityProviderConnectedBy}
+        breadcrumbAncestors={
+          onBackToTenants
+            ? [
+                { label: 'Tenants', onNavigate: onBackToTenants },
+                {
+                  label: organization.name,
+                  onNavigate: onBackToTenantDetails,
+                },
+              ]
+            : undefined
+        }
         onClose={closeWizard}
         onSaved={onOrganizationChange}
       />
@@ -151,8 +173,38 @@ export function IdpManagerIdentityProviderPage({
 
   return (
     <div className="provider-admin-workspace-page tenant-admin-administration idp-manager-identity-provider">
+      {onBackToTenants ? (
+        <Breadcrumb
+          className="idp-manager-identity-provider__breadcrumb"
+          aria-label="Identity providers breadcrumb"
+        >
+          <BreadcrumbItem
+            to="#"
+            onClick={(event) => {
+              event.preventDefault()
+              onBackToTenants()
+            }}
+          >
+            Tenants
+          </BreadcrumbItem>
+          <BreadcrumbItem
+            to={onBackToTenantDetails ? '#' : undefined}
+            onClick={
+              onBackToTenantDetails
+                ? (event) => {
+                    event.preventDefault()
+                    onBackToTenantDetails()
+                  }
+                : undefined
+            }
+            isActive={!onBackToTenantDetails}
+          >
+            {organization.name}
+          </BreadcrumbItem>
+          <BreadcrumbItem isActive>{IDP_MANAGER_IDENTITY_PROVIDER_COPY.title}</BreadcrumbItem>
+        </Breadcrumb>
+      ) : null}
       <ProviderAdminWorkspacePageHeader
-        kicker="Tenant"
         title={IDP_MANAGER_IDENTITY_PROVIDER_COPY.title}
         lede={IDP_MANAGER_IDENTITY_PROVIDER_COPY.lede}
         action={

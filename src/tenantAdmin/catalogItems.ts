@@ -1,17 +1,48 @@
-import type { RateCard } from '../providerSetup/templateDemo'
-import { DEFAULT_RATE_CARD } from '../providerSetup/templateDemo'
+import type { PublishedTemplatePayload, RateCard } from '../providerSetup/templateDemo'
+import {
+  DEFAULT_BLUEPRINT_FORM,
+  DEFAULT_RATE_CARD,
+  PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
+  parseRateCardFromForm,
+} from '../providerSetup/templateDemo'
+import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
+import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
 import { TENANT_CATALOG_GOVERNANCE_ITEMS } from './catalogManager'
 import type { TenantProjectCatalogItem } from './projects'
 
+export const DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID = 'tenant-catalog_general-purpose'
+
 export type TenantCatalogItemSource = 'custom'
+
+export type TenantCatalogItemStatus = 'Live' | 'Unpublished'
+
+export type TenantCatalogItemConfig = Omit<
+  PublishedTemplatePayload,
+  | 'displayName'
+  | 'description'
+  | 'scope'
+  | 'status'
+  | 'rateCard'
+  | 'enterpriseTenantId'
+  | 'enterpriseTenantIds'
+  | 'vipOrganizationId'
+  | 'vipOrganizationIds'
+>
 
 export type TenantCatalogItem = {
   id: string
   displayName: string
+  description?: string
   source: TenantCatalogItemSource
   sourceCatalogItemId: string | null
   rateCard: RateCard
+  status: TenantCatalogItemStatus
   createdAt: string
+  catalogConfig?: TenantCatalogItemConfig
+}
+
+export function isTenantScopedCatalogItemId(id: string): boolean {
+  return id.startsWith('tenant-catalog_')
 }
 
 export type AttachableCatalogOption = {
@@ -26,18 +57,85 @@ export function generateTenantCatalogItemId(): string {
   return `tenant-catalog_${suffix}`
 }
 
+export function createDemoTenantCatalogGeneralPurposeItem(): TenantCatalogItem {
+  return {
+    id: DEMO_TENANT_CATALOG_GENERAL_PURPOSE_ID,
+    displayName: PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
+    source: 'custom',
+    sourceCatalogItemId: null,
+    rateCard: parseRateCardFromForm(DEFAULT_BLUEPRINT_FORM) ?? DEFAULT_RATE_CARD,
+    status: 'Live',
+    createdAt: '2026-08-01T12:00:00.000Z',
+    catalogConfig: {
+      serviceId: 'baremetal',
+      templateRefId: 'bm-dell-r750',
+      templateName: DEFAULT_BLUEPRINT_FORM.templateName,
+      instanceTypeId: 'small',
+      instanceTypeLabel:
+        formatBaremetalInstanceTypeLabel('small') ??
+        'Small (16 vCPU · 128 GB · NVIDIA A100 40 GB)',
+      diskImageId: 'rhel-10',
+      diskImageLabel: 'RHEL 10',
+      hardwareOsMode: 'editable',
+      fieldPolicies: [],
+      networkPolicy: {
+        ...DEFAULT_CATALOG_NETWORK_POLICY,
+        virtualNetwork: { ...DEFAULT_CATALOG_NETWORK_POLICY.virtualNetwork },
+        subnet: { ...DEFAULT_CATALOG_NETWORK_POLICY.subnet },
+        securityGroup: { ...DEFAULT_CATALOG_NETWORK_POLICY.securityGroup },
+        externalIpPool: { ...DEFAULT_CATALOG_NETWORK_POLICY.externalIpPool },
+      },
+    },
+  }
+}
+
+export function createTenantCatalogItemFromPayload(
+  payload: PublishedTemplatePayload,
+): TenantCatalogItem {
+  const {
+    displayName,
+    description,
+    scope: _scope,
+    status,
+    enterpriseTenantId: _enterpriseTenantId,
+    enterpriseTenantIds: _enterpriseTenantIds,
+    vipOrganizationId: _vipOrganizationId,
+    vipOrganizationIds: _vipOrganizationIds,
+    rateCard,
+    ...catalogConfig
+  } = payload
+
+  return {
+    id: generateTenantCatalogItemId(),
+    displayName: displayName.trim(),
+    description: description.trim() || undefined,
+    source: 'custom',
+    sourceCatalogItemId: null,
+    rateCard,
+    status: status === 'unpublished' ? 'Unpublished' : 'Live',
+    createdAt: new Date().toISOString(),
+    catalogConfig,
+  }
+}
+
 export function createTenantCatalogItem(input: {
   displayName: string
+  description?: string
   sourceCatalogItemId: string | null
   rateCard?: RateCard
+  status?: TenantCatalogItemStatus
+  catalogConfig?: TenantCatalogItemConfig
 }): TenantCatalogItem {
   return {
     id: generateTenantCatalogItemId(),
     displayName: input.displayName.trim(),
+    description: input.description?.trim() || undefined,
     source: 'custom',
     sourceCatalogItemId: input.sourceCatalogItemId,
     rateCard: input.rateCard ?? DEFAULT_RATE_CARD,
+    status: input.status ?? 'Live',
     createdAt: new Date().toISOString(),
+    catalogConfig: input.catalogConfig,
   }
 }
 
@@ -64,7 +162,7 @@ export function getAttachableCatalogOptions(
     options.push({
       id: item.id,
       displayName: item.displayName,
-      sourceLabel: 'Tenant-scoped catalog item',
+      sourceLabel: 'Added by you',
       rateCard: item.rateCard,
     })
   }

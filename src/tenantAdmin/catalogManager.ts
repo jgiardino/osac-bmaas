@@ -19,14 +19,22 @@ import {
   resolveCatalogSpecRows,
 } from '../catalog/catalogSpecs'
 import {
+  CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+} from '../catalog/catalogSpecs'
+import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
+  BARE_METAL_GPU_CATALOG_ITEM_ID,
+  LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
   ensureProviderCatalogDemoItems,
   sortByDemoCatalogOrder,
 } from '../providerSetup/prototypeEntry'
+import type { TenantCatalogItem } from './catalogItems'
 import {
   applyTenantNetworkOverrides,
   getTenantNetworkOverrides,
 } from './networking'
+import { ensureTenantDemoCatalogItems } from './storage'
 
 export type TenantCatalogGovernanceItem = {
   id: string
@@ -74,11 +82,11 @@ export const TENANT_CATALOG_MANAGER_DEMO = {
   lede: "Filter the provider's global catalog down to safe, approved offerings.",
   accessLabel: 'Access',
   accessDetailNote:
-    'Available to all tenant members by default. Assign projects or teams if you want to restrict who can launch this item.',
+    'Available to all tenant members by default. Assign projects if you want to restrict who can launch this item.',
   accessDefaultLabel: 'All members',
   accessViewDetailsLabel: 'Details',
-  addProjectsLinkLabel: 'Set up projects & teams',
-  manageProjectsLinkLabel: 'Manage projects & teams',
+  addProjectsLinkLabel: 'Set up projects',
+  manageProjectsLinkLabel: 'Manage projects',
   drawerAccessLede:
     'Review provider-configured networking and access for this offering.',
   networkingLabel: 'Networking',
@@ -93,6 +101,18 @@ export function getTenantCatalogProjectsLinkLabel(projectCount: number): string 
   return projectCount > 0
     ? TENANT_CATALOG_MANAGER_DEMO.manageProjectsLinkLabel
     : TENANT_CATALOG_MANAGER_DEMO.addProjectsLinkLabel
+}
+
+/** Inherited provider offerings shown on the tenant admin catalog demo (2 cards). */
+const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
+  BARE_METAL_GPU_CATALOG_ITEM_ID,
+  CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
+  LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+])
+
+function isTenantAdminDemoProviderCatalogItem(catalogItemId: string): boolean {
+  return TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS.has(catalogItemId)
 }
 
 function isCatalogVisibleToTenant(
@@ -110,7 +130,7 @@ function isCatalogVisibleToTenant(
   // VIP Dense GPU Node is curated for North Summit Bank tenant admin/user.
   if (
     item.catalogItemId === BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID &&
-    organization.slug === 'northstar'
+    (organization.slug === 'northsummit' || organization.slug === 'northstar')
   ) {
     return true
   }
@@ -212,31 +232,132 @@ export const TENANT_CATALOG_GOVERNANCE_ITEMS: TenantCatalogGovernanceItem[] = [
   },
 ]
 
+function mapCustomTenantCatalogItemToGovernance(
+  item: TenantCatalogItem,
+  organization: RegisteredOrganization,
+): TenantCatalogGovernanceItemWithNetworking {
+  const status = item.status ?? 'Live'
+
+  if (item.catalogConfig) {
+    const draftLike: ProviderCatalogDraft = {
+      catalogItemId: item.id,
+      templateRefId: item.catalogConfig.templateRefId,
+      templateName: item.catalogConfig.templateName,
+      displayName: item.displayName,
+      description: item.description,
+      scope: 'vip-enterprise',
+      createdAt: item.createdAt,
+      rateCard: item.rateCard,
+      serviceId: item.catalogConfig.serviceId,
+      networkPolicy: item.catalogConfig.networkPolicy,
+      instanceTypeId: item.catalogConfig.instanceTypeId,
+      instanceTypeLabel: item.catalogConfig.instanceTypeLabel,
+      diskImageId: item.catalogConfig.diskImageId,
+      diskImageLabel: item.catalogConfig.diskImageLabel,
+      clusterVersionMode: item.catalogConfig.clusterVersionMode,
+      hardwareOsMode: item.catalogConfig.hardwareOsMode,
+      nodeSetId: item.catalogConfig.nodeSetId,
+      nodeSetLabel: item.catalogConfig.nodeSetLabel,
+      hostTypeId: item.catalogConfig.hostTypeId,
+      hostTypeLabel: item.catalogConfig.hostTypeLabel,
+      clusterNodeTopologyMode: item.catalogConfig.clusterNodeTopologyMode,
+      fieldPolicies: item.catalogConfig.fieldPolicies,
+    }
+    const base = mapProviderCatalogToGovernanceItem(draftLike, organization)
+    return {
+      ...base,
+      id: item.id,
+      catalogItemId: item.id,
+      displayName: item.displayName,
+      description: item.description,
+      status,
+      scope: 'vip-enterprise',
+      restricted: true,
+      approved: status === 'Live',
+      rateCard: item.rateCard,
+      createdAt: item.createdAt,
+    }
+  }
+
+  const sourceDraft = item.sourceCatalogItemId
+    ? getProviderCatalogItems().find((draft) => draft.catalogItemId === item.sourceCatalogItemId)
+    : null
+
+  if (sourceDraft) {
+    const base = mapProviderCatalogToGovernanceItem(sourceDraft, organization)
+    return {
+      ...base,
+      id: item.id,
+      catalogItemId: sourceDraft.catalogItemId,
+      displayName: item.displayName,
+      description: item.description,
+      status,
+      scope: 'vip-enterprise',
+      restricted: true,
+      approved: status === 'Live',
+      rateCard: item.rateCard,
+      createdAt: item.createdAt,
+      networkPolicy: applyTenantNetworkOverrides(
+        getCatalogItemNetworkPolicy(sourceDraft),
+        getTenantNetworkOverrides(organization.slug, item.id),
+        organization.slug,
+      ),
+    }
+  }
+
+  const fallback = TENANT_CATALOG_GOVERNANCE_ITEMS[0]!
+  return {
+    ...fallback,
+    id: item.id,
+    catalogItemId: undefined,
+    displayName: item.displayName,
+    description: item.description,
+    status,
+    scope: 'vip-enterprise',
+    restricted: true,
+    approved: status === 'Live',
+    rateCard: item.rateCard,
+    createdAt: item.createdAt,
+    networkPolicy: applyTenantNetworkOverrides(
+      DEFAULT_CATALOG_NETWORK_POLICY,
+      getTenantNetworkOverrides(organization.slug, item.id),
+      organization.slug,
+    ),
+  }
+}
+
 export function getTenantCatalogGovernanceItems(
   organization: RegisteredOrganization,
   _catalogDraft: ProviderCatalogDraft | null,
 ): TenantCatalogGovernanceItemWithNetworking[] {
   ensureProviderCatalogDemoItems()
 
-  const visibleItems = getProviderCatalogItems().filter((item) =>
-    isCatalogVisibleToTenant(item, organization),
+  const visibleItems = getProviderCatalogItems().filter(
+    (item) =>
+      isCatalogVisibleToTenant(item, organization) &&
+      isTenantAdminDemoProviderCatalogItem(item.catalogItemId),
   )
 
-  if (visibleItems.length > 0) {
-    return sortByDemoCatalogOrder(visibleItems).map((item) =>
-      mapProviderCatalogToGovernanceItem(item, organization),
-    )
-  }
+  const providerItems =
+    visibleItems.length > 0
+      ? sortByDemoCatalogOrder(visibleItems).map((item) =>
+          mapProviderCatalogToGovernanceItem(item, organization),
+        )
+      : TENANT_CATALOG_GOVERNANCE_ITEMS.map((item) => ({
+          ...item,
+          catalogItemId: item.id,
+          networkPolicy: applyTenantNetworkOverrides(
+            DEFAULT_CATALOG_NETWORK_POLICY,
+            getTenantNetworkOverrides(organization.slug, item.id),
+            organization.slug,
+          ),
+        }))
 
-  return TENANT_CATALOG_GOVERNANCE_ITEMS.map((item) => ({
-    ...item,
-    catalogItemId: item.id,
-    networkPolicy: applyTenantNetworkOverrides(
-      DEFAULT_CATALOG_NETWORK_POLICY,
-      getTenantNetworkOverrides(organization.slug, item.id),
-      organization.slug,
-    ),
-  }))
+  const customItems = ensureTenantDemoCatalogItems(organization.slug).map((item) =>
+    mapCustomTenantCatalogItemToGovernance(item, organization),
+  )
+
+  return [...providerItems, ...customItems]
 }
 
 export function getTenantCatalogGovernanceSpecSummary(item: TenantCatalogGovernanceItem): string {

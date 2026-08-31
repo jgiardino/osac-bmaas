@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { TenantShell } from '../components/tenant/TenantShell'
-import { DEMO_TENANT_DISPLAY_USER, isDemoTenantId } from '../demoTenant'
+import {
+  DEMO_TENANT_DISPLAY_USER,
+  DEMO_TENANT_LOGIN_EMAIL_USER,
+  isDemoTenantId,
+  type DemoTenantId,
+} from '../demoTenant'
 import {
   getDemoTenantUserOrganization,
   getProviderViewingAsTenantUser,
@@ -11,6 +16,7 @@ import { getProviderRegisteredOrganizations, activateProviderRegisteredOrganizat
 import { getProviderCatalogDraft, getProviderCatalogItems } from '../providerSetup/storage'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 import { getRegisteredOrganizationBySlug } from '../tenantAdmin/organizations'
+import { resolveOrganizationCompanyLogo } from '../providerAdmin/organizations'
 import {
   getTenantInstanceServiceId,
   isStickyDemoProvisioningInstance,
@@ -48,6 +54,8 @@ import {
   setProjectScopeId,
   type ProjectScopeId,
 } from '../tenantUser/projectScope'
+import { getTenantUserAccessibleProjects } from '../tenantUser/projects'
+import { TENANT_USER_PROJECTS_PAGE } from '../tenantUser/constants'
 
 function isTenantUserNavId(value: string | null): value is TenantUserNavId {
   return (
@@ -135,8 +143,8 @@ export function TenantUserWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { tenant } = useParams<{ tenant: string }>()
   const tenantSlug =
-    tenant && isDemoTenantId(tenant) && tenant === 'northstar' ? tenant : 'northstar'
-  const isValidTenant = Boolean(tenant && isDemoTenantId(tenant) && tenant === 'northstar')
+    tenant && isDemoTenantId(tenant) && tenant === 'northsummit' ? tenant : 'northsummit'
+  const isValidTenant = Boolean(tenant && isDemoTenantId(tenant) && tenant === 'northsummit')
 
   const [previewSession] = useState(() => getProviderViewingAsTenantUser())
   const [activeNavId, setActiveNavId] = useState<TenantUserNavId>(() =>
@@ -391,6 +399,11 @@ export function TenantUserWorkspacePage() {
       : defaultCatalogDraft
   const catalogDraft = focusedCatalogDraft
   const displayName = DEMO_TENANT_DISPLAY_USER[tenantSlug]
+  const userEmail = DEMO_TENANT_LOGIN_EMAIL_USER[tenantSlug as DemoTenantId]
+  const accessibleProjects = useMemo(
+    () => getTenantUserAccessibleProjects(projects, userEmail),
+    [projects, userEmail],
+  )
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
   const renderWorkspaceContent = () => {
@@ -404,10 +417,10 @@ export function TenantUserWorkspacePage() {
             tenantSlug={tenantSlug}
             instances={instances}
             onInstancesChange={setInstances}
-            projects={projects}
+            projects={accessibleProjects}
+            allProjects={projects}
             projectScopeId={projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
             organization={organization}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
             activeNavId={activeNavId}
@@ -435,13 +448,17 @@ export function TenantUserWorkspacePage() {
           <TenantAdminProjectsTeamsPage
             tenantSlug={tenantSlug}
             organization={organization}
-            projects={projects}
+            projects={accessibleProjects}
+            allProjects={projects}
             instances={instances}
             onProjectsChange={setProjects}
+            readOnly
+            currentUserEmail={userEmail}
+            lede={TENANT_USER_PROJECTS_PAGE.lede}
             openProjectId={openProjectId}
             onOpenProjectConsumed={() => setOpenProjectId(null)}
             onNavigateToInstance={(instance) => {
-              const project = projects.find((entry) => entry.name === instance.projectName)
+              const project = accessibleProjects.find((entry) => entry.name === instance.projectName)
               if (project) {
                 handleProjectScopeChange(project.id)
               }
@@ -510,10 +527,11 @@ export function TenantUserWorkspacePage() {
             organization={organization}
             catalogDraft={catalogDraft}
             tenantSlug={tenantSlug}
-            projects={projects}
+            projects={accessibleProjects}
+            allProjects={projects}
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
+            onNavigateToProjectsTeams={() => handleNavChange('projects-teams')}
             preferCatalogDraft={Boolean(previewSession?.catalogItemId)}
             autoOpenLaunchWizard={Boolean(previewSession?.autoLaunch && previewSession.catalogItemId)}
             openCatalogItemKey={openCatalogItemKey}
@@ -535,6 +553,8 @@ export function TenantUserWorkspacePage() {
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
+      companyLogoSrc={organization ? resolveOrganizationCompanyLogo(organization) : null}
+      companyLogoAlt={organization?.name}
     >
       <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>

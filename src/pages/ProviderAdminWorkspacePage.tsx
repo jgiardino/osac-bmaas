@@ -97,7 +97,7 @@ function getServicesNavId(serviceId: CatalogServiceId): ProviderAdminNavId {
 
 const PUBLISH_PHASE_MS = 900
 const ENTER_PHASE_MS = 700
-const PROVIDER_SERVICES_DEMO_TENANT = 'northstar'
+const PROVIDER_SERVICES_DEMO_TENANT = 'northsummit'
 
 function normalizeProviderNavParam(value: string | null): ProviderAdminNavId | null {
   const normalizedNav =
@@ -469,7 +469,6 @@ export function ProviderAdminWorkspacePage() {
             projects={projects}
             projectScopeId={projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
             organization={getWorkspaceOrganization(PROVIDER_SERVICES_DEMO_TENANT)}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
             activeNavId={activeNavId}
@@ -482,6 +481,9 @@ export function ProviderAdminWorkspacePage() {
             onOpenInstanceConsumed={() => setOpenInstanceId(null)}
             onNavigateToProject={(project) => {
               setOpenProjectId(project.id)
+              handleNavChange('projects-teams')
+            }}
+            onNavigateToCreateProject={() => {
               handleNavChange('projects-teams')
             }}
           />
@@ -524,7 +526,7 @@ export function ProviderAdminWorkspacePage() {
             projects={projects}
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
+            onNavigateToCreateProject={() => handleNavChange('projects-teams')}
             onPlaceOnGrid={
               visionEnabled
                 ? () => {

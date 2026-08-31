@@ -111,7 +111,7 @@ type ProviderAdminCatalogPageProps = {
   projects?: readonly TenantProject[]
   initialProjectId?: string | null
   onProjectScopeChange?: (projectId: string) => void
-  onProjectsChange?: (projects: TenantProject[]) => void
+  onNavigateToCreateProject?: () => void
   /**
    * When the edit wizard is open, parent navigation should call this to show the same
    * leave confirmation before leaving the page.
@@ -127,7 +127,7 @@ type ProviderAdminCatalogPageProps = {
 const CATALOG_ITEM_CREATE_REVEAL_MS = 1600
 /** Intentional publish latency before revealing the live state. */
 const CATALOG_ITEM_PUBLISH_REVEAL_MS = 1500
-const PROVIDER_LAUNCH_DEMO_TENANT = 'northstar'
+const PROVIDER_LAUNCH_DEMO_TENANT = 'northsummit'
 
 function getDraftServiceId(catalogDraft: ProviderCatalogDraft): CatalogServiceId {
   return catalogDraft.serviceId ?? 'baremetal'
@@ -338,7 +338,7 @@ export function ProviderAdminCatalogPage({
   projects = [],
   initialProjectId = null,
   onProjectScopeChange,
-  onProjectsChange,
+  onNavigateToCreateProject,
   onEditLeaveAttemptChange,
   onPlaceOnGrid,
 }: ProviderAdminCatalogPageProps) {
@@ -1046,9 +1046,17 @@ export function ProviderAdminCatalogPage({
           projects={projects}
           initialProjectId={initialProjectId}
           onProjectScopeChange={onProjectScopeChange}
-          onProjectsChange={onProjectsChange ?? (() => undefined)}
+          onNavigateToCreateProject={() => {
+            closeLaunchWizard()
+            onNavigateToCreateProject?.()
+          }}
           existingInstanceNames={existingInstanceNames}
           onClose={closeLaunchWizard}
+          onBackToCatalogItem={() => {
+            if (selectedCatalogItem) {
+              openDetails(selectedCatalogItem)
+            }
+          }}
           onProvisioningStarted={(instance) => {
             onProvisioningStarted?.(instance)
             if (!onProvisioningStarted) {

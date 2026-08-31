@@ -14,6 +14,7 @@ import {
   Dropdown,
   DropdownItem,
   DropdownList,
+  FormGroup,
   Label,
   MenuToggle,
   Modal,
@@ -28,14 +29,16 @@ import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDrop
 import {
   formatOrganizationRolesAssignmentSummary,
   getOrganizationActivationSteps,
-  hasBreakGlassAccount,
+  getOrganizationOsacLoginPath,
   hasPendingIdpInvite,
+  identityProviderConnectedByLabel,
   isOrganizationReadyForLogin,
   resolveBreakGlassUsername,
+  resolveIdentityProviderConnectedBy,
+  resolveOrganizationCompanyLogo,
   type OrganizationActivationStep,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
-import { OrganizationReadyForLoginLinks } from './OrganizationReadyForLoginLinks'
 import { AdditionalEmailDomainsValue } from './AdditionalEmailDomainsField'
 import { AddTenantAdministratorWizard } from '../tenant-admin/AddTenantAdministratorWizard'
 import { OrganizationResourceUsageSection } from './OrganizationResourceUsageSection'
@@ -69,8 +72,10 @@ function formatRegisteredAt(iso: string): string {
 
 function getIdentityProviderStepMeta(organization: RegisteredOrganization): string | null {
   if (!organization.identityProviderConnected) {
-    if (hasPendingIdpInvite(organization) && organization.idpManagerEmail) {
-      return `Invite sent to ${organization.idpManagerEmail}`
+    if (hasPendingIdpInvite(organization)) {
+      return organization.idpManagerEmail
+        ? `Invite sent to ${organization.idpManagerEmail}`
+        : 'Waiting on IdP manager'
     }
     return null
   }
@@ -81,25 +86,6 @@ function getIdentityProviderStepMeta(organization: RegisteredOrganization): stri
   ].filter(Boolean)
 
   return parts.length > 0 ? parts.join(' · ') : organization.identityProviderName
-}
-
-function PersonField({
-  name,
-  email,
-}: {
-  name: string
-  email: string
-}) {
-  return (
-    <>
-      <Content component="p" className="provider-admin-organizations__primary-cell">
-        {name}
-      </Content>
-      <Content component="p" className="provider-admin-organizations__secondary-cell">
-        <code>{email}</code>
-      </Content>
-    </>
-  )
 }
 
 function AccountPersonRow({
@@ -128,8 +114,7 @@ function AccountPersonRow({
           {getAssignableTenantRole(admin.roleId).label}
         </Label>
       </div>
-      {admin.isPrimary ? null : (
-        <Dropdown
+      <Dropdown
           isOpen={isOpen}
           onOpenChange={setIsOpen}
           onSelect={() => setIsOpen(false)}
@@ -155,7 +140,6 @@ function AccountPersonRow({
             </DropdownItem>
           </DropdownList>
         </Dropdown>
-      )}
     </li>
   )
 }
@@ -172,12 +156,15 @@ function ActivationStepRow({
   onReviewRoles?: (organization: RegisteredOrganization) => void
 }) {
   const idpMeta = step.id === 'idp' ? getIdentityProviderStepMeta(organization) : null
+  const connectedBy =
+    step.id === 'idp' ? resolveIdentityProviderConnectedBy(organization) : null
+  const idpConnectedByLabel = connectedBy
+    ? identityProviderConnectedByLabel(connectedBy)
+    : null
   const rolesMeta =
     step.id === 'rbac' && step.complete
       ? formatOrganizationRolesAssignmentSummary(organization)
       : null
-  const showLoginPaths =
-    step.id === 'ready' && step.complete && organization.identityProviderConnected
   const canReviewIdp = step.id === 'idp' && typeof onReviewIdentityProvider === 'function'
   const canReviewRoles =
     step.id === 'rbac' &&
@@ -228,9 +215,17 @@ function ActivationStepRow({
         <span className="pf-v6-screen-reader">
           {step.complete ? ', complete' : ', not complete'}
         </span>
-        {idpMeta ? (
+        {idpMeta || idpConnectedByLabel ? (
           <Content component="p" className="provider-admin-organizations__status-step-meta">
-            {organization.identityProviderConnected ? <code>{idpMeta}</code> : idpMeta}
+            {idpMeta ? (
+              organization.identityProviderConnected ? (
+                <code>{idpMeta}</code>
+              ) : (
+                idpMeta
+              )
+            ) : null}
+            {idpMeta && idpConnectedByLabel ? ' · ' : null}
+            {idpConnectedByLabel}
           </Content>
         ) : null}
         {rolesMeta ? (
@@ -238,12 +233,17 @@ function ActivationStepRow({
             {rolesMeta}
           </Content>
         ) : null}
-        {showLoginPaths ? (
-          <OrganizationReadyForLoginLinks organization={organization} showHeading={false} />
-        ) : null}
       </div>
     </li>
   )
+}
+
+function getDetailsBreakGlassUsername(organization: RegisteredOrganization): string | null {
+  if (resolveIdentityProviderConnectedBy(organization) === 'provider-admin') {
+    return null
+  }
+  const username = resolveBreakGlassUsername(organization)
+  return username.trim() || null
 }
 
 export function OrganizationDetailsPage({
@@ -252,26 +252,33 @@ export function OrganizationDetailsPage({
   onEdit,
   onRemove,
   onReviewIdentityProvider,
-  onReviewRoles: _onReviewRoles,
+  onReviewRoles,
   onOrganizationChange,
 }: OrganizationDetailsPageProps) {
   const activationSteps = getOrganizationActivationSteps(organization)
   const roleAssignments = listRoleAssignments(organization)
-  const [isAddRolesOpen, setIsAddRolesOpen] = useState(false)
+  const companyLogoSrc = resolveOrganizationCompanyLogo(organization)
+  const breakGlassUsername = getDetailsBreakGlassUsername(organization)
+  const showBreakGlassAccount = Boolean(breakGlassUsername)
+  const [isAssignRolesOpen, setIsAssignRolesOpen] = useState(false)
   const [administratorPendingRemove, setAdministratorPendingRemove] =
     useState<TenantAdministrator | null>(null)
-  const canAddRoles = organization.identityProviderConnected
+  const canAssignRoles = organization.identityProviderConnected
 
-  const handleAddRoles = () => {
-    if (!canAddRoles) {
+  const handleAssignRoles = () => {
+    if (!canAssignRoles) {
       return
     }
-    setIsAddRolesOpen(true)
+    if (onReviewRoles) {
+      onReviewRoles(organization)
+      return
+    }
+    setIsAssignRolesOpen(true)
   }
 
   const handleRoleAssigned = (updated: RegisteredOrganization) => {
     onOrganizationChange?.(updated)
-    setIsAddRolesOpen(false)
+    setIsAssignRolesOpen(false)
   }
 
   const handleConfirmRemoveAdministrator = () => {
@@ -286,16 +293,19 @@ export function OrganizationDetailsPage({
     setAdministratorPendingRemove(null)
   }
 
-  if (isAddRolesOpen) {
+  if (isAssignRolesOpen) {
     return (
       <AddTenantAdministratorWizard
         isOpen
         organization={organization}
-        parentLabel={organization.name}
+        breadcrumbAncestors={[
+          { label: 'Tenants', onNavigate: onBack },
+          { label: organization.name, onNavigate: () => setIsAssignRolesOpen(false) },
+        ]}
         title={IDP_MANAGER_ROLES_COPY.wizardTitle}
         submitLabel={IDP_MANAGER_ROLES_COPY.wizardSubmitLabel}
         showRoleCatalog
-        onClose={() => setIsAddRolesOpen(false)}
+        onClose={() => setIsAssignRolesOpen(false)}
         onAdded={handleRoleAssigned}
       />
     )
@@ -345,6 +355,21 @@ export function OrganizationDetailsPage({
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
+                  <DescriptionListTerm>Company logo</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {companyLogoSrc ? (
+                      <div className="provider-admin-organizations__logo-preview">
+                        <img
+                          src={companyLogoSrc}
+                          alt={organization.logoFileName || organization.name}
+                        />
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
                   <DescriptionListTerm>Primary email domain</DescriptionListTerm>
                   <DescriptionListDescription>
                     {organization.primaryDomain || '—'}
@@ -354,6 +379,14 @@ export function OrganizationDetailsPage({
                   <DescriptionListTerm>Additional email domains</DescriptionListTerm>
                   <DescriptionListDescription>
                     <AdditionalEmailDomainsValue domains={organization.additionalDomains ?? []} />
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                  <DescriptionListTerm>OSAC URL</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    <span className="provider-admin-organizations__osac-url">
+                      <code>{getOrganizationOsacLoginPath(organization.slug)}</code>
+                    </span>
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
@@ -390,7 +423,7 @@ export function OrganizationDetailsPage({
                     step={step}
                     organization={organization}
                     onReviewIdentityProvider={onReviewIdentityProvider}
-                    onReviewRoles={canAddRoles ? () => handleAddRoles() : undefined}
+                    onReviewRoles={canAssignRoles ? () => handleAssignRoles() : undefined}
                   />
                 ))}
               </ol>
@@ -413,23 +446,23 @@ export function OrganizationDetailsPage({
                 >
                   Roles
                 </Title>
-                {canAddRoles ? (
+                {canAssignRoles ? (
                   <Button
                     variant="link"
                     isInline
                     icon={<PlusCircleIcon />}
                     className="provider-admin-organizations__accounts-add"
-                    onClick={handleAddRoles}
+                    onClick={handleAssignRoles}
                   >
-                    Add roles
+                    Assign roles
                   </Button>
                 ) : null}
               </div>
               {roleAssignments.length === 0 ? (
                 <Content component="p" className="provider-admin-organizations__secondary-cell">
-                  {canAddRoles
+                  {canAssignRoles
                     ? IDP_MANAGER_ROLES_COPY.emptyBody
-                    : 'Connect the identity provider before adding roles.'}
+                    : 'Connect the identity provider before assigning roles.'}
                 </Content>
               ) : (
                 <ul
@@ -446,6 +479,7 @@ export function OrganizationDetailsPage({
                 </ul>
               )}
             </div>
+            {showBreakGlassAccount && breakGlassUsername ? (
             <div className="entity-details-page__column-block">
               <Title
                 headingLevel="h2"
@@ -454,45 +488,28 @@ export function OrganizationDetailsPage({
               >
                 Break-glass account
               </Title>
-              {hasBreakGlassAccount(organization) ? (
-                <div className="provider-admin-organizations__break-glass">
+              <div className="provider-admin-organizations__break-glass">
+                <FormGroup label="Username" fieldId="tenant-break-glass-username">
                   <ClipboardCopy
+                    id="tenant-break-glass-username"
                     isReadOnly
                     isCode
                     hoverTip="Copy username"
                     clickTip="Username copied"
                     textAriaLabel="Break-glass username"
                   >
-                    {resolveBreakGlassUsername(organization)}
+                    {breakGlassUsername}
                   </ClipboardCopy>
-                  <Content
-                    component="p"
-                    className="provider-admin-organizations__secondary-cell"
-                  >
-                    Custodian:{' '}
-                    {organization.breakGlassName || 'IdP manager'}
-                    {organization.breakGlassEmail
-                      ? ` · ${organization.breakGlassEmail}`
-                      : ''}
-                  </Content>
-                  <Content
-                    component="p"
-                    className="provider-admin-organizations__secondary-cell"
-                  >
-                    Local login. Does not use the tenant IdP.
-                  </Content>
-                </div>
-              ) : organization.breakGlassEmail ? (
-                <PersonField
-                  name={organization.breakGlassName || '—'}
-                  email={organization.breakGlassEmail}
-                />
-              ) : (
-                <Content component="p" className="provider-admin-organizations__secondary-cell">
-                  —
+                </FormGroup>
+                <Content
+                  component="p"
+                  className="provider-admin-organizations__secondary-cell"
+                >
+                  Local login for the IdP manager. Does not use the tenant IdP.
                 </Content>
-              )}
+              </div>
             </div>
+            ) : null}
           </div>
         </div>
       </div>

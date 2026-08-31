@@ -9,7 +9,9 @@ export type WizardStepFooterConfig = {
 
 export type UseWizardLeaveConfirmOptions = {
   onLeave: () => void
+  onDismiss?: () => void
   isLeaveDisabled?: boolean
+  title?: string
   primaryActionLabel?: string
   description?: string
   titleId?: string
@@ -17,7 +19,9 @@ export type UseWizardLeaveConfirmOptions = {
 
 export function useWizardLeaveConfirm({
   onLeave,
+  onDismiss,
   isLeaveDisabled = false,
+  title = 'Are you sure?',
   primaryActionLabel = 'Leave',
   description = 'Your progress will not be saved.',
   titleId = 'wizard-leave-confirm-title',
@@ -33,7 +37,8 @@ export function useWizardLeaveConfirm({
 
   const closeLeaveConfirm = useCallback(() => {
     setIsLeaveConfirmOpen(false)
-  }, [])
+    onDismiss?.()
+  }, [onDismiss])
 
   const confirmLeave = useCallback(() => {
     setIsLeaveConfirmOpen(false)
@@ -61,6 +66,7 @@ export function useWizardLeaveConfirm({
       isOpen={isLeaveConfirmOpen}
       onClose={closeLeaveConfirm}
       onConfirm={confirmLeave}
+      title={title}
       primaryActionLabel={primaryActionLabel}
       description={description}
       titleId={titleId}

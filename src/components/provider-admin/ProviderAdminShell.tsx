@@ -218,7 +218,7 @@ export function ProviderAdminShell({
               to="#"
               preventDefault
             >
-              Projects & teams
+              Projects
             </NavItem>
             <NavExpandable
               id="provider-admin-genai-studio-nav"

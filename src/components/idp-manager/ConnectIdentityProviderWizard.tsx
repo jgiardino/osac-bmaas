@@ -21,14 +21,19 @@ import {
   OrganizationActionWorkingState,
   type OrganizationActionCompletionPhase,
 } from '../provider-admin/OrganizationActionSuccessState'
-import { NetworkInventoryCreateWizardShell } from '../networking/NetworkInventoryCreateWizardShell'
+import {
+  NetworkInventoryCreateWizardShell,
+  type NetworkInventoryCreateBreadcrumbAncestor,
+} from '../networking/NetworkInventoryCreateWizardShell'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
 import { ResourceCreatePageShell } from '../shared/ResourceCreatePageShell'
+import { IDP_MANAGER_IDENTITY_PROVIDER_COPY } from '../../idpManager/constants'
 import {
   areAdditionalDomainsValid,
   buildDefaultAdditionalDomains,
   getTakenEmailDomains,
   identityProviderProtocolLabel,
+  type IdentityProviderConnectedBy,
   type OrganizationIdentityProvider,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
@@ -50,6 +55,8 @@ type ConnectIdentityProviderWizardProps = {
   isOpen: boolean
   organization: RegisteredOrganization
   editingProvider: OrganizationIdentityProvider | null
+  connectedBy: IdentityProviderConnectedBy
+  breadcrumbAncestors?: readonly NetworkInventoryCreateBreadcrumbAncestor[]
   onClose: () => void
   onSaved: (organization: RegisteredOrganization) => void
 }
@@ -58,6 +65,8 @@ export function ConnectIdentityProviderWizard({
   isOpen,
   organization,
   editingProvider,
+  connectedBy,
+  breadcrumbAncestors,
   onClose,
   onSaved,
 }: ConnectIdentityProviderWizardProps) {
@@ -101,7 +110,7 @@ export function ConnectIdentityProviderWizard({
     additionalDomainsValid
   const issuerLabel = form.protocol === 'SAML' ? 'Metadata URL' : 'Issuer URL'
   const clientLabel = form.protocol === 'SAML' ? 'Entity ID' : 'Client ID'
-  const parentLabel = 'Identity provider'
+  const parentLabel = IDP_MANAGER_IDENTITY_PROVIDER_COPY.title
   const wizardTitle = isEditing ? 'Edit identity provider' : 'Connect identity provider'
   const submitLabel = isEditing ? 'Save' : 'Connect identity provider'
 
@@ -119,7 +128,7 @@ export function ConnectIdentityProviderWizard({
           form,
           additionalDomains,
         )
-      : addOrganizationIdentityProvider(organization, form, additionalDomains)
+      : addOrganizationIdentityProvider(organization, form, additionalDomains, connectedBy)
   }
 
   const handleSave = () => {
@@ -290,9 +299,20 @@ export function ConnectIdentityProviderWizard({
     return undefined
   }
 
+  const completionAncestors = breadcrumbAncestors?.map((item) => ({
+    label: item.label,
+    onClick: item.onNavigate
+      ? () => {
+          handleClose()
+          item.onNavigate?.()
+        }
+      : undefined,
+  }))
+
   if (completionPhase !== 'idle') {
     return (
       <ResourceCreatePageShell
+        ancestors={completionAncestors}
         parentLabel={parentLabel}
         title={wizardTitle}
         titleId="connect-identity-provider-wizard-title"
@@ -318,6 +338,7 @@ export function ConnectIdentityProviderWizard({
   return (
     <NetworkInventoryCreateWizardShell
       isOpen={isOpen}
+      ancestors={breadcrumbAncestors}
       parentLabel={parentLabel}
       title={wizardTitle}
       titleId="connect-identity-provider-wizard-title"

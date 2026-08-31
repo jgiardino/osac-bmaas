@@ -56,9 +56,10 @@ type TenantUserCatalogPageProps = {
   catalogDraft: ProviderCatalogDraft | null
   tenantSlug: string
   projects: readonly TenantProject[]
+  allProjects?: readonly TenantProject[]
   initialProjectId?: string | null
   onProjectScopeChange?: (projectId: string) => void
-  onProjectsChange: (projects: TenantProject[]) => void
+  onNavigateToProjectsTeams: () => void
   /** When true, open the launch wizard immediately (provider preview). */
   autoOpenLaunchWizard?: boolean
   /** Prefer the provided catalog draft even if org assignment differs. */
@@ -93,9 +94,9 @@ export function TenantUserCatalogPage({
   catalogDraft,
   tenantSlug,
   projects,
+  allProjects,
   initialProjectId = null,
   onProjectScopeChange,
-  onProjectsChange,
   autoOpenLaunchWizard = false,
   preferCatalogDraft = false,
   openCatalogItemKey = null,
@@ -315,11 +316,18 @@ export function TenantUserCatalogPage({
           preferCatalogDraft={preferCatalogDraft}
           tenantSlug={tenantSlug}
           projects={projects}
+          allProjects={allProjects}
           initialProjectId={initialProjectId}
           onProjectScopeChange={onProjectScopeChange}
-          onProjectsChange={onProjectsChange}
           existingInstanceNames={existingInstanceNames}
           onClose={closeLaunchWizard}
+          onBackToCatalogItem={() => {
+            if (activeCatalogItem) {
+              setIsWizardOpen(false)
+              setIsDetailsDrawerOpen(true)
+              syncWorkspaceCatalogItemParam(setSearchParams, activeCatalogItem.displayName)
+            }
+          }}
           onProvisioningStarted={onProvisioningStarted}
           onDismissDuringProvisioning={(instanceId, serviceId) => {
             onDismissDuringProvisioning(instanceId, serviceId)

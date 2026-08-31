@@ -38,7 +38,7 @@ import type { TenantNavGroup, TenantNavItem } from '../../tenantShell/constants'
 import { flattenTenantNavItems } from '../../tenantShell/constants'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { BlueSolaceMastheadLogo } from './BlueSolaceMastheadLogo'
-import { NorthstarBankMastheadLogo } from './NorthstarBankMastheadLogo'
+import { NorthsummitBankMastheadLogo } from './NorthsummitBankMastheadLogo'
 
 type TenantShellRole = 'tenant-admin' | 'tenant-user' | 'idp-manager'
 
@@ -55,6 +55,8 @@ type TenantShellProps = {
   disabledNavIds?: string[]
   isOnboardingLayout?: boolean
   isContentFilled?: boolean
+  companyLogoSrc?: string | null
+  companyLogoAlt?: string
 }
 
 const roleLabels: Record<TenantShellRole, string> = {
@@ -76,6 +78,8 @@ export function TenantShell({
   disabledNavIds = [],
   isOnboardingLayout = false,
   isContentFilled = false,
+  companyLogoSrc = null,
+  companyLogoAlt,
 }: TenantShellProps) {
   const navigate = useNavigate()
   const flattenedNavItems =
@@ -160,16 +164,37 @@ export function TenantShell({
           </PageToggleButton>
         </MastheadToggle>
         <MastheadLogo
-          className={role === 'idp-manager' ? 'bluesolace-masthead-logo' : 'northstar-masthead-logo'}
+          className={
+            companyLogoSrc || role === 'idp-manager'
+              ? 'bluesolace-masthead-logo'
+              : 'northsummit-masthead-logo'
+          }
         >
           <MastheadBrand>
-            {role === 'idp-manager' ? <BlueSolaceMastheadLogo /> : <NorthstarBankMastheadLogo />}
+            {companyLogoSrc ? (
+              <div
+                className="bluesolace-masthead-brand"
+                role="img"
+                aria-label={companyLogoAlt || 'Tenant'}
+              >
+                <img
+                  src={companyLogoSrc}
+                  alt=""
+                  className="bluesolace-masthead-brand__img"
+                  draggable={false}
+                />
+              </div>
+            ) : role === 'idp-manager' ? (
+              <BlueSolaceMastheadLogo />
+            ) : (
+              <NorthsummitBankMastheadLogo />
+            )}
           </MastheadBrand>
         </MastheadLogo>
       </MastheadMain>
 
-      <MastheadContent className="northstar-masthead-content">
-        <Toolbar ouiaId="tenant-masthead-utilities-toolbar" className="northstar-masthead-utilities-toolbar">
+      <MastheadContent className="northsummit-masthead-content">
+        <Toolbar ouiaId="tenant-masthead-utilities-toolbar" className="northsummit-masthead-utilities-toolbar">
           <ToolbarContent alignItems="center">
             <ToolbarGroup
               align={{ default: 'alignEnd' }}

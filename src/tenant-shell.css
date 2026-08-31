@@ -119,7 +119,7 @@
   text-transform: uppercase;
 }
 
-.northstar-masthead-content.pf-v6-c-masthead__content {
+.northsummit-masthead-content.pf-v6-c-masthead__content {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -130,12 +130,12 @@
   min-width: 0;
 }
 
-.northstar-masthead-content__spacer {
+.northsummit-masthead-content__spacer {
   flex: 1 1 0;
   min-width: 0;
 }
 
-.northstar-masthead-search {
+.northsummit-masthead-search {
   flex: 0 1 28rem;
   width: min(28rem, 100%);
   max-width: min(28rem, 100%);
@@ -143,26 +143,26 @@
   margin-inline-start: 0;
 }
 
-.northstar-masthead-search .pf-v6-c-text-input-group {
+.northsummit-masthead-search .pf-v6-c-text-input-group {
   width: 100%;
   min-width: 0;
   --pf-v6-c-text-input-group__text-input--MinWidth: 0;
 }
 
-.northstar-masthead-search .pf-v6-c-text-input-group__main {
+.northsummit-masthead-search .pf-v6-c-text-input-group__main {
   flex-wrap: nowrap;
   min-width: 0;
 }
 
-.northstar-masthead-search .pf-v6-c-text-input-group__main.pf-m-icon {
+.northsummit-masthead-search .pf-v6-c-text-input-group__main.pf-m-icon {
   min-width: 0;
 }
 
-.northstar-masthead-search .pf-v6-c-text-input-group__text {
+.northsummit-masthead-search .pf-v6-c-text-input-group__text {
   min-width: 0;
 }
 
-.northstar-masthead-utilities-toolbar.pf-v6-c-toolbar {
+.northsummit-masthead-utilities-toolbar.pf-v6-c-toolbar {
   flex-shrink: 0;
   width: 100%;
   max-width: 100%;
@@ -240,7 +240,7 @@
   gap: 0.25rem;
 }
 
-.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northstar-masthead-logo {
+.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northsummit-masthead-logo {
   display: inline-flex;
   align-items: center;
   width: auto;
@@ -249,7 +249,7 @@
   height: auto;
 }
 
-.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northstar-masthead-logo .pf-v6-c-masthead__brand {
+.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northsummit-masthead-logo .pf-v6-c-masthead__brand {
   display: flex;
   align-items: center;
   align-self: auto;
@@ -257,11 +257,11 @@
   padding-block-end: 0;
 }
 
-.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northstar-masthead-logo > * {
+.pf-v6-c-masthead__main .pf-v6-c-masthead__logo.northsummit-masthead-logo > * {
   max-height: var(--pf-v6-c-masthead__logo--MaxHeight);
 }
 
-.northstar-masthead-brand {
+.northsummit-masthead-brand {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -269,13 +269,21 @@
   max-height: var(--pf-v6-c-masthead__logo--MaxHeight, 2.375rem);
 }
 
-.northstar-masthead-brand__mark {
+.northsummit-masthead-brand__img {
+  display: block;
+  height: 2.5rem;
+  width: auto;
+  max-width: min(100%, 16rem);
+  object-fit: contain;
+}
+
+.northsummit-masthead-brand__mark {
   display: flex;
   align-items: center;
   flex-shrink: 0;
 }
 
-.northstar-masthead-brand__ring {
+.northsummit-masthead-brand__ring {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -287,13 +295,13 @@
   color: #eb0000;
 }
 
-.northstar-masthead-brand__star {
+.northsummit-masthead-brand__star {
   width: 55%;
   height: 55%;
   display: block;
 }
 
-.northstar-masthead-brand__text {
+.northsummit-masthead-brand__text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -302,7 +310,7 @@
   gap: 0.1rem;
 }
 
-.northstar-masthead-brand__line1 {
+.northsummit-masthead-brand__line1 {
   font-size: 0.5625rem;
   font-weight: 300;
   letter-spacing: 0.28em;
@@ -311,7 +319,7 @@
   opacity: 0.92;
 }
 
-.northstar-masthead-brand__line2 {
+.northsummit-masthead-brand__line2 {
   font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: -0.02em;

@@ -30,6 +30,7 @@ import {
   type TenantAdminNavId,
 } from '../tenantAdmin/constants'
 import { getWorkspaceOrganization } from '../tenantAdmin/organizations'
+import { resolveOrganizationCompanyLogo } from '../providerAdmin/organizations'
 import {
   getTenantActiveNav,
   ensureTenantDemoProjects,
@@ -155,9 +156,9 @@ export function TenantAdminWorkspacePage() {
   const { tenant: tenantParam } = useParams<{ tenant: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const isValidTenant = Boolean(
-    tenantParam && isDemoTenantId(tenantParam) && tenantParam === 'northstar',
+    tenantParam && isDemoTenantId(tenantParam) && tenantParam === 'northsummit',
   )
-  const tenant = 'northstar' as const
+  const tenant = 'northsummit' as const
 
   const [organization, setOrganization] = useState(() => getWorkspaceOrganization(tenant))
   const [activeNavId, setActiveNavId] = useState<TenantAdminNavId>(() =>
@@ -235,7 +236,7 @@ export function TenantAdminWorkspacePage() {
 
   const catalogDraft = getProviderCatalogDraft()
   const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems(), visionEnabled)
-  const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northstar
+  const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
   const handleProjectScopeChange = (scopeId: ProjectScopeId) => {
@@ -382,7 +383,6 @@ export function TenantAdminWorkspacePage() {
             projects={projects}
             projectScopeId={projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
             organization={organization}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
             activeNavId={activeNavId}
@@ -394,6 +394,9 @@ export function TenantAdminWorkspacePage() {
             onOpenInstanceConsumed={() => setOpenInstanceId(null)}
             onNavigateToProject={(project) => {
               setOpenProjectId(project.id)
+              handleNavChange('projects-teams')
+            }}
+            onNavigateToCreateProject={() => {
               handleNavChange('projects-teams')
             }}
           />
@@ -422,7 +425,6 @@ export function TenantAdminWorkspacePage() {
             projects={projects}
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
-            onProjectsChange={setProjects}
             onNavigateToProjectsTeams={() => handleNavChange('projects-teams')}
             existingInstanceNames={instances.map((instance) => instance.name)}
             openCatalogItemKey={openCatalogItemKey}
@@ -522,6 +524,8 @@ export function TenantAdminWorkspacePage() {
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       isContentFilled={activeNavId === MODEL_FLEET_VISION_NAV_ID}
+      companyLogoSrc={resolveOrganizationCompanyLogo(organization)}
+      companyLogoAlt={organization.name}
     >
       {activeNavId === MODEL_FLEET_VISION_NAV_ID ? (
         renderWorkspaceContent()

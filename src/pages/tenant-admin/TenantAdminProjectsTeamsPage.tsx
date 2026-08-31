@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   Button,
   Content,
@@ -17,7 +17,10 @@ import {
   ModalVariant,
   SearchInput,
   Title,
+  Label,
 } from '@patternfly/react-core'
+import { AngleDownIcon } from '@patternfly/react-icons/dist/esm/icons/angle-down-icon'
+import { AngleRightIcon } from '@patternfly/react-icons/dist/esm/icons/angle-right-icon'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import { CreateTenantProjectWizard } from '../../components/tenant-admin/CreateTenantProjectWizard'
@@ -27,25 +30,36 @@ import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFil
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import {
   buildProjectFilterParts,
+  buildTenantProjectTreeRows,
+  collectDescendantProjectIds,
+  getAutoExpandedProjectIds,
+  getChildTenantProjects,
+  getEffectiveProjectMembers,
   getTenantProjectActions,
+  getTenantProjectAncestors,
+  getTenantProjectById,
+  getTenantProjectInstanceQuotaLabel,
   getTenantProjectMemberCountLabel,
   getTenantProjectPoolLabel,
   getTenantProjectServicesLabel,
-  matchesProjectEnvironmentFilter,
-  PROJECT_ENVIRONMENT_FILTER_OPTIONS,
+  matchesProjectListFilter,
+  PROJECT_LIST_FILTER_OPTIONS,
   projectMatchesSearch,
   TENANT_PROJECTS_TEAMS_DEMO,
-  type ProjectEnvironmentFilter,
+  type ProjectListFilter,
   type TenantProject,
   type TenantProjectMember,
 } from '../../tenantAdmin/projects'
+import { generateProjectWizardMemberId } from '../../tenantAdmin/createProjectWizard'
 import {
   addTenantProject,
   addTenantProjectMember,
   removeTenantProject,
   removeTenantProjectMember,
+  updateTenantProject,
 } from '../../tenantAdmin/storage'
 import type { TenantInstance } from '../../tenantUser/instances'
+import { buildTenantUserProjectTreeRows, getProjectMembershipForEmail, isTenantUserProjectManager, normalizeMemberEmail } from '../../tenantUser/projects'
 
 type TenantAdminProjectsTeamsPageProps = {
   tenantSlug: string
@@ -57,6 +71,10 @@ type TenantAdminProjectsTeamsPageProps = {
   /** Opens this project's detail page when navigating from another workspace view. */
   openProjectId?: string | null
   onOpenProjectConsumed?: () => void
+  readOnly?: boolean
+  currentUserEmail?: string
+  allProjects?: readonly TenantProject[]
+  lede?: string
 }
 
 export function TenantAdminProjectsTeamsPage({
@@ -68,38 +86,149 @@ export function TenantAdminProjectsTeamsPage({
   onNavigateToInstance,
   openProjectId = null,
   onOpenProjectConsumed,
+  readOnly = false,
+  currentUserEmail,
+  allProjects,
+  lede,
 }: TenantAdminProjectsTeamsPageProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<TenantProject | null>(null)
+  const [nestedCreateParent, setNestedCreateParent] = useState<TenantProject | null>(null)
+  const [returnToProjectAfterWizard, setReturnToProjectAfterWizard] = useState<TenantProject | null>(
+    null,
+  )
   const [selectedProject, setSelectedProject] = useState<TenantProject | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [projectPendingDelete, setProjectPendingDelete] = useState<TenantProject | null>(null)
   const [searchValue, setSearchValue] = useState('')
-  const [selectedEnvironment, setSelectedEnvironment] = useState<ProjectEnvironmentFilter>('all')
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<ProjectListFilter>('all')
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
+
+  const projectCatalog = allProjects ?? projects
 
   const sortedProjects = useMemo(
     () => [...projects].sort((left, right) => left.name.localeCompare(right.name)),
     [projects],
   )
 
-  const filteredProjects = useMemo(() => {
-    return sortedProjects.filter((project) => {
-      if (!matchesProjectEnvironmentFilter(project, selectedEnvironment)) {
-        return false
-      }
+  const filteredProjects = useMemo(
+    () =>
+      sortedProjects.filter((project) => {
+        if (!matchesProjectListFilter(project, selectedProjectFilter, instances)) {
+          return false
+        }
 
-      return projectMatchesSearch(project, searchValue)
-    })
-  }, [searchValue, selectedEnvironment, sortedProjects])
+        return projectMatchesSearch(project, searchValue, sortedProjects)
+      }),
+    [instances, searchValue, selectedProjectFilter, sortedProjects],
+  )
+
+  const treeRows = useMemo(() => {
+    if (!readOnly) {
+      return buildTenantProjectTreeRows(
+        sortedProjects,
+        searchValue,
+        selectedProjectFilter,
+        instances,
+        expandedProjectIds,
+      )
+    }
+
+    const visibleIds = new Set(filteredProjects.map((project) => project.id))
+    return buildTenantUserProjectTreeRows(
+      projectCatalog,
+      sortedProjects,
+      expandedProjectIds,
+    ).filter(({ project }) => visibleIds.has(project.id))
+  }, [
+    expandedProjectIds,
+    filteredProjects,
+    instances,
+    projectCatalog,
+    readOnly,
+    searchValue,
+    selectedProjectFilter,
+    sortedProjects,
+  ])
 
   const filterDescriptionParts = useMemo(
-    () => buildProjectFilterParts(searchValue, selectedEnvironment),
-    [searchValue, selectedEnvironment],
+    () => buildProjectFilterParts(searchValue, selectedProjectFilter),
+    [searchValue, selectedProjectFilter],
   )
+
+  const showActionsColumn = !readOnly || Boolean(currentUserEmail)
+
+  const canCreateRootProject =
+    !readOnly ||
+    Boolean(currentUserEmail && isTenantUserProjectManager(projectCatalog, currentUserEmail))
+
+  const canManageProject = (project: TenantProject) => {
+    if (!readOnly) {
+      return true
+    }
+
+    if (!currentUserEmail) {
+      return false
+    }
+
+    return (
+      getProjectMembershipForEmail(projectCatalog, project, currentUserEmail)?.role === 'manager'
+    )
+  }
+
+  const getProjectRowActions = (project: TenantProject) => {
+    if (readOnly) {
+      const canManage = canManageProject(project)
+
+      return getTenantProjectActions(project, {
+        onViewDetails: openDetails,
+        onCreateNested: (parent) => openCreateProject(parent),
+        showCreateNested: true,
+        createNestedDisabled: !canManage,
+        createNestedDisabledTooltip: TENANT_PROJECTS_TEAMS_DEMO.createNestedProjectDeniedTooltip,
+        onEdit: openEditProject,
+        showEdit: true,
+        editDisabled: !canManage,
+        editDisabledTooltip: TENANT_PROJECTS_TEAMS_DEMO.editProjectDeniedTooltip,
+        onDelete: openDeleteProject,
+        showDelete: true,
+        deleteDisabled: !canManage,
+        deleteDisabledTooltip: TENANT_PROJECTS_TEAMS_DEMO.deleteProjectDeniedTooltip,
+      })
+    }
+
+    return getTenantProjectActions(project, {
+      onViewDetails: openDetails,
+      onCreateNested: (parent) => openCreateProject(parent),
+      onEdit: openEditProject,
+      onDelete: openDeleteProject,
+    })
+  }
 
   const clearAllFilters = () => {
     setSearchValue('')
-    setSelectedEnvironment('all')
+    setSelectedProjectFilter('all')
   }
+
+  useEffect(() => {
+    const autoExpanded = getAutoExpandedProjectIds(
+      projects,
+      searchValue,
+      selectedProjectFilter,
+      instances,
+    )
+    const parentsWithChildren = sortedProjects
+      .filter((project) => getChildTenantProjects(sortedProjects, project.id).length > 0)
+      .map((project) => project.id)
+
+    setExpandedProjectIds((current) => {
+      const next = new Set([...current, ...autoExpanded, ...parentsWithChildren])
+      if (next.size === current.size && [...next].every((id) => current.has(id))) {
+        return current
+      }
+      return next
+    })
+  }, [instances, projects, searchValue, selectedProjectFilter, sortedProjects])
 
   useEffect(() => {
     if (!openProjectId) {
@@ -140,9 +269,96 @@ export function TenantAdminProjectsTeamsPage({
     setIsDetailsOpen(false)
   }
 
+  const closeCreateWizard = () => {
+    setIsCreateModalOpen(false)
+    setEditingProject(null)
+    setNestedCreateParent(null)
+
+    if (returnToProjectAfterWizard) {
+      const latest =
+        getTenantProjectById(projects, returnToProjectAfterWizard.id) ?? returnToProjectAfterWizard
+      setSelectedProject(latest)
+      setIsDetailsOpen(true)
+      setReturnToProjectAfterWizard(null)
+    }
+  }
+
+  const openCreateProject = (parent: TenantProject | null = null, fromDetails = false) => {
+    setEditingProject(null)
+    setNestedCreateParent(parent)
+    if (fromDetails && parent) {
+      setReturnToProjectAfterWizard(parent)
+      setIsDetailsOpen(false)
+    } else {
+      setReturnToProjectAfterWizard(null)
+    }
+    setIsCreateModalOpen(true)
+  }
+
+  const openEditProject = (project: TenantProject, fromDetails = false) => {
+    setEditingProject(project)
+    setNestedCreateParent(null)
+    if (fromDetails) {
+      setReturnToProjectAfterWizard(project)
+      setIsDetailsOpen(false)
+    } else {
+      setReturnToProjectAfterWizard(null)
+    }
+    setIsCreateModalOpen(true)
+  }
+
   const handleCreateProject = (project: TenantProject) => {
-    addTenantProject(tenantSlug, project)
-    onProjectsChange([...projects, project])
+    let nextProject = project
+
+    if (readOnly && currentUserEmail) {
+      const normalizedEmail = normalizeMemberEmail(currentUserEmail)
+      const alreadyMember = project.members.some(
+        (member) => normalizeMemberEmail(member.email) === normalizedEmail,
+      )
+
+      if (!alreadyMember) {
+        const parentProject = project.parentProjectId
+          ? getTenantProjectById(projectCatalog, project.parentProjectId)
+          : null
+        const inheritedMembership = parentProject
+          ? getEffectiveProjectMembers(projectCatalog, parentProject).find(
+              (member) => normalizeMemberEmail(member.email) === normalizedEmail,
+            )
+          : null
+
+        nextProject = {
+          ...project,
+          members: [
+            ...project.members,
+            {
+              id: generateProjectWizardMemberId(),
+              name: inheritedMembership?.name ?? currentUserEmail,
+              email: currentUserEmail,
+              role: 'manager',
+            },
+          ],
+        }
+      }
+    }
+
+    addTenantProject(tenantSlug, nextProject)
+    onProjectsChange([...projectCatalog, nextProject])
+  }
+
+  const handleUpdateProject = (project: TenantProject) => {
+    onProjectsChange(updateTenantProject(tenantSlug, project))
+  }
+
+  const toggleProjectExpanded = (projectId: string) => {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
   }
 
   const openDeleteProject = (projectId: string) => {
@@ -173,6 +389,10 @@ export function TenantAdminProjectsTeamsPage({
     }
   }
 
+  const nestedDeleteCount = projectPendingDelete
+    ? collectDescendantProjectIds(projects, projectPendingDelete.id).length
+    : 0
+
   const deleteConfirmModal = (
     <Modal
       variant={ModalVariant.small}
@@ -190,8 +410,15 @@ export function TenantAdminProjectsTeamsPage({
         <Content component="p" id="delete-project-description">
           {projectPendingDelete ? (
             <>
-              <strong>{projectPendingDelete.name}</strong> will be permanently removed. This cannot
-              be undone.
+              <strong>{projectPendingDelete.name}</strong> will be permanently removed.
+              {nestedDeleteCount > 0 ? (
+                <>
+                  {' '}
+                  This will also delete {nestedDeleteCount} nested project
+                  {nestedDeleteCount === 1 ? '' : 's'}.
+                </>
+              ) : null}{' '}
+              This cannot be undone.
             </>
           ) : (
             'This project will be permanently removed. This cannot be undone.'
@@ -218,14 +445,38 @@ export function TenantAdminProjectsTeamsPage({
   }
 
   if (isCreateModalOpen) {
+    const editBreadcrumbAncestors = editingProject
+      ? getTenantProjectAncestors(projects, editingProject.id).map((ancestor) => ({
+          label: ancestor.name,
+          onClick: () => {
+            setIsCreateModalOpen(false)
+            setEditingProject(null)
+            setReturnToProjectAfterWizard(null)
+            openDetails(ancestor)
+          },
+        }))
+      : undefined
+
     return (
       <>
         <CreateTenantProjectWizard
           presentation="page"
           isOpen={isCreateModalOpen}
           organization={organization}
-          onClose={() => setIsCreateModalOpen(false)}
+          projects={projects}
+          parentProject={nestedCreateParent}
+          breadcrumbAncestors={editBreadcrumbAncestors}
+          editingProject={editingProject}
+          onOpenParentProject={(project) => {
+            setIsCreateModalOpen(false)
+            setEditingProject(null)
+            setNestedCreateParent(null)
+            setReturnToProjectAfterWizard(null)
+            openDetails(project)
+          }}
+          onClose={closeCreateWizard}
           onCreate={handleCreateProject}
+          onUpdate={handleUpdateProject}
         />
         {deleteConfirmModal}
       </>
@@ -237,12 +488,18 @@ export function TenantAdminProjectsTeamsPage({
       <>
         <TenantProjectDetailsPage
           project={selectedProject}
+          projects={projectCatalog}
           instances={instances}
           onBack={closeDetails}
+          onOpenProject={openDetails}
+          onCreateNested={(parent) => openCreateProject(parent, true)}
+          onEdit={(project) => openEditProject(project, true)}
           onDelete={openDeleteProject}
           onAddMember={handleAddMember}
           onRemoveMember={handleRemoveMember}
           onNavigateToInstance={onNavigateToInstance}
+          readOnly={readOnly}
+          currentUserEmail={currentUserEmail}
         />
         {deleteConfirmModal}
       </>
@@ -260,26 +517,28 @@ export function TenantAdminProjectsTeamsPage({
         >
           <FlexItem>
             <Title headingLevel="h1" size="3xl" className="tenant-admin-projects-teams__title">
-              Projects & teams
+              Projects
             </Title>
             <Content component="p" className="tenant-admin-projects-teams__lede">
-              {TENANT_PROJECTS_TEAMS_DEMO.lede}
+              {lede ?? TENANT_PROJECTS_TEAMS_DEMO.lede}
             </Content>
           </FlexItem>
-          <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
-            <Button
-              variant="primary"
-              icon={<PlusIcon />}
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              {TENANT_PROJECTS_TEAMS_DEMO.createProjectLabel}
-            </Button>
-          </FlexItem>
+          {canCreateRootProject ? (
+            <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
+              <Button
+                variant="primary"
+                icon={<PlusIcon />}
+                onClick={() => openCreateProject()}
+              >
+                {TENANT_PROJECTS_TEAMS_DEMO.createProjectLabel}
+              </Button>
+            </FlexItem>
+          ) : null}
         </Flex>
       ) : (
         <>
           <Title headingLevel="h1" size="3xl" className="tenant-admin-projects-teams__title">
-            Projects & teams
+            Projects
           </Title>
           <Content component="p" className="tenant-admin-projects-teams__lede">
             {TENANT_PROJECTS_TEAMS_DEMO.lede}
@@ -292,14 +551,12 @@ export function TenantAdminProjectsTeamsPage({
           <div className="catalog-view-toolbar__start">
             <FormSelect
               className="catalog-status-filter"
-              id="tenant-projects-environment-filter"
-              value={selectedEnvironment}
-              onChange={(_event, value) =>
-                setSelectedEnvironment(value as ProjectEnvironmentFilter)
-              }
-              aria-label="Filter projects by environment"
+              id="tenant-projects-list-filter"
+              value={selectedProjectFilter}
+              onChange={(_event, value) => setSelectedProjectFilter(value as ProjectListFilter)}
+              aria-label="Filter projects"
             >
-              {PROJECT_ENVIRONMENT_FILTER_OPTIONS.map((option) => (
+              {PROJECT_LIST_FILTER_OPTIONS.map((option) => (
                 <FormSelectOption key={option.value} value={option.value} label={option.label} />
               ))}
             </FormSelect>
@@ -325,20 +582,22 @@ export function TenantAdminProjectsTeamsPage({
           </EmptyStateBody>
           <EmptyStateFooter>
             <EmptyStateActions>
-              <Button
-                variant="primary"
-                icon={<PlusIcon />}
-                onClick={() => setIsCreateModalOpen(true)}
-              >
-                {TENANT_PROJECTS_TEAMS_DEMO.createFirstProjectLabel}
-              </Button>
+              {canCreateRootProject ? (
+                <Button
+                  variant="primary"
+                  icon={<PlusIcon />}
+                  onClick={() => openCreateProject()}
+                >
+                  {TENANT_PROJECTS_TEAMS_DEMO.createFirstProjectLabel}
+                </Button>
+              ) : null}
             </EmptyStateActions>
           </EmptyStateFooter>
         </EmptyState>
-      ) : filteredProjects.length === 0 ? (
+      ) : treeRows.length === 0 ? (
         <CatalogFilterEmptyState
           title="No projects match your filters"
-          description="Try a different environment or search term."
+          description={TENANT_PROJECTS_TEAMS_DEMO.filterEmptyDescription}
           onClearFilters={clearAllFilters}
         />
       ) : (
@@ -361,45 +620,99 @@ export function TenantAdminProjectsTeamsPage({
                 <Th>Project members</Th>
                 <Th>IP pool</Th>
                 <Th>Instance quota</Th>
-                <Th screenReaderText="Actions" />
+                {showActionsColumn ? <Th screenReaderText="Actions" /> : null}
               </Tr>
             </Thead>
             <Tbody>
-              {filteredProjects.map((project) => (
-                <Tr key={project.id}>
-                  <Td dataLabel="Name">
-                    <Content component="p" className="tenant-admin-projects-teams__primary-cell">
-                      <Button
-                        variant="link"
-                        isInline
-                        className="catalog-table-name-link"
-                        onClick={() => openDetails(project)}
+              {treeRows.map(({ project, depth, hasChildren, isExpanded }) => {
+                const parentProject = project.parentProjectId
+                  ? getTenantProjectById(projectCatalog, project.parentProjectId)
+                  : null
+
+                return (
+                  <Tr key={project.id}>
+                    <Td dataLabel="Name">
+                      <div
+                        className="tenant-admin-projects-teams__tree-row"
+                        style={
+                          {
+                            '--tenant-project-tree-depth': depth,
+                          } as CSSProperties
+                        }
                       >
-                        {project.name}
-                      </Button>
-                    </Content>
-                    <Content component="p" className="tenant-admin-projects-teams__meta-cell">
-                      {project.id}
-                    </Content>
-                  </Td>
-                  <Td dataLabel="Services">
-                    {getTenantProjectServicesLabel(instances, project)}
-                  </Td>
-                  <Td dataLabel="Project members">
-                    {getTenantProjectMemberCountLabel(project)}
-                  </Td>
-                  <Td dataLabel="IP pool">{getTenantProjectPoolLabel(project)}</Td>
-                  <Td dataLabel="Instance quota">{project.instanceQuota} instances</Td>
-                  <Td isActionCell className="tenant-admin-projects-teams__table-action">
-                    <ActionsColumn
-                      items={getTenantProjectActions(project, {
-                        onViewDetails: openDetails,
-                        onDelete: openDeleteProject,
-                      })}
-                    />
-                  </Td>
-                </Tr>
-              ))}
+                        <div className="tenant-admin-projects-teams__name-cell">
+                          {hasChildren ? (
+                            <Button
+                              variant="plain"
+                              className="tenant-admin-projects-teams__tree-toggle"
+                              aria-label={
+                                isExpanded
+                                  ? `Collapse ${project.name}`
+                                  : `Expand ${project.name}`
+                              }
+                              aria-expanded={isExpanded}
+                              onClick={() => toggleProjectExpanded(project.id)}
+                            >
+                              {isExpanded ? (
+                                <AngleDownIcon aria-hidden />
+                              ) : (
+                                <AngleRightIcon aria-hidden />
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="tenant-admin-projects-teams__tree-spacer" aria-hidden />
+                          )}
+                          <div className="tenant-admin-projects-teams__name-copy">
+                            <Content
+                              component="p"
+                              className="tenant-admin-projects-teams__primary-cell"
+                            >
+                              <Button
+                                variant="link"
+                                isInline
+                                className="catalog-table-name-link"
+                                onClick={() => openDetails(project)}
+                              >
+                                {project.name}
+                              </Button>
+                              {parentProject ? (
+                                <Label
+                                  color="grey"
+                                  isCompact
+                                  className="tenant-admin-projects-teams__nested-badge"
+                                >
+                                  {TENANT_PROJECTS_TEAMS_DEMO.nestedBadgeLabel}
+                                </Label>
+                              ) : null}
+                            </Content>
+                            <Content
+                              component="p"
+                              className="tenant-admin-projects-teams__meta-cell"
+                            >
+                              {project.id}
+                            </Content>
+                          </div>
+                        </div>
+                      </div>
+                    </Td>
+                    <Td dataLabel="Services">
+                      {getTenantProjectServicesLabel(instances, project)}
+                    </Td>
+                    <Td dataLabel="Project members">
+                      {getTenantProjectMemberCountLabel(projectCatalog, project)}
+                    </Td>
+                    <Td dataLabel="IP pool">{getTenantProjectPoolLabel(project)}</Td>
+                    <Td dataLabel="Instance quota">
+                      {getTenantProjectInstanceQuotaLabel(projectCatalog, project)}
+                    </Td>
+                    {showActionsColumn ? (
+                      <Td isActionCell className="tenant-admin-projects-teams__table-action">
+                        <ActionsColumn items={getProjectRowActions(project)} />
+                      </Td>
+                    ) : null}
+                  </Tr>
+                )
+              })}
             </Tbody>
           </Table>
         </div>

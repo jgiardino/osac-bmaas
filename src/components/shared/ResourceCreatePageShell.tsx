@@ -6,9 +6,16 @@ import {
   Title,
 } from '@patternfly/react-core'
 
+export type ResourceCreateBreadcrumbAncestor = {
+  label: string
+  onClick?: () => void
+}
+
 export type ResourceCreatePageShellProps = {
-  /** List page label in the breadcrumb (e.g. Catalog, Organizations). */
-  parentLabel: string
+  /** Optional crumbs before the immediate parent (e.g. Tenants > tenant name). */
+  ancestors?: readonly ResourceCreateBreadcrumbAncestor[]
+  /** List page label in the breadcrumb (e.g. Catalog, Organizations). Omit when ancestors already include the parent. */
+  parentLabel?: string
   /** Current create title shown as the page H1 and active breadcrumb crumb. */
   title: string
   titleId?: string
@@ -28,6 +35,7 @@ export type ResourceCreatePageShellProps = {
  * Breadcrumb parent always returns to the resource landing list.
  */
 export function ResourceCreatePageShell({
+  ancestors,
   parentLabel,
   title,
   titleId = 'resource-create-page-title',
@@ -48,15 +56,33 @@ export function ResourceCreatePageShell({
         .join(' ')}
     >
       <Breadcrumb aria-label={`${title} breadcrumb`}>
-        <BreadcrumbItem
-          to="#"
-          onClick={(event) => {
-            event.preventDefault()
-            onBack()
-          }}
-        >
-          {parentLabel}
-        </BreadcrumbItem>
+        {ancestors?.map((item) => (
+          <BreadcrumbItem
+            key={item.label}
+            to={item.onClick ? '#' : undefined}
+            onClick={
+              item.onClick
+                ? (event) => {
+                    event.preventDefault()
+                    item.onClick?.()
+                  }
+                : undefined
+            }
+          >
+            {item.label}
+          </BreadcrumbItem>
+        ))}
+        {parentLabel ? (
+          <BreadcrumbItem
+            to="#"
+            onClick={(event) => {
+              event.preventDefault()
+              onBack()
+            }}
+          >
+            {parentLabel}
+          </BreadcrumbItem>
+        ) : null}
         <BreadcrumbItem isActive>{title}</BreadcrumbItem>
       </Breadcrumb>
 

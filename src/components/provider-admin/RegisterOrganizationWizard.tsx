@@ -33,6 +33,8 @@ import {
 import {
   DEFAULT_REGISTER_ORGANIZATION_FORM,
   buildNextRegisterOrganizationForm,
+  buildRegisterBreakGlassFields,
+  formFromRegisteredOrganization,
   generateOrganizationId,
   generateTenantId,
   generateBillingAccountId,
@@ -40,6 +42,7 @@ import {
   isOrganizationNameTaken,
   isOrganizationSlugTaken,
   isValidPrimaryDomain,
+  normalizeAdditionalDomains,
   normalizePrimaryDomain,
   REGISTER_ORGANIZATION_STEPS,
   slugifyOrganizationName,
@@ -51,25 +54,33 @@ import {
   getKubernetesResourceNameValidation,
   isValidKubernetesResourceName,
 } from '../../shared/kubernetesResourceName'
+import { TenantCompanyLogoField } from './TenantCompanyLogoField'
 
 type RegisterOrganizationWizardProps = {
   isOpen: boolean
   /** `page` replaces the organizations landing (breadcrumb back). Default `modal`. */
   presentation?: 'modal' | 'page'
   catalogDraft: ProviderCatalogDraft | null
+  editingOrganization?: RegisteredOrganization | null
   onClose: () => void
   onRegister: (organization: RegisteredOrganization) => void
+  onSave?: (organization: RegisteredOrganization) => void
 }
 
 export function RegisterOrganizationWizard({
   isOpen,
   presentation = 'modal',
   catalogDraft,
+  editingOrganization = null,
   onClose,
   onRegister,
+  onSave,
 }: RegisterOrganizationWizardProps) {
+  const isEditMode = editingOrganization !== null
   const [form, setForm] = useState<RegisterOrganizationForm>(() =>
-    buildNextRegisterOrganizationForm(getProviderRegisteredOrganizations()),
+    editingOrganization
+      ? formFromRegisteredOrganization(editingOrganization)
+      : buildNextRegisterOrganizationForm(getProviderRegisteredOrganizations()),
   )
   const existingOrganizations = useMemo(() => {
     if (!isOpen) {
@@ -88,7 +99,11 @@ export function RegisterOrganizationWizard({
   }, [isOpen])
 
   const resetWizard = () => {
-    setForm(buildNextRegisterOrganizationForm(getProviderRegisteredOrganizations()))
+    setForm(
+      editingOrganization
+        ? formFromRegisteredOrganization(editingOrganization)
+        : buildNextRegisterOrganizationForm(getProviderRegisteredOrganizations()),
+    )
   }
 
   const handleClose = () => {
@@ -98,13 +113,18 @@ export function RegisterOrganizationWizard({
 
   const { requestClose, leaveConfirmModal, wrapStepFooter } = useWizardLeaveConfirm({
     onLeave: handleClose,
-    primaryActionLabel: 'Leave',
+    primaryActionLabel: isEditMode ? 'Discard changes' : 'Leave',
     titleId: 'register-organization-leave-confirm',
   })
 
   useEffect(() => {
     if (!isOpen) {
       resetWizard()
+      return
+    }
+
+    if (editingOrganization) {
+      setForm(formFromRegisteredOrganization(editingOrganization))
       return
     }
 
@@ -120,12 +140,25 @@ export function RegisterOrganizationWizard({
         ? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId
         : (pools[0]?.id ?? ''),
     })
-  }, [isOpen])
+  }, [editingOrganization, isOpen])
 
+  const excludeOrganizationId = editingOrganization?.id
   const primaryDomain = normalizePrimaryDomain(form.primaryDomain)
-  const nameTaken = isOrganizationNameTaken(form.organizationName, existingOrganizations)
-  const domainTaken = isOrganizationDomainTaken(form.primaryDomain, existingOrganizations)
-  const slugTaken = isOrganizationSlugTaken(form.organizationName, existingOrganizations)
+  const nameTaken = isOrganizationNameTaken(
+    form.organizationName,
+    existingOrganizations,
+    excludeOrganizationId,
+  )
+  const domainTaken = isOrganizationDomainTaken(
+    form.primaryDomain,
+    existingOrganizations,
+    excludeOrganizationId,
+  )
+  const slugTaken = isOrganizationSlugTaken(
+    form.organizationName,
+    existingOrganizations,
+    excludeOrganizationId,
+  )
   const nameFormat = getKubernetesResourceNameValidation(form.organizationName)
   const isOrganizationStepValid =
     isValidKubernetesResourceName(form.organizationName) &&
@@ -144,12 +177,46 @@ export function RegisterOrganizationWizard({
       null
     if (
       !isOrganizationStepValid ||
-      isOrganizationNameTaken(form.organizationName, latestOrganizations) ||
-      isOrganizationDomainTaken(form.primaryDomain, latestOrganizations) ||
-      isOrganizationSlugTaken(form.organizationName, latestOrganizations) ||
+      isOrganizationNameTaken(
+        form.organizationName,
+        latestOrganizations,
+        excludeOrganizationId,
+      ) ||
+      isOrganizationDomainTaken(
+        form.primaryDomain,
+        latestOrganizations,
+        excludeOrganizationId,
+      ) ||
+      isOrganizationSlugTaken(
+        form.organizationName,
+        latestOrganizations,
+        excludeOrganizationId,
+      ) ||
       !Number.isFinite(maxInstances) ||
       maxInstances <= 0
     ) {
+      return
+    }
+
+    const logoSrc = form.logoSrc.trim() || null
+    const logoFileName = form.logoFileName.trim() || null
+
+    if (editingOrganization) {
+      const updated: RegisteredOrganization = {
+        ...editingOrganization,
+        name: form.organizationName.trim(),
+        slug: slugifyOrganizationName(form.organizationName),
+        primaryDomain,
+        additionalDomains: normalizeAdditionalDomains(
+          editingOrganization.additionalDomains,
+          primaryDomain,
+        ),
+        billingAccountName: form.billingAccountName.trim(),
+        logoSrc,
+        logoFileName,
+      }
+      onSave?.(updated)
+      handleClose()
       return
     }
 
@@ -162,6 +229,8 @@ export function RegisterOrganizationWizard({
       additionalDomains: [],
       billingAccountId: form.billingAccountId.trim() || generateBillingAccountId(),
       billingAccountName: form.billingAccountName.trim(),
+      logoSrc,
+      logoFileName,
       catalogItemId: catalogDraft?.catalogItemId ?? null,
       catalogDisplayName: catalogDraft?.displayName ?? null,
       externalIpPoolId: selectedPool?.id ?? null,
@@ -173,6 +242,7 @@ export function RegisterOrganizationWizard({
       additionalTenantAdmins: [],
       invitedTenantUserEmails: [],
       identityProviderConnected: false,
+      identityProviderConnectedBy: null,
       identityProviderName: null,
       identityProviderDisplayName: null,
       identityProviderProtocol: null,
@@ -184,11 +254,12 @@ export function RegisterOrganizationWizard({
       idpInviteStatus: 'none',
       idpInviteSentAt: null,
       idpInviteExpiresAt: null,
-      breakGlassName: null,
-      breakGlassEmail: null,
-      breakGlassUsername: null,
-      breakGlassPassword: null,
-      breakGlassIssuedAt: null,
+      ...buildRegisterBreakGlassFields(form.organizationName.trim(), primaryDomain, {
+        breakGlassUsername: form.breakGlassUsername,
+        breakGlassPassword: form.breakGlassPassword,
+        slug: slugifyOrganizationName(form.organizationName),
+      }),
+      breakGlassIssuedAt: new Date().toISOString(),
       rbacConfigured: false,
       status: 'Pending activation',
       createdAt: new Date().toISOString(),
@@ -204,7 +275,9 @@ export function RegisterOrganizationWizard({
         return (
           <div className="provider-admin-organizations__wizard-step">
             <Content component="p" className="provider-admin-organizations__wizard-lede">
-              Create the tenant and map its billing account.
+              {isEditMode
+                ? 'Update the tenant and billing account.'
+                : 'Create the tenant and map its billing account.'}
             </Content>
             <Form autoComplete="off" className="provider-admin-organizations__wizard-form">
               <FormGroup label="Tenant name" fieldId="register-org-name" isRequired>
@@ -212,17 +285,34 @@ export function RegisterOrganizationWizard({
                   id="register-org-name"
                   value={form.organizationName}
                   onChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      organizationName: value,
-                      billingAccountName: value.trim()
-                        ? `${value
-                            .trim()
-                            .toLowerCase()
-                            .replace(/[^a-z0-9]+/g, '-')
-                            .replace(/^-+|-+$/g, '')}-enterprise-billing`
-                        : '',
-                    }))
+                    setForm((current) => {
+                      const billingAccountName =
+                        isEditMode || !value.trim()
+                          ? current.billingAccountName
+                          : `${value
+                              .trim()
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]+/g, '-')
+                              .replace(/^-+|-+$/g, '')}-enterprise-billing`
+                      if (isEditMode) {
+                        return { ...current, organizationName: value, billingAccountName }
+                      }
+                      const previousSlug = slugifyOrganizationName(current.organizationName)
+                      const nextSlug = slugifyOrganizationName(value)
+                      const issued = buildRegisterBreakGlassFields(value, current.primaryDomain, {
+                        breakGlassUsername:
+                          previousSlug === nextSlug ? current.breakGlassUsername : null,
+                        breakGlassPassword:
+                          previousSlug === nextSlug ? current.breakGlassPassword : null,
+                      })
+                      return {
+                        ...current,
+                        organizationName: value,
+                        billingAccountName,
+                        breakGlassUsername: issued.breakGlassUsername,
+                        breakGlassPassword: issued.breakGlassPassword,
+                      }
+                    })
                   }
                   placeholder="e.g. north-summit-bank"
                   isRequired
@@ -261,6 +351,18 @@ export function RegisterOrganizationWizard({
                   </HelperText>
                 </FormHelperText>
               </FormGroup>
+              <TenantCompanyLogoField
+                id="register-company-logo"
+                logoSrc={form.logoSrc}
+                logoFileName={form.logoFileName}
+                onLogoChange={(patch) =>
+                  setForm((current) => ({
+                    ...current,
+                    logoSrc: patch.logoSrc ?? current.logoSrc,
+                    logoFileName: patch.logoFileName ?? current.logoFileName,
+                  }))
+                }
+              />
               <FormGroup label="Billing account ID" fieldId="register-billing-id">
                 <TextInput
                   id="register-billing-id"
@@ -299,6 +401,21 @@ export function RegisterOrganizationWizard({
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>
+              <DescriptionListTerm>Company logo</DescriptionListTerm>
+              <DescriptionListDescription>
+                {form.logoSrc.trim() ? (
+                  <div className="provider-admin-organizations__logo-preview">
+                    <img
+                      src={form.logoSrc}
+                      alt={form.logoFileName.trim() || form.organizationName.trim() || 'Company logo'}
+                    />
+                  </div>
+                ) : (
+                  '—'
+                )}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
               <DescriptionListTerm>Billing account</DescriptionListTerm>
               <DescriptionListDescription>
                 {form.billingAccountName.trim() || '—'}{' '}
@@ -329,8 +446,8 @@ export function RegisterOrganizationWizard({
       return wrapStepFooter({
         nextButtonText: (
           <span className="provider-admin-organizations__register-label">
-            <UsersIcon aria-hidden />
-            <span>Register tenant</span>
+            {isEditMode ? null : <UsersIcon aria-hidden />}
+            <span>{isEditMode ? 'Save' : 'Register tenant'}</span>
             <ArrowRightIcon aria-hidden />
           </span>
         ),
@@ -342,12 +459,12 @@ export function RegisterOrganizationWizard({
     return undefined
   }
 
-  const wizardTitle = 'Register tenant'
+  const wizardTitle = isEditMode ? 'Edit tenant' : 'Register tenant'
   const isPage = presentation === 'page'
 
   const wizard = isOpen ? (
     <Wizard
-      key="register-organization-wizard"
+      key={editingOrganization?.id ?? 'register-organization-wizard'}
       className="provider-admin-organizations__wizard"
       height={isPage ? '100%' : '40rem'}
       isPlain={isPage}
@@ -358,7 +475,9 @@ export function RegisterOrganizationWizard({
             title={wizardTitle}
             titleId="register-organization-wizard-title"
             onClose={requestClose}
-            closeButtonAriaLabel="Close register tenant wizard"
+            closeButtonAriaLabel={
+              isEditMode ? 'Close edit tenant wizard' : 'Close register tenant wizard'
+            }
           />
         )
       }

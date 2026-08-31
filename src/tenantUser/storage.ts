@@ -25,8 +25,10 @@ import {
   getDemoInstanceProjectIds,
   getTenantInstanceProjectIds,
   syncDemoMultiProjectShowcaseInstance,
+  withInstanceProjectIds,
   type TenantInstance,
 } from './instances'
+import type { TenantProject } from '../tenantAdmin/projects'
 import {
   DEMO_TENANT_PROJECT_ID,
   DEMO_TENANT_PROJECT_ID_02,
@@ -236,10 +238,10 @@ export function getTenantUserInstances(slug: string): TenantInstance[] {
 }
 
 function getDemoOrganizationName(slug: string): string {
-  if (slug === 'northstar' || slug === 'evergreen') {
-    return DEMO_TENANT_LABEL[slug]
+  if (slug === 'evergreen') {
+    return DEMO_TENANT_LABEL.evergreen
   }
-  return DEMO_TENANT_LABEL.northstar
+  return DEMO_TENANT_LABEL.northsummit
 }
 
 /**
@@ -427,6 +429,26 @@ export function updateTenantUserInstance(
   const instances = source.map((instance) =>
     instance.id === instanceId ? { ...instance, ...patch } : instance,
   )
+  setTenantUserInstances(slug, instances)
+  return instances
+}
+
+export function assignTenantUserInstanceToProject(
+  slug: string,
+  instanceId: string,
+  projectId: string,
+  projects: readonly TenantProject[],
+  organizationName: string,
+  knownInstances?: TenantInstance[],
+): TenantInstance[] {
+  const source = knownInstances ?? getTenantUserInstances(slug)
+  const instances = source.map((instance) => {
+    if (instance.id !== instanceId) {
+      return instance
+    }
+
+    return withInstanceProjectIds(instance, [projectId], projects, organizationName)
+  })
   setTenantUserInstances(slug, instances)
   return instances
 }

@@ -9,54 +9,44 @@ import {
 } from '@patternfly/react-core'
 import { FolderOpenIcon } from '@patternfly/react-icons/dist/esm/icons/folder-open-icon'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
-import { CreateTenantProjectWizard } from '../tenant-admin/CreateTenantProjectWizard'
-import type { RegisteredOrganization } from '../../providerAdmin/organizations'
-import { getWorkspaceOrganization } from '../../tenantAdmin/organizations'
+import { ProjectTreeDropdownItems } from './ProjectTreeDropdownItems'
 import {
   TENANT_PROJECTS_TEAMS_DEMO,
   type TenantProject,
 } from '../../tenantAdmin/projects'
-import { addTenantProject } from '../../tenantAdmin/storage'
 import {
   ALL_PROJECTS_SCOPE_ID,
   getProjectScopeLabel,
   type ProjectScopeId,
 } from '../../tenantUser/projectScope'
+import { buildTenantUserProjectTreeRows } from '../../tenantUser/projects'
 
 type ProjectScopeSwitcherProps = {
   tenantSlug: string
   projects: readonly TenantProject[]
+  allProjects?: readonly TenantProject[]
   selectedScopeId: ProjectScopeId
   onChange: (scopeId: ProjectScopeId) => void
-  organization: RegisteredOrganization | null
-  onProjectsChange: (projects: TenantProject[]) => void
+  onNavigateToCreateProject?: () => void
   id?: string
 }
 
 export function ProjectScopeSwitcher({
   tenantSlug,
   projects,
+  allProjects,
   selectedScopeId,
   onChange,
-  organization,
-  onProjectsChange,
+  onNavigateToCreateProject,
   id = 'project-scope-switcher',
 }: ProjectScopeSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [isCreateWizardOpen, setIsCreateWizardOpen] = useState(false)
-  const resolvedOrganization = organization ?? getWorkspaceOrganization(tenantSlug)
-  const selectedLabel = getProjectScopeLabel(tenantSlug, selectedScopeId)
+  const selectedLabel = getProjectScopeLabel(tenantSlug, selectedScopeId, projects)
+  const treeRows = buildTenantUserProjectTreeRows(allProjects ?? projects, projects)
 
-  const openCreateWizard = () => {
+  const handleCreateProject = () => {
     setIsOpen(false)
-    setIsCreateWizardOpen(true)
-  }
-
-  const handleCreateProject = (project: TenantProject) => {
-    addTenantProject(tenantSlug, project)
-    onProjectsChange([...projects, project])
-    onChange(project.id)
-    setIsCreateWizardOpen(false)
+    onNavigateToCreateProject?.()
   }
 
   return (
@@ -96,29 +86,23 @@ export function ProjectScopeSwitcher({
           >
             All projects
           </DropdownItem>
-          {projects.map((project) => (
-            <DropdownItem
-              key={project.id}
-              value={project.id}
-              isSelected={selectedScopeId === project.id}
-            >
-              {project.name}
-            </DropdownItem>
-          ))}
-          <Divider component="li" key="create-project-separator" />
-          <DropdownItem icon={<PlusIcon />} onClick={openCreateWizard}>
-            {TENANT_PROJECTS_TEAMS_DEMO.createProjectLabel}
-          </DropdownItem>
+          <ProjectTreeDropdownItems
+            projects={projects}
+            treeRows={treeRows}
+            selectedProjectId={
+              selectedScopeId === ALL_PROJECTS_SCOPE_ID ? null : selectedScopeId
+            }
+          />
+          {onNavigateToCreateProject ? (
+            <>
+              <Divider component="li" key="create-project-separator" />
+              <DropdownItem icon={<PlusIcon />} onClick={handleCreateProject}>
+                {TENANT_PROJECTS_TEAMS_DEMO.createProjectLabel}
+              </DropdownItem>
+            </>
+          ) : null}
         </DropdownList>
       </Dropdown>
-
-      <CreateTenantProjectWizard
-        presentation="modal"
-        isOpen={isCreateWizardOpen}
-        organization={resolvedOrganization}
-        onClose={() => setIsCreateWizardOpen(false)}
-        onCreate={handleCreateProject}
-      />
     </div>
   )
 }

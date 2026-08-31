@@ -2,6 +2,8 @@ import {
   buildDemoIdentityProviderName,
   buildDefaultIdentityProviderClientId,
   normalizeAdditionalDomains,
+  resolveOrganizationIdentityProviders,
+  type IdentityProviderConnectedBy,
   type OrganizationIdentityProvider,
   type RegisteredOrganization,
 } from '../providerAdmin/organizations'
@@ -16,6 +18,14 @@ export type IdentityProviderDraft = {
 
 function buildIdentityProviderId(): string {
   return `idp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+}
+
+export function identityProviderFromDraft(
+  draft: IdentityProviderDraft,
+  primaryDomain: string,
+  existingId?: string,
+): OrganizationIdentityProvider {
+  return toIdentityProvider(draft, primaryDomain, existingId)
 }
 
 function toIdentityProvider(
@@ -36,14 +46,28 @@ function toIdentityProvider(
 
 function primaryIdentityProviderPatch(
   providers: OrganizationIdentityProvider[],
+  options?: {
+    existingConnectedBy?: IdentityProviderConnectedBy | null
+    connectedBy?: IdentityProviderConnectedBy
+  },
 ): Partial<RegisteredOrganization> {
   const primary = providers[0]
   if (!primary) {
-    return {}
+    return {
+      identityProviderConnected: false,
+      identityProviderConnectedBy: null,
+      identityProviderName: null,
+      identityProviderDisplayName: null,
+      identityProviderProtocol: null,
+      identityProviderIssuerUrl: null,
+      identityProviderClientId: null,
+    }
   }
 
   return {
     identityProviderConnected: true,
+    identityProviderConnectedBy:
+      options?.existingConnectedBy ?? options?.connectedBy ?? 'provider-admin',
     identityProviderName: primary.name,
     identityProviderDisplayName: primary.displayName,
     identityProviderProtocol: primary.protocol,
@@ -58,16 +82,20 @@ export function addOrganizationIdentityProvider(
   organization: RegisteredOrganization,
   draft: IdentityProviderDraft,
   additionalDomains: string[],
+  connectedBy: IdentityProviderConnectedBy,
 ): RegisteredOrganization | null {
   const nextProviders = [
-    ...organization.identityProviders,
+    ...resolveOrganizationIdentityProviders(organization),
     toIdentityProvider(draft, organization.primaryDomain),
   ]
 
   return updateProviderRegisteredOrganization(organization.id, {
     identityProviders: nextProviders,
     additionalDomains: normalizeAdditionalDomains(additionalDomains, organization.primaryDomain),
-    ...primaryIdentityProviderPatch(nextProviders),
+    ...primaryIdentityProviderPatch(nextProviders, {
+      existingConnectedBy: organization.identityProviderConnectedBy,
+      connectedBy,
+    }),
   })
 }
 
@@ -77,20 +105,23 @@ export function updateOrganizationIdentityProvider(
   draft: IdentityProviderDraft,
   additionalDomains: string[],
 ): RegisteredOrganization | null {
-  const nextProviders = organization.identityProviders.map((provider) =>
+  const currentProviders = resolveOrganizationIdentityProviders(organization)
+  const nextProviders = currentProviders.map((provider) =>
     provider.id === providerId
       ? toIdentityProvider(draft, organization.primaryDomain, provider.id)
       : provider,
   )
 
-  if (nextProviders.every((provider, index) => provider === organization.identityProviders[index])) {
+  if (nextProviders.every((provider, index) => provider === currentProviders[index])) {
     return null
   }
 
   return updateProviderRegisteredOrganization(organization.id, {
     identityProviders: nextProviders,
     additionalDomains: normalizeAdditionalDomains(additionalDomains, organization.primaryDomain),
-    ...primaryIdentityProviderPatch(nextProviders),
+    ...primaryIdentityProviderPatch(nextProviders, {
+      existingConnectedBy: organization.identityProviderConnectedBy,
+    }),
   })
 }
 
@@ -98,14 +129,17 @@ export function removeOrganizationIdentityProvider(
   organization: RegisteredOrganization,
   providerId: string,
 ): RegisteredOrganization | null {
-  const nextProviders = organization.identityProviders.filter((provider) => provider.id !== providerId)
-  if (nextProviders.length === organization.identityProviders.length) {
+  const currentProviders = resolveOrganizationIdentityProviders(organization)
+  const nextProviders = currentProviders.filter((provider) => provider.id !== providerId)
+  if (nextProviders.length === currentProviders.length) {
     return null
   }
 
   return updateProviderRegisteredOrganization(organization.id, {
     identityProviders: nextProviders,
-    ...primaryIdentityProviderPatch(nextProviders),
+    ...primaryIdentityProviderPatch(nextProviders, {
+      existingConnectedBy: organization.identityProviderConnectedBy,
+    }),
   })
 }
 
@@ -114,8 +148,9 @@ export function buildDefaultIdentityProviderDraft(
 ): IdentityProviderDraft {
   const domain = organization.primaryDomain || 'example.com'
   const baseName = `${organization.name}-idp`
+  const currentProviders = resolveOrganizationIdentityProviders(organization)
   const takenNames = new Set(
-    organization.identityProviders.map((provider) => provider.displayName.toLowerCase()),
+    currentProviders.map((provider) => provider.displayName.toLowerCase()),
   )
   let displayName = baseName
   let suffix = 2
@@ -130,7 +165,7 @@ export function buildDefaultIdentityProviderDraft(
     issuerUrl: `https://login.${domain}/oauth2`,
     clientId: buildDefaultIdentityProviderClientId(
       organization,
-      organization.identityProviders.map((provider) => provider.clientId),
+      currentProviders.map((provider) => provider.clientId),
     ),
   }
 }

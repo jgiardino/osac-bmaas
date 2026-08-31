@@ -1,10 +1,13 @@
-import type { TenantProjectCatalogItem, TenantProjectEnvironment } from './projects'
+import type {
+  TenantProject,
+  TenantProjectCatalogItem,
+  TenantProjectEnvironment,
+  TenantProjectMemberRole,
+} from './projects'
 
 export type CreateProjectWizardStepId = 'project-info' | 'team-members' | 'review'
 
-export type { TenantProjectEnvironment }
-
-export type TenantProjectMemberRole = 'developer' | 'project-admin' | 'viewer'
+export type { TenantProjectEnvironment, TenantProjectMemberRole } from './projects'
 
 export type TenantProjectWizardMember = {
   id: string
@@ -50,13 +53,16 @@ export const TENANT_PROJECT_MEMBER_ROLES: ReadonlyArray<{
   label: string
   shortLabel: string
 }> = [
-  { id: 'developer', label: 'Developer — Provision and manage instances', shortLabel: 'Developer' },
   {
-    id: 'project-admin',
-    label: 'Project admin — Manage project settings and members',
-    shortLabel: 'Project admin',
+    id: 'manager',
+    label: 'Manager — Can create, edit, and delete projects',
+    shortLabel: 'Manager',
   },
-  { id: 'viewer', label: 'Viewer — Read-only access', shortLabel: 'Viewer' },
+  {
+    id: 'viewer',
+    label: 'Viewer — Has view access only',
+    shortLabel: 'Viewer',
+  },
 ]
 
 export const CREATE_PROJECT_WIZARD_DEMO = {
@@ -68,11 +74,16 @@ export const CREATE_PROJECT_WIZARD_DEMO = {
   membersInviteNote:
     'Invitees will receive an email to join the platform and be scoped to this project.',
   reviewLede: 'Confirm project details before creating.',
+  reviewEditLede: 'Review your changes before saving.',
   reviewNoDescription: 'No description',
   reviewNoMembers: 'No members yet — you can invite them later.',
   addMemberLabel: 'Add',
   continueLabel: 'Continue',
   createProjectLabel: 'Create project',
+  createNestedProjectLabel: 'Create nested project',
+  editProjectLabel: 'Edit project',
+  saveProjectLabel: 'Save',
+  parentProjectLabel: 'Parent project',
 } as const
 
 export const DEFAULT_PROJECT_IP_SLICE = '203.0.113.0/26'
@@ -103,15 +114,37 @@ export const DEFAULT_CREATE_PROJECT_WIZARD_FORM: CreateProjectWizardForm = {
   ipPoolSlice: DEFAULT_PROJECT_IP_SLICE,
   memberName: 'Jordan Lee',
   memberEmail: 'jordan@northsummitbank.com',
-  memberRole: 'developer',
+  memberRole: 'manager',
   members: [
     {
       id: 'project-member-demo',
       name: 'Chris Morgan',
-      email: 'chris@northsummitbank.com',
-      role: 'developer',
+      email: 'cmorgan@northsummitbank.com',
+      role: 'manager',
     },
   ],
+}
+
+export function formFromTenantProject(project: TenantProject): CreateProjectWizardForm {
+  return {
+    name: project.name,
+    description: project.description,
+    environmentType: project.environmentType,
+    vcpuAllocation: DEFAULT_CREATE_PROJECT_WIZARD_FORM.vcpuAllocation,
+    ramAllocationGb: DEFAULT_CREATE_PROJECT_WIZARD_FORM.ramAllocationGb,
+    instanceQuota: project.instanceQuota,
+    externalIpPoolId: project.externalIpPoolId ?? '',
+    ipPoolSlice: project.externalIpPoolCidr ?? DEFAULT_PROJECT_IP_SLICE,
+    memberName: '',
+    memberEmail: '',
+    memberRole: 'manager',
+    members: project.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      role: member.role,
+    })),
+  }
 }
 
 export function generateProjectWizardMemberId(): string {
@@ -140,6 +173,12 @@ export function getTenantProjectMemberRoleShortLabel(role: TenantProjectMemberRo
   return (
     TENANT_PROJECT_MEMBER_ROLES.find((entry) => entry.id === role)?.shortLabel ?? role
   )
+}
+
+export function getTenantProjectMemberRoleLabelColor(
+  role: TenantProjectMemberRole,
+): 'blue' | 'grey' {
+  return role === 'manager' ? 'blue' : 'grey'
 }
 
 export function isCatalogItemSelected(
