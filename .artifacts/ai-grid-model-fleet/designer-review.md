@@ -51,6 +51,8 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 - Right-side icon on cards for a full details page, after browsing PatternFly icons.
 - **Make an instance available as a service.** Helper copy is on non-MaaS instance details. Do not build the select-a-gateway flow yet.
 - **Tenant on every details view as a systematic pattern.** Cluster, gateway, and model details already show Tenant in places. Do not expand that in this pass.
+- **Expandable Clusters / Models / Gateway sections in the drawer.** We used accordion chrome before and replaced it with section headings plus the type-toggle. Revisit an expand/collapse control on those lists later. Not this pass.
+- **One shared model list across pages.** Catalog, AI Grid, Services → Models, MaaS governance, API keys, AI asset endpoints, and Playground each show a different set of models (names, IDs, and object types). Do not unify those mocks in this pass. Capture the gaps in `.artifacts/ai-grid-model-fleet/model-list-inventory.md` and treat a single demo catalog as a later refinement.
 
 ### Done this pass (alignment + map)
 
@@ -127,6 +129,10 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 - Map footer **Active models** and **Active clusters** are links on the property label. The number is plain text. Active models counts every model instance in the current filter (on-cluster plus external), matching the Services models list.
 - List patterns is archived at `.artifacts/ai-grid-model-fleet/archive/` and is not in the Provider Admin nav.
 - Tenant Admin has the same AI Grid when `?vision=model-fleet` is set, locked to that tenant (North Summit Bank). No tenant filter.
+- Tenant Admin sidebar keeps **GenAI studio** and **AI** (MaaS governance, Model catalog settings, API keys) on every iteration, matching Provider Admin. AI Grid remains vision-gated.
+- Landing-page **AI Grid (future vision)** is the last prototype link for Provider Admin, Tenant Admin, and Tenant User.
+- Sidebar order: consume first (**Services**, **GenAI studio**), then setup/management (**Projects**, then AI settings / Networking / Administration). Same order for Provider Admin, Tenant Admin, and Tenant User.
+- **Parked:** model lists are inconsistent across Catalog, AI Grid, Services → Models, MaaS governance, API keys, AI asset endpoints, and Playground. See inventory. Not this pass.
 
 ### Future refine
 

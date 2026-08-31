@@ -77,7 +77,17 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
     label: 'Services',
     children: TENANT_ADMIN_SERVICES_NAV_ITEMS,
   },
+  {
+    id: 'genai-studio',
+    label: 'GenAI studio',
+    children: TENANT_ADMIN_GENAI_NAV_ITEMS,
+  },
   { id: 'projects-teams', label: 'Projects' },
+  {
+    id: 'ai',
+    label: 'AI',
+    children: TENANT_ADMIN_AI_NAV_ITEMS,
+  },
   {
     id: 'networking',
     label: 'Networking',

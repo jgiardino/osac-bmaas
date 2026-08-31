@@ -118,16 +118,16 @@ export function BmaasLandingPage() {
       to: '/provider/workspace?nav=catalog',
     },
     {
-      label: 'AI Grid (future vision)',
-      to: '/provider/workspace?vision=model-fleet&nav=vision-model-fleet',
-    },
-    {
       label: 'Projects',
       to: '/provider/workspace?nav=projects-teams',
     },
     {
       label: 'Tenant onboarding (IdP Manager)',
       to: '/idp-manager/bluesolace',
+    },
+    {
+      label: 'AI Grid (future vision)',
+      to: '/provider/workspace?vision=model-fleet&nav=vision-model-fleet',
     },
   ]
 
@@ -188,6 +188,10 @@ export function BmaasLandingPage() {
         {
           label: 'Projects',
           to: '/tenant-user/northsummit/workspace?nav=projects-teams',
+        },
+        {
+          label: 'AI Grid (future vision)',
+          to: '/tenant-user/northsummit/workspace?vision=model-fleet&nav=vision-model-fleet',
         },
       ],
     },

@@ -50,6 +50,7 @@ export type TenantUserNavId =
   | 'genai-playground'
   | 'genai-api-keys'
   | 'projects-teams'
+  | 'vision-model-fleet'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -66,6 +67,7 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'genai-playground',
   'genai-api-keys',
   'projects-teams',
+  'vision-model-fleet',
   'networking-virtual-networks',
   'networking-subnets',
   'networking-security-groups',

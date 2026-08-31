@@ -56,6 +56,14 @@ import {
 } from '../tenantUser/projectScope'
 import { getTenantUserAccessibleProjects } from '../tenantUser/projects'
 import { TENANT_USER_PROJECTS_PAGE } from '../tenantUser/constants'
+import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
+import {
+  MODEL_FLEET_VISION_NAV_ID,
+  MODEL_FLEET_VISION_VALUE,
+  isModelFleetVision,
+  mergeVisionCatalogItems,
+} from '../vision/modelFleet'
+import { visionOrgIdForTenantSlug } from '../vision/fleetWorld'
 
 function isTenantUserNavId(value: string | null): value is TenantUserNavId {
   return (
@@ -68,6 +76,7 @@ function isTenantUserNavId(value: string | null): value is TenantUserNavId {
     value === 'genai-playground' ||
     value === 'genai-api-keys' ||
     value === 'projects-teams' ||
+    value === 'vision-model-fleet' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-subnets' ||
     value === 'networking-security-groups' ||
@@ -167,6 +176,13 @@ export function TenantUserWorkspacePage() {
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
   const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
+  const visionEnabled = isModelFleetVision(searchParams)
+  const navItems = useMemo(() => {
+    if (!visionEnabled && activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+      return TENANT_USER_NAV_ITEMS
+    }
+    return [{ id: MODEL_FLEET_VISION_NAV_ID, label: 'AI Grid' }, ...TENANT_USER_NAV_ITEMS]
+  }, [activeNavId, visionEnabled])
 
   const clearProvisioningTimer = useCallback((instanceId: string) => {
     const timeoutId = provisioningTimersRef.current.get(instanceId)
@@ -257,6 +273,21 @@ export function TenantUserWorkspacePage() {
 
     syncWorkspaceNavParam(setSearchParams, getTenantUserActiveNav(tenantSlug), { replace: true })
   }, [isValidTenant, searchParams, setSearchParams, tenantSlug])
+
+  useLayoutEffect(() => {
+    if (activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+      return
+    }
+    if (searchParams.get('vision') === MODEL_FLEET_VISION_VALUE) {
+      return
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('vision', MODEL_FLEET_VISION_VALUE)
+      next.set('nav', activeNavId)
+      return next
+    }, { replace: true })
+  }, [activeNavId, searchParams, setSearchParams])
 
   const handleProjectScopeChange = useCallback(
     (scopeId: ProjectScopeId) => {
@@ -376,6 +407,12 @@ export function TenantUserWorkspacePage() {
     ],
   )
 
+  const userEmail = DEMO_TENANT_LOGIN_EMAIL_USER[tenantSlug as DemoTenantId]
+  const accessibleProjects = useMemo(
+    () => getTenantUserAccessibleProjects(projects, userEmail),
+    [projects, userEmail],
+  )
+
   if (!isValidTenant) {
     return <Navigate to="/" replace />
   }
@@ -398,16 +435,24 @@ export function TenantUserWorkspacePage() {
         ) ?? defaultCatalogDraft)
       : defaultCatalogDraft
   const catalogDraft = focusedCatalogDraft
+  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems(), visionEnabled)
   const displayName = DEMO_TENANT_DISPLAY_USER[tenantSlug]
-  const userEmail = DEMO_TENANT_LOGIN_EMAIL_USER[tenantSlug as DemoTenantId]
-  const accessibleProjects = useMemo(
-    () => getTenantUserAccessibleProjects(projects, userEmail),
-    [projects, userEmail],
-  )
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
   const renderWorkspaceContent = () => {
     switch (activeNavId) {
+      case 'vision-model-fleet':
+        return (
+          <VisionModelFleetPage
+            key={searchParams.get('scenario') || 'default'}
+            catalogItems={displayCatalogItems}
+            lockedOrgId={visionOrgIdForTenantSlug(tenantSlug)}
+            onOpenCatalogPreset={(catalogItemId) => {
+              handleNavChange('catalog')
+              syncWorkspaceCatalogItemParam(setSearchParams, catalogItemId)
+            }}
+          />
+        )
       case 'services-baremetal':
       case 'services-clusters':
       case 'services-models':
@@ -549,14 +594,19 @@ export function TenantUserWorkspacePage() {
     <TenantShell
       role="tenant-user"
       displayName={displayName}
-      navItems={TENANT_USER_NAV_ITEMS}
+      navItems={navItems}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
+      isContentFilled={activeNavId === MODEL_FLEET_VISION_NAV_ID}
       companyLogoSrc={organization ? resolveOrganizationCompanyLogo(organization) : null}
       companyLogoAlt={organization?.name}
     >
-      <div key={navContentKey}>{renderWorkspaceContent()}</div>
+      {activeNavId === MODEL_FLEET_VISION_NAV_ID ? (
+        renderWorkspaceContent()
+      ) : (
+        <div key={navContentKey}>{renderWorkspaceContent()}</div>
+      )}
     </TenantShell>
   )
 }
