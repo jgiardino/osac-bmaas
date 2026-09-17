@@ -9,6 +9,7 @@ import {
   getCatalogItemStatus,
   getProviderCatalogItems,
 } from '../providerSetup/storage'
+import { mergeVisionCatalogItems } from '../vision/modelFleet'
 import type { CatalogNetworkPolicy } from '../providerAdmin/catalogNetworkPolicy'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
 import {
@@ -22,6 +23,7 @@ import {
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
 } from '../catalog/catalogSpecs'
+import { MODEL_CATALOG_ITEM_IDS } from '../vision/modelCatalogSeed'
 import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
@@ -103,8 +105,9 @@ export function getTenantCatalogProjectsLinkLabel(projectCount: number): string 
     : TENANT_CATALOG_MANAGER_DEMO.addProjectsLinkLabel
 }
 
-/** Inherited provider offerings shown on the tenant admin catalog demo (2 cards). */
+/** Inherited provider offerings shown on the tenant admin catalog demo. */
 const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
+  ...MODEL_CATALOG_ITEM_IDS,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
@@ -328,11 +331,12 @@ function mapCustomTenantCatalogItemToGovernance(
 
 export function getTenantCatalogGovernanceItems(
   organization: RegisteredOrganization,
-  _catalogDraft: ProviderCatalogDraft | null,
+  catalogDraft?: ProviderCatalogDraft | null,
 ): TenantCatalogGovernanceItemWithNetworking[] {
+  void catalogDraft
   ensureProviderCatalogDemoItems()
 
-  const visibleItems = getProviderCatalogItems().filter(
+  const visibleItems = mergeVisionCatalogItems(getProviderCatalogItems()).filter(
     (item) =>
       isCatalogVisibleToTenant(item, organization) &&
       isTenantAdminDemoProviderCatalogItem(item.catalogItemId),
@@ -373,6 +377,7 @@ export function getTenantCatalogItemDetailSpecRows(
 ): CatalogSpecRow[] {
   return resolveCatalogSpecRows(
     {
+      catalogItemId: item.id,
       serviceId: item.serviceId,
       templateRefId: item.templateRefId,
       templateName: item.templateName,

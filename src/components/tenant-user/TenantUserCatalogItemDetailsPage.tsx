@@ -12,6 +12,7 @@ import {
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { BareMetalCatalogItemDetailsBody } from '../catalog/BareMetalCatalogItemDetailsBody'
 import { ClusterCatalogItemDetailsBody } from '../catalog/ClusterCatalogItemDetailsBody'
+import { ModelServingPresetDetailsBody } from '../catalog/ModelServingPresetDetailsBody'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import { formatCatalogItemCreatedAt } from '../../catalog/catalogDetails'
 import { getCatalogItemUserDescription } from '../../catalog/catalogItemDescriptions'
@@ -23,6 +24,7 @@ import {
 } from '../../catalog/catalogSpecs'
 import { formatCatalogFieldPolicyMode } from '../../catalog/catalogPublishConfig'
 import { CatalogClusterVersionValue } from '../catalog/CatalogClusterVersionValue'
+import { CatalogSpecValueWithBadge } from '../catalog/CatalogSpecValueWithBadge'
 import { CatalogVmDefaultsSections } from '../catalog/CatalogVmDefaultsSections'
 import { formatRateCardSummary } from '../../providerSetup/templateDemo'
 import type { TenantUserCatalogCard } from '../../tenantUser/catalog'
@@ -41,6 +43,7 @@ export function TenantUserCatalogItemDetailsPage({
 }: TenantUserCatalogItemDetailsPageProps) {
   const specRows = resolveCatalogSpecRows(
     {
+      catalogItemId: catalogItem.catalogItemId,
       serviceId: catalogItem.serviceId,
       templateRefId: catalogItem.templateRefId,
       templateName: catalogItem.templateName,
@@ -61,6 +64,7 @@ export function TenantUserCatalogItemDetailsPage({
   const isVirtualMachine = catalogItem.serviceId === 'virtual-machine'
   const isCluster = catalogItem.serviceId === 'cluster'
   const isBareMetal = catalogItem.serviceId === 'baremetal'
+  const isModels = catalogItem.serviceId === 'models'
   const vmHighlightRows = isVirtualMachine
     ? resolveVmCatalogHighlightRows({
         serviceId: catalogItem.serviceId,
@@ -141,7 +145,27 @@ export function TenantUserCatalogItemDetailsPage({
         </Button>
       }
     >
-      {isBareMetal ? (
+      {isModels ? (
+        <ModelServingPresetDetailsBody
+          variant="entity"
+          content={{
+            service: catalogItem.service,
+            statusLabel: catalogItem.status,
+            statusColor: 'green',
+            rateSummary: formatRateCardSummary(catalogItem.rateCard),
+            scope: catalogItem.scope,
+            visibilityLabel:
+              catalogItem.scope === 'vip-enterprise' ? 'VIP enterprise' : 'Global public',
+            createdAtLabel: formatCatalogItemCreatedAt(catalogItem.createdAt),
+            specRows: resolveCatalogSpecRows({
+              catalogItemId: catalogItem.catalogItemId,
+              serviceId: catalogItem.serviceId,
+              templateRefId: catalogItem.templateRefId,
+              templateName: catalogItem.templateName,
+            }),
+          }}
+        />
+      ) : isBareMetal ? (
         <BareMetalCatalogItemDetailsBody
           variant="entity"
           content={{
@@ -259,15 +283,8 @@ export function TenantUserCatalogItemDetailsPage({
                         >
                           {row.value}
                         </CatalogClusterVersionValue>
-                      ) : row.badge ? (
-                        <span className="catalog-spec-row-value-with-badge">
-                          <span>{row.value}</span>
-                          <Label color={row.badge.color} isCompact>
-                            {row.badge.text}
-                          </Label>
-                        </span>
                       ) : (
-                        row.value
+                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
                       )}
                     </DescriptionListDescription>
                   </DescriptionListGroup>
@@ -356,12 +373,7 @@ export function TenantUserCatalogItemDetailsPage({
                     <DescriptionListTerm>{row.label}</DescriptionListTerm>
                     <DescriptionListDescription>
                       {row.badge ? (
-                        <span className="catalog-spec-row-value-with-badge">
-                          <span>{row.value}</span>
-                          <Label color={row.badge.color} isCompact>
-                            {row.badge.text}
-                          </Label>
-                        </span>
+                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
                       ) : (
                         row.value
                       )}

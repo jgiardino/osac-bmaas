@@ -11,8 +11,9 @@ import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { getCatalogSpecsSectionLabel } from '../../catalog/catalogSpecs'
 import type { CatalogClusterVersionMode } from '../../catalog/catalogPublishConfig'
 import type { PublishCatalogScope } from '../../providerSetup/templateDemo'
-import { CatalogClusterVersionValue } from './CatalogClusterVersionValue'
 import { CatalogPublishScopeIcon } from '../provider-admin/CatalogPublishScopeIcon'
+import { CatalogClusterVersionValue } from './CatalogClusterVersionValue'
+import { CatalogSpecValueWithBadge } from './CatalogSpecValueWithBadge'
 
 export type ClusterCatalogDetailsVariant = 'entity' | 'provider'
 
@@ -51,14 +52,7 @@ function renderConfigurationRowValue(
   }
 
   if (row.badge) {
-    return (
-      <span className="catalog-spec-row-value-with-badge">
-        <span>{row.value}</span>
-        <Label color={row.badge.color} isCompact>
-          {row.badge.text}
-        </Label>
-      </span>
-    )
+    return <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
   }
 
   return row.value

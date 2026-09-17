@@ -31,7 +31,9 @@ import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
 import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
+import { VisionModelCatalogPatternsPage } from './provider-admin/vision/VisionModelCatalogPatternsPage'
 import {
+  MODEL_CATALOG_PATTERNS_NAV_ID,
   MODEL_FLEET_VISION_NAV_ID,
   MODEL_FLEET_VISION_VALUE,
   isModelFleetVision,
@@ -171,8 +173,8 @@ export function ProviderAdminWorkspacePage() {
   const navParam = searchParams.get('nav')
   const visionEnabled = isModelFleetVision(searchParams)
   const displayCatalogItems = useMemo(
-    () => mergeVisionCatalogItems(catalogItems, visionEnabled),
-    [catalogItems, visionEnabled],
+    () => mergeVisionCatalogItems(catalogItems),
+    [catalogItems],
   )
 
   useLayoutEffect(() => {
@@ -210,7 +212,10 @@ export function ProviderAdminWorkspacePage() {
   }, [navParam, setSearchParams])
 
   useLayoutEffect(() => {
-    if (activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
+    if (
+      activeNavId !== MODEL_FLEET_VISION_NAV_ID &&
+      activeNavId !== MODEL_CATALOG_PATTERNS_NAV_ID
+    ) {
       return
     }
     if (searchParams.get('vision') === MODEL_FLEET_VISION_VALUE) {
@@ -449,7 +454,8 @@ export function ProviderAdminWorkspacePage() {
   const renderPostSetupContent = () => {
     if (
       catalogItems.length === 0 &&
-      activeNavId !== MODEL_FLEET_VISION_NAV_ID
+      activeNavId !== MODEL_FLEET_VISION_NAV_ID &&
+      activeNavId !== MODEL_CATALOG_PATTERNS_NAV_ID
     ) {
       return (
         <ProviderAdminOverviewPage />
@@ -527,18 +533,13 @@ export function ProviderAdminWorkspacePage() {
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
             onNavigateToCreateProject={() => handleNavChange('projects-teams')}
-            onPlaceOnGrid={
-              visionEnabled
-                ? () => {
-                    handleNavChange(MODEL_FLEET_VISION_NAV_ID)
-                  }
-                : undefined
-            }
             onEditLeaveAttemptChange={(attemptLeave) => {
               catalogEditLeaveAttemptRef.current = attemptLeave
             }}
           />
         )
+      case 'vision-model-catalog-patterns':
+        return <VisionModelCatalogPatternsPage />
       case 'vision-model-fleet':
         return (
           <VisionModelFleetPage
@@ -668,7 +669,8 @@ export function ProviderAdminWorkspacePage() {
       showNavigation={setupComplete}
       showVisionNav={
         visionEnabled ||
-        activeNavId === MODEL_FLEET_VISION_NAV_ID
+        activeNavId === MODEL_FLEET_VISION_NAV_ID ||
+        activeNavId === MODEL_CATALOG_PATTERNS_NAV_ID
       }
       activeNavId={activeNavId}
       onNavChange={handleNavChange}

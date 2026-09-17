@@ -10,8 +10,9 @@ import {
 import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { getCatalogSpecsSectionLabel } from '../../catalog/catalogSpecs'
 import type { PublishCatalogScope } from '../../providerSetup/templateDemo'
-import { CatalogDiskImageValue } from './CatalogDiskImageValue'
 import { CatalogPublishScopeIcon } from '../provider-admin/CatalogPublishScopeIcon'
+import { CatalogDiskImageValue } from './CatalogDiskImageValue'
+import { CatalogSpecValueWithBadge } from './CatalogSpecValueWithBadge'
 
 export type BareMetalCatalogDetailsVariant = 'entity' | 'provider'
 
@@ -37,25 +38,10 @@ function getClassPrefix(variant: BareMetalCatalogDetailsVariant): string {
 }
 
 function renderHardwareSpecRowValue(row: CatalogSpecRow) {
-  const value =
-    row.label === 'Disk image' ? (
-      <CatalogDiskImageValue badge={row.badge}>{row.value}</CatalogDiskImageValue>
-    ) : (
-      row.value
-    )
-
-  if (!row.badge || row.label === 'Disk image') {
-    return value
+  if (row.label === 'Disk image') {
+    return <CatalogDiskImageValue badge={row.badge}>{row.value}</CatalogDiskImageValue>
   }
-
-  return (
-    <span className="catalog-spec-row-value-with-badge">
-      {value}
-      <Label color={row.badge.color} isCompact>
-        {row.badge.text}
-      </Label>
-    </span>
-  )
+  return <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
 }
 
 export function BareMetalCatalogItemDetailsBody({

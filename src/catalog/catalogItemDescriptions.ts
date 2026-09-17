@@ -17,6 +17,16 @@ export const CATALOG_ITEM_DESCRIPTIONS_BY_ID: Readonly<Record<string, string>> =
     'Use this offering to launch an OpenShift cluster.',
   [DEMO_CATALOG_ITEM_IDS.vmNetworkAttachments]:
     'Use this virtual machine for apps, testing, or development. You can adjust networking when you launch.',
+  'cat-llm-lightweight-text-gen':
+    'Low-latency runtime for small-footprint models (1B–7B). Fast, cost-effective text generation, basic summarization, and high-throughput classification.',
+  'cat-llm-instruct':
+    'Standardized endpoint for instruction-tuned models in automated backend processes, data pipelines, and scheduled workflows.',
+  'cat-llm-tool-calling':
+    'Agentic workflows, function calling, structured API parameter generation, and multi-step execution chains.',
+  'cat-llm-high-capacity-reasoning':
+    'Multi-GPU blueprint for large-scale models (70B+): complex reasoning, deep analysis, and extended context.',
+  'cat-predictive':
+    'Low-latency endpoint for classical tabular models (XGBoost, scikit-learn, LightGBM): real-time scoring, classification, and regression.',
 }
 
 export const CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE: Readonly<Record<CatalogServiceId, string>> = {

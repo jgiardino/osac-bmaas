@@ -31,6 +31,7 @@ import {
   formatClusterPlatformLabel,
 } from '../catalog/catalogPublishConfig'
 import { getDefaultMasterTemplate, getStandardClusterTemplate } from '../providerAdmin/bmaasTemplates'
+import { MODEL_CATALOG_ITEM_IDS } from '../vision/modelCatalogSeed'
 import {
   addProviderCatalogItem,
   deleteProviderCatalogItem,
@@ -101,6 +102,7 @@ export const LEGACY_BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID = 'bm_hpe_dl380_a100
  * Tenant Admin / Tenant User use the same order with unpublished items filtered out.
  */
 export const DEMO_CATALOG_ITEM_ORDER = [
+  ...MODEL_CATALOG_ITEM_IDS,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
@@ -668,6 +670,7 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'administration-quotas' ||
     value === 'billing-metering' ||
     value === 'system' ||
-    value === 'vision-model-fleet'
+    value === 'vision-model-fleet' ||
+    value === 'vision-model-catalog-patterns'
   )
 }

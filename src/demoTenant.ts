@@ -40,3 +40,30 @@ export const DEMO_TENANT_DISPLAY_USER: Record<DemoTenantId, string> = {
 }
 
 export const DEMO_LOGIN_PREFILLED_PASSWORD = '*****************'
+
+export const DEMO_PROVIDER_USERNAME = 'ajohnson'
+
+export const DEMO_TENANT_USERNAME_USER: Record<DemoTenantId, string> = {
+  northsummit: 'cmorgan',
+  evergreen: 'ecruz',
+}
+
+export const DEMO_TENANT_USERNAME_ADMIN: Record<DemoTenantId, string> = {
+  northsummit: 'pnair',
+  evergreen: 'marcuschen',
+}
+
+export const demoUsernameFromPathname = (pathname: string): string => {
+  if (pathname.startsWith('/provider')) {
+    return DEMO_PROVIDER_USERNAME
+  }
+  const adminMatch = pathname.match(/^\/tenant-admin\/([^/]+)/)
+  if (adminMatch && isDemoTenantId(adminMatch[1])) {
+    return DEMO_TENANT_USERNAME_ADMIN[adminMatch[1]]
+  }
+  const userMatch = pathname.match(/^\/tenant-user\/([^/]+)/)
+  if (userMatch && isDemoTenantId(userMatch[1])) {
+    return DEMO_TENANT_USERNAME_USER[userMatch[1]]
+  }
+  return DEMO_PROVIDER_USERNAME
+}

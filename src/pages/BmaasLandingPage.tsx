@@ -87,6 +87,21 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
   )
 }
 
+function CreditLink({ href, children }: { href: string; children: string }) {
+  return (
+    <Button
+      variant="link"
+      component="a"
+      isInline
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </Button>
+  )
+}
+
 function SingleEnterActions({
   to,
   disabled = false,
@@ -270,28 +285,14 @@ export function BmaasLandingPage() {
             </Button>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
-                Created by{' '}
-                <Button
-                  variant="link"
-                  component="a"
-                  isInline
-                  href="https://redhat.enterprise.slack.com/archives/D021Q4YKTBR"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Ethan Kim
-                </Button>
+                AI Grid (future vision) by{' '}
+                <CreditLink href="https://github.com/jgiardino">Jenn Giardino</CreditLink>.
+              </Content>
+              <Content component="p">
+                Underlying prototype created by{' '}
+                <CreditLink href="https://github.com/heyethankim">Ethan Kim</CreditLink>
                 {' & '}
-                <Button
-                  variant="link"
-                  component="a"
-                  isInline
-                  href="https://redhat.enterprise.slack.com/archives/D08ABCFSWGW"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Kyle Baker
-                </Button>
+                <CreditLink href="https://github.com/kybaker">Kyle Baker</CreditLink>
                 {' - OpenShift UXD'}
               </Content>
               <Content component="p">Last updated: {BMAAS_LANDING_LAST_UPDATED}</Content>

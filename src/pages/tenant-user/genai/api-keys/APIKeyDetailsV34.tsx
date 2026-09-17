@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import {
   ClipboardCopyButton,
   CodeBlock,
@@ -26,6 +26,7 @@ import {
 } from '@patternfly/react-core';
 import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon';
 
+import { demoUsernameFromPathname } from '../../../../demoTenant';
 import { ResourceDetailHeader, ResourceDetailsPageError } from '../osacStubs/ResourceDetail';
 
 import { findDynamicKey } from './apiKeysStoreV34';
@@ -37,15 +38,19 @@ import { useApiKeysPaths } from './useApiKeysPaths';
 type CodeLanguage = 'curl' | 'python' | 'javascript';
 
 const APIKeyDetailsV34: React.FunctionComponent = () => {
+  const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
   const keyId = searchParams.get('keyId') ?? undefined;
   const { userProfile } = useUserProfile();
   const { listPath } = useApiKeysPaths();
   const isAdmin = userProfile === 'AI Admin';
+  const currentUsername = demoUsernameFromPathname(pathname);
 
   useDocumentTitle('API Key Details');
 
-  const apiKey = keyId ? (findDynamicKey(keyId) ?? getApiKeyByIdV34(keyId, isAdmin)) : undefined;
+  const apiKey = keyId
+    ? (findDynamicKey(keyId) ?? getApiKeyByIdV34(keyId, isAdmin, currentUsername))
+    : undefined;
 
   const [activeLanguageTab, setActiveLanguageTab] = React.useState<CodeLanguage>('curl');
   const [copiedStates, setCopiedStates] = React.useState<Record<string, boolean>>({});

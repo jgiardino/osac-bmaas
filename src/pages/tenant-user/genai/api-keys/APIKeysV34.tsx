@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   AlertActionCloseButton,
@@ -40,8 +40,9 @@ import TimesIcon from '@patternfly/react-icons/dist/esm/icons/times-icon';
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 import type { ThProps } from '@patternfly/react-table';
 
-import ListPage from '../osacStubs/ListPage';
+import { demoUsernameFromPathname } from '../../../../demoTenant';
 import { GenaiPageStack } from '../GenaiPageStack';
+import ListPage from '../osacStubs/ListPage';
 
 import { addDynamicKey, getDynamicKeys } from './apiKeysStoreV34';
 import { CreateAPIKeyModalV34 } from './components/CreateAPIKeyModalV34';
@@ -71,17 +72,19 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
   kicker,
 }) => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { userProfile } = useUserProfile();
   const { isAdmin: isAdminSurface, keyDetailsPath, subscriptionDetailsPath } = useApiKeysPaths();
   const isAdmin = userProfile === 'AI Admin';
+  const currentUsername = demoUsernameFromPathname(pathname);
 
   const getInitialKeys = React.useCallback(() => {
     const mock = isAdmin
       ? [...mockApiKeysAdminV34, ...mockHeavyUserKeysV34]
-      : mockApiKeysEngineerV34;
+      : mockApiKeysEngineerV34.map((key) => ({ ...key, username: currentUsername }));
     return [...getDynamicKeys(), ...mock];
-  }, [isAdmin]);
+  }, [currentUsername, isAdmin]);
 
   const [apiKeys, setApiKeys] = React.useState<ApiKeyV34[]>(getInitialKeys);
 
@@ -217,18 +220,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
     setPage(1);
   }, [submittedSearch, statusFilters]);
 
-  const getCurrentUsername = (): string => {
-    switch (userProfile) {
-      case 'AI Admin':
-        return 'admin';
-      case 'AI Engineer':
-        return 'celtan';
-      case 'Data Scientist':
-        return 'datascientist';
-      default:
-        return 'user';
-    }
-  };
+  const getCurrentUsername = (): string => currentUsername;
 
   const handleKeyCreated = (newKey: ApiKeyV34) => {
     addDynamicKey(newKey);

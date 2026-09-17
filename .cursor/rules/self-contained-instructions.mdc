@@ -1,0 +1,17 @@
+---
+description: >-
+  Task and planning answers must be self-contained for context-switching.
+  No shorthand that depends on prior turns; pull content into the answer.
+alwaysApply: true
+---
+
+# Self-contained instructions
+
+When giving the user next steps, recommendations, checklists, or “what to do” guidance:
+
+1. **Write complete instructions in the answer itself.** Do not rely on the user re-reading earlier chat turns, hunting through long design markdown files, or decoding shorthand (“this pass,” “fill Already in Ethan,” “six fields”).
+2. **If content lives in a design file, extract the substance into the reply** (paste-ready text, tables, or bullets the user can use immediately). Cite the file path only as a source reference, not as “go read section X.”
+3. **Expand abbreviations and labels** the first time they appear in that reply (e.g. MVP layer = …; Future vision = …; continuity objects = site, cluster, model, endpoint, tenant).
+4. **When recommending Miro / doc edits, provide copy-paste content** for each cell, row, or stage whenever the user asked for contents—not a meta-instruction that they should invent the contents from a checklist.
+5. **When clarifying a prior recommendation, restate the full recommendation** with context. Do not answer with fragments that only make sense next to an older message.
+6. **Prefer one coherent procedure** (numbered steps with explicit where/what/why) over scattered bullets that assume shared memory of the project.

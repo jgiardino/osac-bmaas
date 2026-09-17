@@ -22,6 +22,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import { CatalogClusterVersionValue } from '../catalog/CatalogClusterVersionValue'
+import { CatalogSpecValueWithBadge } from '../catalog/CatalogSpecValueWithBadge'
 import { CatalogVmDefaultsSections } from '../catalog/CatalogVmDefaultsSections'
 import { BareMetalCatalogItemDetailsBody } from '../catalog/BareMetalCatalogItemDetailsBody'
 import { ClusterCatalogItemDetailsBody } from '../catalog/ClusterCatalogItemDetailsBody'
@@ -44,7 +45,6 @@ import {
 } from '../../providerSetup/templateDemo'
 import { formatCatalogItemCreatedAt } from '../../catalog/catalogDetails'
 import { getCatalogItemUserDescription } from '../../catalog/catalogItemDescriptions'
-import { GRANITE_3B_STABLE_NAME, isVisionModelServingPreset } from '../../vision/modelFleet'
 import {
   getCatalogSpecsSectionLabel,
   getDraftServiceId,
@@ -69,7 +69,6 @@ type CatalogItemDetailsPageProps = {
   onUnpublish: () => void
   isPublishing?: boolean
   onLaunch: () => void
-  onPlaceOnGrid?: () => void
   onEdit: () => void
   onDuplicate: () => void
   onDelete: () => void
@@ -120,7 +119,6 @@ export function CatalogItemDetailsPage({
   onPublish,
   onUnpublish,
   onLaunch,
-  onPlaceOnGrid,
   onEdit,
   onDuplicate,
   onDelete,
@@ -132,7 +130,7 @@ export function CatalogItemDetailsPage({
   const isLive = getCatalogItemStatus(catalog) === 'live'
   const isVirtualMachine = serviceId === 'virtual-machine'
   const isCluster = serviceId === 'cluster'
-  const isVisionPreset = isVisionModelServingPreset(catalog)
+  const isModels = serviceId === 'models'
   const parsedInstanceType = catalog.instanceTypeLabel
     ? parseCatalogInstanceTypeParts(catalog.instanceTypeLabel)
     : null
@@ -264,11 +262,7 @@ export function CatalogItemDetailsPage({
         </FlexItem>
         <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
           <div className="provider-admin-catalog-item-details__actions">
-            {isVisionPreset && onPlaceOnGrid ? (
-              <Button variant="primary" onClick={onPlaceOnGrid}>
-                Place on AI Grid
-              </Button>
-            ) : showLaunch ? (
+            {showLaunch ? (
               <Button variant="primary" icon={<RocketIcon />} onClick={onLaunch}>
                 {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
               </Button>
@@ -288,7 +282,6 @@ export function CatalogItemDetailsPage({
                 )}
               </Button>
             )}
-            {isVisionPreset ? null : (
             <Dropdown
               isOpen={isActionsOpen}
               onOpenChange={setIsActionsOpen}
@@ -328,7 +321,6 @@ export function CatalogItemDetailsPage({
                 </DropdownItem>
               </DropdownList>
             </Dropdown>
-            )}
           </div>
         </FlexItem>
       </Flex>
@@ -339,8 +331,9 @@ export function CatalogItemDetailsPage({
           className="provider-admin-catalog-item-details__details-band"
           aria-label="Catalog item details"
         >
-          {isVisionPreset ? (
+          {isModels ? (
             <ModelServingPresetDetailsBody
+              variant="provider"
               content={{
                 service: CATALOG_SERVICE_FILTER_LABELS[serviceId],
                 statusLabel: showLaunch ? 'Live' : showPublishing ? 'Publishing' : 'Unpublished',
@@ -349,9 +342,7 @@ export function CatalogItemDetailsPage({
                 scope: catalog.scope,
                 visibilityLabel: scopeLabel,
                 createdAtLabel: formatCatalogItemCreatedAt(catalog.createdAt),
-                stableModelName: GRANITE_3B_STABLE_NAME,
-                servingSize: catalog.instanceTypeLabel ?? '—',
-                artifact: catalog.diskImageLabel ?? '—',
+                specRows: resolveCatalogSpecRows(catalog),
               }}
               publishingExtras={getCatalogPublishingExtras(catalog, organizations)}
             />
@@ -570,15 +561,8 @@ export function CatalogItemDetailsPage({
                             >
                               {row.value}
                             </CatalogClusterVersionValue>
-                          ) : row.badge ? (
-                            <span className="catalog-spec-row-value-with-badge">
-                              <span>{row.value}</span>
-                              <Label color={row.badge.color} isCompact>
-                                {row.badge.text}
-                              </Label>
-                            </span>
                           ) : (
-                            row.value
+                            <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
                           )}
                         </DescriptionListDescription>
                       </DescriptionListGroup>

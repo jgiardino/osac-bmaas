@@ -1,32 +1,25 @@
 import { Content, Stack, StackItem } from '@patternfly/react-core'
+import { useLocation } from 'react-router-dom'
+import { ModelsInstanceCard } from '../../../components/catalog/ModelsInstanceCard'
 import {
   getVisionOrg,
-  getVisionPreset,
   getVisionSite,
   modelsOnGatewayCount,
   type VisionCluster,
   type VisionDeployment,
   type VisionGateway,
   type VisionOffPlatformModel,
+  type VisionOrgId,
 } from '../../../vision/fleetWorld'
+import { servicesModelsForOrg } from '../../../vision/modelInstanceSeed'
 import type { VisionDrawerSelection, VisionGridObjectType } from '../../../vision/visionDrawer'
 import { VisionClusterInspector } from './VisionClusterInspector'
 import { VisionGatewayInspector } from './VisionGatewayInspector'
 import { VisionGridClusterCard } from './VisionGridClusterCard'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
-import { VisionGridDrawerCard } from './VisionGridDrawerCard'
-import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
-import { VisionGridModelListBadge } from './VisionGridModelListBadge'
+import { VisionGridGatewayCard } from './VisionGridGatewayCard'
 import { VisionOffPlatformModelInspector } from './VisionOffPlatformModelInspector'
 import { VisionServiceModelInspector } from './VisionServiceModelInspector'
-import { visionFleetModelSpecNodes } from './visionFleetModelSpec'
-import {
-  gatewayRelationsForDeployment,
-  gatewayRelationsForOffPlatform,
-  visionAdminScopeFooter,
-  visionClusterDisplayName,
-  visionGatewayListSpecRows,
-} from './visionGridServiceMeta'
 
 type VisionGridServicesTabProps = {
   mode: 'list' | 'detail'
@@ -52,15 +45,6 @@ type VisionGridServicesTabProps = {
   onViewOffPlatform: (modelId: string) => void
 }
 
-const gatewayClusterLabel = (gateway: VisionGateway, clusters: VisionCluster[]) => {
-  const cluster = clusters.find((entry) => entry.id === gateway.clusterId)
-  if (!cluster) {
-    return gateway.clusterId
-  }
-  const site = getVisionSite(cluster.siteId)
-  return `${cluster.name} · ${site.regionLabel}`
-}
-
 export const VisionGridServicesTab = ({
   mode,
   selection,
@@ -84,6 +68,9 @@ export const VisionGridServicesTab = ({
   onViewGateway,
   onViewOffPlatform,
 }: VisionGridServicesTabProps) => {
+  const { pathname } = useLocation()
+  const showTenant = pathname.startsWith('/provider')
+
   if (mode === 'detail') {
     if (selection.kind === 'cluster') {
       return (
@@ -195,30 +182,6 @@ export const VisionGridServicesTab = ({
     const org = getVisionOrg(cluster.orgId)
     return matches(cluster.name) || matches(site.regionLabel) || matches(org.label)
   })
-  const visibleDeployments = deployments.filter((deployment) => {
-    const cluster = clusters.find((entry) => entry.id === deployment.clusterId)
-    const preset = getVisionPreset(deployment.presetId)
-    const org = getVisionOrg(deployment.orgId)
-    return (
-      matches(preset?.displayName ?? '') ||
-      matches(preset?.modelId ?? '') ||
-      matches(cluster?.name ?? '') ||
-      matches(org.label) ||
-      matches(deployment.projectName)
-    )
-  })
-  const visibleOffPlatform = offPlatformModels.filter((model) => {
-    const org = getVisionOrg(model.orgId)
-    const clusterName = visionClusterDisplayName(model.clusterId, clusters)
-    return (
-      matches(model.displayName) ||
-      matches(model.modelId) ||
-      matches(model.servedBy) ||
-      matches(org.label) ||
-      matches(model.projectName) ||
-      matches(clusterName)
-    )
-  })
   const visibleGateways = gateways.filter((gateway) => {
     const org = getVisionOrg(gateway.orgId)
     return matches(gateway.label) || matches(gateway.hostname) || matches(org.label)
@@ -226,7 +189,17 @@ export const VisionGridServicesTab = ({
   const showClusters = objectTypes.includes('clusters')
   const showModels = objectTypes.includes('models')
   const showGateways = objectTypes.includes('gateways')
-  const modelCount = visibleDeployments.length + visibleOffPlatform.length
+  const orgIds = new Set(clusters.map((cluster) => cluster.orgId))
+  const seedOrgId: VisionOrgId | 'all' = orgIds.size === 1 ? [...orgIds][0] : 'all'
+  const visibleSeedModels = servicesModelsForOrg(seedOrgId).filter(
+    (item) =>
+      matches(item.displayName) ||
+      matches(item.modelId) ||
+      matches(item.tenantLabel) ||
+      matches(item.projectName) ||
+      matches(item.clusterId ?? ''),
+  )
+  const modelCount = visibleSeedModels.length
 
   if (!showClusters && !showModels && !showGateways) {
     return <Content component="p">Select a type to show services.</Content>
@@ -283,19 +256,13 @@ export const VisionGridServicesTab = ({
                 <Content component="p">No gateways in the current filter.</Content>
               </StackItem>
             ) : (
-              visibleGateways.map((gateway) => {
-                const org = getVisionOrg(gateway.orgId)
-                return (
+              visibleGateways.map((gateway) => (
                   <StackItem key={gateway.id}>
-                    <VisionGridDrawerCard
+                    <VisionGridGatewayCard
                       id={`vision-service-gateway-${gateway.id}`}
-                      name={gateway.label}
-                      secondary={gateway.hostname}
-                      specRows={visionGatewayListSpecRows({
-                        clusterValue: gatewayClusterLabel(gateway, clusters),
-                        modelCount: modelsOnGatewayCount(deployments, offPlatformModels, gateway.id),
-                      })}
-                      footerRows={[{ label: 'Tenant', value: org.label }]}
+                      gateway={gateway}
+                      clusters={clusters}
+                      modelCount={modelsOnGatewayCount(deployments, offPlatformModels, gateway.id)}
                       isSelected={
                         highlight.kind === 'gateway' && highlight.gatewayId === gateway.id
                       }
@@ -303,8 +270,7 @@ export const VisionGridServicesTab = ({
                       onViewDetails={() => onViewGateway(gateway.id)}
                     />
                   </StackItem>
-                )
-              })
+                ))
             )}
           </Stack>
         </StackItem>
@@ -325,82 +291,16 @@ export const VisionGridServicesTab = ({
                 <Content component="p">No model instances running in the current filter.</Content>
               </StackItem>
             ) : (
-              <>
-                {visibleDeployments.map((deployment) => {
-                  const org = getVisionOrg(deployment.orgId)
-                  const preset = getVisionPreset(deployment.presetId)
-                  return (
-                    <StackItem key={deployment.id}>
-                      <VisionGridDrawerCard
-                        id={`vision-service-model-${deployment.id}`}
-                        name={preset?.displayName ?? deployment.presetId}
-                        secondary={preset?.modelId ?? deployment.presetId}
-                        specNodes={visionFleetModelSpecNodes({
-                          idPrefix: `vision-service-model-${deployment.id}`,
-                          clusterName: visionClusterDisplayName(deployment.clusterId, clusters),
-                          size: deployment.replicas,
-                        })}
-                        extra={
-                          <VisionGridGatewayRelationList
-                            idPrefix={`vision-service-model-${deployment.id}`}
-                            relations={gatewayRelationsForDeployment(deployment, gateways)}
-                          />
-                        }
-                        footerRows={visionAdminScopeFooter(org.label, deployment.projectName)}
-                        isSelected={
-                          highlight.kind === 'deployment' &&
-                          highlight.deploymentId === deployment.id
-                        }
-                        onSelect={() => onHighlightDeployment(deployment.id)}
-                        onViewDetails={() => onViewDeployment(deployment.id)}
-                        badge={
-                          <VisionGridModelListBadge
-                            idPrefix={`vision-service-model-${deployment.id}`}
-                            status={deployment.status}
-                          />
-                        }
-                      />
-                    </StackItem>
-                  )
-                })}
-                {visibleOffPlatform.map((model) => {
-                  const org = getVisionOrg(model.orgId)
-                  return (
-                    <StackItem key={model.id}>
-                      <VisionGridDrawerCard
-                        id={`vision-service-model-${model.id}`}
-                        name={model.displayName}
-                        secondary={model.modelId}
-                        specNodes={visionFleetModelSpecNodes({
-                          idPrefix: `vision-service-model-${model.id}`,
-                          clusterName: visionClusterDisplayName(model.clusterId, clusters),
-                          servedBy: model.servedBy,
-                        })}
-                        extra={
-                          <VisionGridGatewayRelationList
-                            idPrefix={`vision-service-model-${model.id}`}
-                            relations={gatewayRelationsForOffPlatform(model, gateways)}
-                          />
-                        }
-                        footerRows={visionAdminScopeFooter(org.label, model.projectName)}
-                        isSelected={
-                          highlight.kind === 'off-platform-model' &&
-                          highlight.modelId === model.id
-                        }
-                        onSelect={() => onHighlightOffPlatform(model.id)}
-                        onViewDetails={() => onViewOffPlatform(model.id)}
-                        badge={
-                          <VisionGridModelListBadge
-                            idPrefix={`vision-service-model-${model.id}`}
-                            status="Ready"
-                            servingKind="external-model"
-                          />
-                        }
-                      />
-                    </StackItem>
-                  )
-                })}
-              </>
+              visibleSeedModels.map((item) => (
+                <StackItem key={item.id}>
+                  <ModelsInstanceCard
+                    item={item}
+                    variant="compact"
+                    showTenant={showTenant}
+                    idPrefix="vision-service-model"
+                  />
+                </StackItem>
+              ))
             )}
           </Stack>
         </StackItem>

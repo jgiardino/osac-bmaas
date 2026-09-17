@@ -25,6 +25,7 @@ import { VisionGridClusterCard } from './VisionGridClusterCard'
 import { VisionGridClusterIdLabel } from './VisionGridClusterIdLabel'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
+import { VisionGridGatewayCard } from './VisionGridGatewayCard'
 import { VisionGridGatewayKindLabels } from './VisionGridGatewayKindLabels'
 import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
 import { VisionGridModelListBadge } from './VisionGridModelListBadge'
@@ -179,10 +180,11 @@ export const VisionServiceModelInspector = ({
         relations.map((relation) => {
           return (
             <StackItem key={relation.gateway.id}>
-              <VisionGridDrawerCard
+              <VisionGridGatewayCard
                 id={`vision-service-model-maas-${relation.gateway.id}`}
-                name={relation.gateway.label}
-                secondary={relation.gateway.hostname}
+                gateway={relation.gateway}
+                modelCount={modelsOnGatewayCount(deployments, offPlatformModels, relation.gateway.id)}
+                includeCluster={false}
                 specNodes={[
                   ...(relation.origin === 'other-cluster'
                     ? [
@@ -205,7 +207,6 @@ export const VisionServiceModelInspector = ({
                     ),
                   },
                 ]}
-                footerRows={[{ label: 'Tenant', value: getVisionOrg(relation.gateway.orgId).label }]}
                 isSelected={
                   highlight.kind === 'gateway' && highlight.gatewayId === relation.gateway.id
                 }

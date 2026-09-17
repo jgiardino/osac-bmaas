@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Button,
   ClipboardCopy,
@@ -23,7 +24,6 @@ import {
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
-  Truncate,
 } from '@patternfly/react-core'
 import EllipsisVIcon from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
 import FilterIcon from '@patternfly/react-icons/dist/esm/icons/filter-icon'
@@ -36,6 +36,8 @@ import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import { MOCK_AI_MODELS } from './mocks'
 import type { AIModel } from './types'
 import { GenaiPageStack } from '../GenaiPageStack'
+import { MaasModelIdentity } from '../../../../components/catalog/MaasModelIdentity'
+import { visionOrgFilterFromPathname } from '../../../../vision/modelInstanceSeed'
 
 const CAPABILITY_DISPLAY: Record<string, { label: string; color: 'green' | 'purple' | 'teal' }> = {
   vision: { label: 'Vision', color: 'green' },
@@ -95,6 +97,8 @@ const filterLabel = (key: FilterType) => {
 }
 
 export function ModelsTab() {
+  const { pathname } = useLocation()
+  const orgId = visionOrgFilterFromPathname(pathname)
   const [filterType, setFilterType] = useState<FilterType>('name')
   const [searchValue, setSearchValue] = useState('')
   const [appliedName, setAppliedName] = useState('')
@@ -105,7 +109,9 @@ export function ModelsTab() {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(10)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [models, setModels] = useState(MOCK_AI_MODELS)
+  const [models, setModels] = useState(() =>
+    orgId === 'all' ? MOCK_AI_MODELS : MOCK_AI_MODELS.filter((model) => model.tenantId === orgId),
+  )
 
   const hasCustomEndpoints = models.some((m) => m.model_source_type === 'custom_endpoint')
 
@@ -466,28 +472,17 @@ function ModelRow({
     <>
       <Tr>
         <Td dataLabel="Model">
-          <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
-            <FlexItem>
-              <strong>{model.display_name || model.model_name}</strong>
-            </FlexItem>
-            {model.model_type === 'embedding' ? (
-              <FlexItem>
-                <Label color="blue" isCompact>
-                  Embedding
-                </Label>
-              </FlexItem>
-            ) : null}
-          </Flex>
-          <Truncate
-            content={model.model_id}
-            className="pf-v6-u-font-family-monospace pf-v6-u-font-size-xs pf-v6-u-text-color-subtle"
+          <MaasModelIdentity
+            id={`aae-prod-identity-${model.model_id}`}
+            displayName={model.display_name || model.model_name}
+            modelRefId={model.model_id}
+            description={model.description}
+            labels={
+              model.model_source_type === 'maas'
+                ? [{ text: 'MaaS', color: 'blue' }]
+                : undefined
+            }
           />
-          {model.description ? (
-            <Truncate
-              content={model.description}
-              className="pf-v6-u-font-size-xs pf-v6-u-text-color-subtle"
-            />
-          ) : null}
         </Td>
         <Td dataLabel="Use case">{model.usecase}</Td>
         <Td dataLabel="Capabilities">

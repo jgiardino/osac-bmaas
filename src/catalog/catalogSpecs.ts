@@ -19,6 +19,7 @@ import {
   type CatalogHardwareOsMode,
 } from './catalogPublishConfig'
 import { resolveHardwareSpecsForCatalogItem } from './hardwareSpecs'
+import { resolveModelCatalogSpecRows } from '../vision/modelCatalogSeed'
 
 export type CatalogSpecRow = {
   label: string
@@ -390,10 +391,17 @@ export function resolveCatalogSpecRows(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
-  >,
+  > & { catalogItemId?: string },
   options?: { includeDetails?: boolean },
 ): CatalogSpecRow[] {
   const serviceId = getDraftServiceId(item)
+
+  if (serviceId === 'models') {
+    const modelRows = resolveModelCatalogSpecRows(item.catalogItemId)
+    if (modelRows) {
+      return modelRows
+    }
+  }
 
   if (serviceId === 'cluster') {
     return buildClusterCatalogSpecRows(item, options)
@@ -464,7 +472,7 @@ export function formatCatalogConfigurationSummary(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
-  >,
+  > & { catalogItemId?: string },
 ): string {
   return resolveCatalogSpecRows(item)
     .map((row) => (row.badge ? `${row.value} (${row.badge.text})` : row.value))

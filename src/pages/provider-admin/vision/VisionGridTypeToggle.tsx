@@ -1,6 +1,5 @@
 import { ToggleGroup, ToggleGroupItem, Tooltip } from '@patternfly/react-core'
-import { GlobeRouteIcon } from '@patternfly/react-icons/dist/esm/icons/globe-route-icon'
-import { getCatalogServiceIcon } from '../../../catalog/serviceIcons'
+import { getCatalogServiceIcon, getGatewayIcon } from '../../../catalog/serviceIcons'
 import type { VisionGridObjectType } from '../../../vision/visionDrawer'
 
 type VisionGridTypeToggleProps = {
@@ -18,7 +17,7 @@ const TYPE_LABELS: Record<VisionGridObjectType, string> = {
 
 const typeIcon = (type: VisionGridObjectType) => {
   if (type === 'gateways') {
-    return <GlobeRouteIcon />
+    return getGatewayIcon()
   }
   return getCatalogServiceIcon(type === 'clusters' ? 'cluster' : 'models')
 }

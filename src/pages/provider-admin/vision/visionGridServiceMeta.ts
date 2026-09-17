@@ -29,6 +29,17 @@ export const visionClusterDisplayName = (
   clusters: VisionCluster[],
 ): string => clusters.find((entry) => entry.id === clusterId)?.name ?? clusterId
 
+export const gatewayClusterLabel = (
+  gateway: VisionGateway,
+  clusters: VisionCluster[],
+): string => {
+  const cluster = clusters.find((entry) => entry.id === gateway.clusterId)
+  if (!cluster) {
+    return gateway.clusterId
+  }
+  return `${cluster.name} · ${cluster.region}`
+}
+
 export const visionGatewayListSpecRows = ({
   clusterValue,
   modelCount,

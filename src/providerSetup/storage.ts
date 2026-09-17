@@ -184,7 +184,8 @@ export function getProviderActiveNav(): ProviderAdminNavId {
       value === 'administration-quotas' ||
       value === 'billing-metering' ||
       value === 'system' ||
-      value === 'vision-model-fleet'
+      value === 'vision-model-fleet' ||
+      value === 'vision-model-catalog-patterns'
     ) {
       return value
     }

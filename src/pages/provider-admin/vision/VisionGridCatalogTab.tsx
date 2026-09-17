@@ -28,11 +28,13 @@ import {
   type VisionCatalogModelRow,
 } from '../../../vision/visionCatalogRows'
 import type { VisionDrawerSelection, VisionGridObjectType } from '../../../vision/visionDrawer'
+import { ModelsCatalogItemCard } from '../../../components/catalog/ModelsCatalogItemCard'
 import { getVisionCatalogKebabItems } from './visionGridCatalogActions'
 import { VisionGridClusterCard } from './VisionGridClusterCard'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
 import { VisionGridGatewayRelationList } from './VisionGridGatewayRelationList'
+import { VisionGridKebab } from './VisionGridKebab'
 import { VisionGridModelLabels } from './VisionGridModelLabels'
 import { VisionGridModelListBadge } from './VisionGridModelListBadge'
 import { visionFleetModelSpecNodes } from './visionFleetModelSpec'
@@ -214,7 +216,6 @@ export const VisionGridCatalogTab = ({
                     <VisionGridDrawerCard
                       id={`vision-catalog-cluster-${row.id}`}
                       name={row.displayName}
-                      secondary={row.catalogItemId}
                       specRows={row.specRows}
                       footerRows={[{ label: 'Rate', value: row.rate }]}
                       isSelected={isClusterRowSelected(row, highlight)}
@@ -265,19 +266,24 @@ export const VisionGridCatalogTab = ({
                 <Content component="p">No models in the catalog.</Content>
               </StackItem>
             ) : (
-              visibleModelRows.map((row) => (
+              visibleModelRows.map((row) => {
+                const catalogItem = catalogItems.find(
+                  (item) => item.catalogItemId === row.catalogItemId,
+                )
+                if (!catalogItem) {
+                  return null
+                }
+                return (
                 <StackItem key={row.id}>
-                  <VisionGridDrawerCard
+                  <ModelsCatalogItemCard
+                    variant="compact"
                     id={`vision-catalog-model-${row.id}`}
-                    name={row.displayName}
-                    secondary={row.catalogItemId}
-                    specRows={row.specRows}
-                    footerRows={[{ label: 'Rate', value: row.rate }]}
+                    item={catalogItem}
                     isSelected={isModelRowSelected(row, highlight)}
                     onSelect={() =>
                       highlightModelRow(row, onHighlightPreset, onHighlightCatalogItem)
                     }
-                    onViewDetails={() => viewModelRow(row, onViewPreset, onViewCatalogItem)}
+                    onNameClick={() => viewModelRow(row, onViewPreset, onViewCatalogItem)}
                     badge={
                       <VisionGridModelLabels
                         idPrefix={`vision-catalog-model-${row.id}`}
@@ -290,18 +296,26 @@ export const VisionGridCatalogTab = ({
                         )}
                       />
                     }
-                    kebabItems={getVisionCatalogKebabItems(
-                      row.presetId
-                        ? { kind: 'preset', presetId: row.presetId }
-                        : { kind: 'catalog-item', catalogItemId: row.catalogItemId },
-                      catalogItems,
-                      onPlacePreset,
-                      onAddOffering,
-                      onOpenCatalogItem,
-                    )}
+                    headerActions={
+                      <VisionGridKebab
+                        id={`vision-catalog-model-${row.id}-actions`}
+                        label={`Actions for ${row.displayName}`}
+                        items={getVisionCatalogKebabItems(
+                          row.presetId
+                            ? { kind: 'preset', presetId: row.presetId }
+                            : { kind: 'catalog-item', catalogItemId: row.catalogItemId },
+                          catalogItems,
+                          onPlacePreset,
+                          onAddOffering,
+                          onOpenCatalogItem,
+                        )}
+                      />
+                    }
+                    footerRows={[{ label: 'Rate', value: row.rate }]}
                   />
                 </StackItem>
-              ))
+                )
+              })
             )}
           </Stack>
         </StackItem>

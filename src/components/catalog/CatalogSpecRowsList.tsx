@@ -1,7 +1,7 @@
-import { Label } from '@patternfly/react-core'
 import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { CatalogClusterVersionValue } from './CatalogClusterVersionValue'
 import { CatalogDiskImageValue } from './CatalogDiskImageValue'
+import { CatalogSpecValueWithBadge } from './CatalogSpecValueWithBadge'
 
 const DISK_IMAGE_SPEC_LABELS = new Set(['OS image', 'Disk image'])
 
@@ -11,6 +11,7 @@ type CatalogSpecRowsListProps = {
   rowClassName?: string
   labelClassName?: string
   valueClassName?: string
+  idPrefix?: string
 }
 
 export function CatalogSpecRowsList({
@@ -19,6 +20,7 @@ export function CatalogSpecRowsList({
   rowClassName = 'provider-admin-catalog-items__spec-row',
   labelClassName = 'provider-admin-catalog-items__spec-label',
   valueClassName = 'provider-admin-catalog-items__spec-value',
+  idPrefix = 'catalog-spec',
 }: CatalogSpecRowsListProps) {
   return (
     <dl className={className}>
@@ -30,15 +32,12 @@ export function CatalogSpecRowsList({
               <CatalogClusterVersionValue badge={row.badge}>{row.value}</CatalogClusterVersionValue>
             ) : DISK_IMAGE_SPEC_LABELS.has(row.label) ? (
               <CatalogDiskImageValue badge={row.badge}>{row.value}</CatalogDiskImageValue>
-            ) : row.badge ? (
-              <span className="catalog-spec-row-value-with-badge">
-                <span>{row.value}</span>
-                <Label color={row.badge.color} isCompact>
-                  {row.badge.text}
-                </Label>
-              </span>
             ) : (
-              row.value
+              <CatalogSpecValueWithBadge
+                value={row.value}
+                badge={row.badge}
+                id={`${idPrefix}-badge-${row.label}-${row.badge?.text ?? ''}`.replace(/\s+/g, '-')}
+              />
             )}
           </dd>
         </div>

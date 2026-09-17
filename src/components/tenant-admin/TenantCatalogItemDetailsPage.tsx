@@ -13,6 +13,7 @@ import {
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
 import { BareMetalCatalogItemDetailsBody } from '../catalog/BareMetalCatalogItemDetailsBody'
 import { ClusterCatalogItemDetailsBody } from '../catalog/ClusterCatalogItemDetailsBody'
+import { ModelServingPresetDetailsBody } from '../catalog/ModelServingPresetDetailsBody'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import { formatCatalogItemCreatedAt } from '../../catalog/catalogDetails'
 import { getCatalogItemUserDescription } from '../../catalog/catalogItemDescriptions'
@@ -25,6 +26,7 @@ import {
 import { formatRateCardSummary } from '../../providerSetup/templateDemo'
 import { formatCatalogFieldPolicyMode } from '../../catalog/catalogPublishConfig'
 import { CatalogClusterVersionValue } from '../catalog/CatalogClusterVersionValue'
+import { CatalogSpecValueWithBadge } from '../catalog/CatalogSpecValueWithBadge'
 import { CatalogVmDefaultsSections } from '../catalog/CatalogVmDefaultsSections'
 import {
   TENANT_CATALOG_MANAGER_DEMO,
@@ -58,6 +60,7 @@ export function TenantCatalogItemDetailsPage({
   const isBareMetal = item.serviceId === 'baremetal'
   const isVirtualMachine = item.serviceId === 'virtual-machine'
   const isCluster = item.serviceId === 'cluster'
+  const isModels = item.serviceId === 'models'
   const vmHighlightRows = isVirtualMachine
     ? resolveVmCatalogHighlightRows({
         serviceId: item.serviceId,
@@ -140,7 +143,26 @@ export function TenantCatalogItemDetailsPage({
         ) : undefined
       }
     >
-      {isBareMetal ? (
+      {isModels ? (
+        <ModelServingPresetDetailsBody
+          variant="entity"
+          content={{
+            service: item.service,
+            statusLabel: item.status,
+            statusColor: item.status === 'Unpublished' ? 'grey' : 'green',
+            rateSummary: formatRateCardSummary(item.rateCard),
+            scope: item.scope,
+            visibilityLabel: getTenantAdminCatalogSourceLabel(item),
+            createdAtLabel: formatCatalogItemCreatedAt(item.createdAt),
+            specRows: resolveCatalogSpecRows({
+              catalogItemId: item.catalogItemId ?? item.id,
+              serviceId: item.serviceId,
+              templateRefId: item.templateRefId,
+              templateName: item.templateName,
+            }),
+          }}
+        />
+      ) : isBareMetal ? (
         <BareMetalCatalogItemDetailsBody
           variant="entity"
           content={{
@@ -296,15 +318,8 @@ export function TenantCatalogItemDetailsPage({
                         >
                           {row.value}
                         </CatalogClusterVersionValue>
-                      ) : row.badge ? (
-                        <span className="catalog-spec-row-value-with-badge">
-                          <span>{row.value}</span>
-                          <Label color={row.badge.color} isCompact>
-                            {row.badge.text}
-                          </Label>
-                        </span>
                       ) : (
-                        row.value
+                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
                       )}
                     </DescriptionListDescription>
                   </DescriptionListGroup>
@@ -391,12 +406,7 @@ export function TenantCatalogItemDetailsPage({
                     <DescriptionListTerm>{row.label}</DescriptionListTerm>
                     <DescriptionListDescription>
                       {row.badge ? (
-                        <span className="catalog-spec-row-value-with-badge">
-                          <span>{row.value}</span>
-                          <Label color={row.badge.color} isCompact>
-                            {row.badge.text}
-                          </Label>
-                        </span>
+                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
                       ) : (
                         row.value
                       )}

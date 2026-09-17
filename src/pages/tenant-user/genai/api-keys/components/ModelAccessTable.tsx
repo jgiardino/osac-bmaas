@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Alert,
   AlertVariant,
@@ -30,7 +30,12 @@ import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from '@patternf
 
 import { GenaiPageStack } from '../../GenaiPageStack';
 import { mockApiKeysEngineerV34 } from '../mockDataV34';
-import { mockMaaSModels, mockSubscriptions } from '../subscriptions/mockData';
+import { mockSubscriptions } from '../subscriptions/mockData';
+import {
+  apiKeyModelIdentities,
+  visionOrgFilterFromPathname,
+} from '../../../../../vision/modelInstanceSeed';
+import { MaasModelIdentity } from '../../../../../components/catalog/MaasModelIdentity';
 import type { Subscription, TokenRateLimit } from '../subscriptions/types';
 import { useApiKeysPaths } from '../useApiKeysPaths';
 
@@ -44,22 +49,13 @@ interface ConsumerModel {
   status: ModelStatus;
 }
 
-const modelStatusMap: Record<string, ModelStatus> = {
-  'granite-3b-instruct': 'available',
-  'llama-3-1-8b-instruct': 'available',
-  'gpt-4-turbo': 'unavailable',
-  'mistral-7b-instruct': 'available',
-  'claude-3-sonnet': 'available',
-};
-
-const consumerModels: ConsumerModel[] = mockMaaSModels
-  .filter((m) => mockSubscriptions.some((s) => s.modelRefs.some((ref) => ref.name === m.id)))
-  .map((m) => ({
-    id: m.id,
-    name: m.id,
-    displayName: m.name,
-    description: m.description,
-    status: modelStatusMap[m.id] ?? 'available',
+const toConsumerModels = (orgId: ReturnType<typeof visionOrgFilterFromPathname>): ConsumerModel[] =>
+  apiKeyModelIdentities(orgId).map((item) => ({
+    id: item.maasModelRefId,
+    name: item.maasModelRefId,
+    displayName: item.displayName,
+    description: item.description,
+    status: 'available',
   }));
 
 const formatTokenLimit = (n: number): string => {
@@ -225,6 +221,8 @@ interface ModelAccessTableProps {
 
 const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'subscription' }) => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const consumerModels = toConsumerModels(visionOrgFilterFromPathname(pathname));
   const { subscriptionDetailsPath } = useApiKeysPaths();
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroup);
   const [searchValue, setSearchValue] = useState('');
@@ -268,7 +266,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
       }
     }
     return result;
-  }, [userSubscriptions]);
+  }, [userSubscriptions, consumerModels]);
 
   const toggleModel = (id: string) => {
     setExpandedModels((prev) => {
@@ -415,23 +413,12 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
                     }}
                   />
                   <Td dataLabel="Model">
-                    <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
-                      <FlexItem>
-                        {model.displayName}
-                      </FlexItem>
-                      <FlexItem>
-                        <ModelInfoPopover model={model} idPrefix="model-view" />
-                      </FlexItem>
-                      <FlexItem>
-                        <UnavailableModelLabel model={model} idPrefix="model-view" />
-                      </FlexItem>
-                    </Flex>
-                    <Content
-                      component={ContentVariants.small}
-                      style={{ color: 'var(--pf-t--global--text--color--subtle)' }}
-                    >
-                      {model.name}
-                    </Content>
+                    <MaasModelIdentity
+                      id={`subs-model-identity-${model.id}`}
+                      displayName={model.displayName}
+                      modelRefId={model.name}
+                      description={model.description}
+                    />
                   </Td>
                 </Tr>
                 <Tr isExpanded={isExpanded}>

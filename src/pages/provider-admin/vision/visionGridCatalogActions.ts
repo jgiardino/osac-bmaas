@@ -37,11 +37,17 @@ export const getVisionCatalogKebabItems = (
       })
 
   const items: VisionGridKebabItem[] = []
-  if (modelRow?.presetId) {
+  if (modelRow) {
     items.push({
-      id: `place-${modelRow.presetId}`,
-      label: 'Place on AI Grid',
-      onClick: () => onPlacePreset(modelRow.presetId as string),
+      id: `launch-${modelRow.id}`,
+      label: 'Launch instance',
+      onClick: () => {
+        if (modelRow.presetId) {
+          onPlacePreset(modelRow.presetId)
+          return
+        }
+        onOpenCatalogItem(modelRow.catalogItemId)
+      },
     })
   }
   if (clusterRow) {

@@ -9,6 +9,7 @@ import {
   Flex,
   FlexItem,
 } from '@patternfly/react-core'
+import { ActionsColumn, type IAction } from '@patternfly/react-table'
 import type { CatalogSpecRow } from '../../../catalog/catalogSpecs'
 import { CatalogSpecRowsList } from '../../../components/catalog/CatalogSpecRowsList'
 import type { VisionFleetSpecNode } from './visionFleetModelSpec'
@@ -26,6 +27,7 @@ type VisionGridDrawerCardProps = {
   onSelect: () => void
   onViewDetails?: () => void
   isSelected?: boolean
+  icon?: ReactNode
   badge?: ReactNode
   kebabItems?: VisionGridKebabItem[]
   secondary?: string
@@ -46,6 +48,7 @@ export const VisionGridDrawerCard = ({
   onSelect,
   onViewDetails,
   isSelected = false,
+  icon,
   badge,
   kebabItems = [],
   secondary,
@@ -72,11 +75,85 @@ export const VisionGridDrawerCard = ({
       <dd className="vision-grid-drawer-card__spec-value">{extra}</dd>
     </div>
   ) : null
+  const titleLink = onViewDetails ? (
+    <Button
+      variant="link"
+      isInline
+      className="tenant-user-instances__name-link catalog-item-name-link"
+      onClick={(event) => {
+        event.stopPropagation()
+        onViewDetails()
+      }}
+    >
+      {name}
+    </Button>
+  ) : (
+    name
+  )
+  const compactKebab: IAction[] = [
+    ...(onViewDetails ? [{ title: 'View details', onClick: () => onViewDetails() }] : []),
+    ...kebabItems.map((item) => ({ title: item.label, onClick: item.onClick })),
+  ]
+  const body = (
+    <>
+      {secondaryLabel ? (
+        <Content component="small" className="vision-grid-drawer-card__field-label">
+          {secondaryLabel}
+        </Content>
+      ) : null}
+      {secondary ? (
+        <Content
+          component="p"
+          className={
+            secondaryIsMono
+              ? 'vision-grid-drawer-card__secondary'
+              : 'vision-grid-drawer-card__secondary vision-grid-drawer-card__secondary--plain'
+          }
+        >
+          {secondary}
+        </Content>
+      ) : null}
+      {hasNodeSpecs || extra ? (
+        <dl className="vision-grid-drawer-card__specs">
+          {resolvedNodes?.map((row) => (
+            <div key={row.label} className="vision-grid-drawer-card__spec-row">
+              <dt className="vision-grid-drawer-card__spec-label">{row.label}</dt>
+              <dd className="vision-grid-drawer-card__spec-value">{row.value}</dd>
+            </div>
+          ))}
+          {extraRow}
+        </dl>
+      ) : hasCatalogSpecs ? (
+        <CatalogSpecRowsList
+          rows={specRows}
+          className="vision-grid-drawer-card__specs"
+          rowClassName="vision-grid-drawer-card__spec-row"
+          labelClassName="vision-grid-drawer-card__spec-label"
+          valueClassName="vision-grid-drawer-card__spec-value"
+        />
+      ) : null}
+      {meta && !hasCatalogSpecs && !hasNodeSpecs && !extra ? (
+        <Content component="small">{meta}</Content>
+      ) : null}
+      {footerRows.length > 0 ? (
+        <dl className="vision-grid-drawer-card__footer">
+          {footerRows.map((row) => (
+            <div key={row.label} className="vision-grid-drawer-card__footer-row">
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </>
+  )
 
   return (
     <Card
       id={id}
-      className="vision-grid-drawer-card"
+      className={
+        icon ? 'vision-grid-drawer-card tenant-user-instances__card' : 'vision-grid-drawer-card'
+      }
       isCompact
       isSelectable
       isSelected={isSelected}
@@ -88,100 +165,81 @@ export const VisionGridDrawerCard = ({
         onSelect()
       }}
     >
-      <CardHeader
-        actions={
-          kebabItems.length > 0
-            ? {
-                actions: (
-                  <VisionGridKebab id={`${id}-actions`} label={`Actions for ${name}`} items={kebabItems} />
-                ),
-                hasNoOffset: true,
-              }
-            : undefined
-        }
-      >
-        <Flex
-          spaceItems={{ default: 'spaceItemsSm' }}
-          alignItems={{ default: 'alignItemsCenter' }}
-          flexWrap={{ default: 'nowrap' }}
-        >
-          <FlexItem>
-            {nameLabel ? (
-              <Content component="small" className="vision-grid-drawer-card__field-label">
-                {nameLabel}
-              </Content>
-            ) : null}
-            <CardTitle id={titleId}>
-              {onViewDetails ? (
-                <Button
-                  variant="link"
-                  isInline
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onViewDetails()
-                  }}
-                >
-                  {name}
-                </Button>
-              ) : (
-                name
-              )}
-            </CardTitle>
-          </FlexItem>
-          {badge ? <FlexItem>{badge}</FlexItem> : null}
-        </Flex>
-      </CardHeader>
-      <CardBody>
-        {secondaryLabel ? (
-          <Content component="small" className="vision-grid-drawer-card__field-label">
-            {secondaryLabel}
-          </Content>
-        ) : null}
-        {secondary ? (
-          <Content
-            component="p"
-            className={
-              secondaryIsMono
-                ? 'vision-grid-drawer-card__secondary'
-                : 'vision-grid-drawer-card__secondary vision-grid-drawer-card__secondary--plain'
+      {icon ? (
+        <CardBody>
+          <div className="tenant-user-instances__card-header">
+            <div className="models-instance-card__title-row">
+              <span
+                className="tenant-user-instances__card-icon models-instance-card__icon--compact"
+                aria-hidden
+              >
+                {icon}
+              </span>
+              <div className="tenant-user-instances__card-title-block">
+                <Content component="p" className="tenant-user-instances__primary-cell">
+                  {titleLink}
+                </Content>
+              </div>
+            </div>
+            <div className="tenant-user-instances__card-header-actions">
+              {badge}
+              {compactKebab.length > 0 ? <ActionsColumn items={compactKebab} /> : null}
+            </div>
+          </div>
+          {body}
+        </CardBody>
+      ) : (
+        <>
+          <CardHeader
+            actions={
+              kebabItems.length > 0
+                ? {
+                    actions: (
+                      <VisionGridKebab
+                        id={`${id}-actions`}
+                        label={`Actions for ${name}`}
+                        items={kebabItems}
+                      />
+                    ),
+                    hasNoOffset: true,
+                  }
+                : undefined
             }
           >
-            {secondary}
-          </Content>
-        ) : null}
-        {hasNodeSpecs || extra ? (
-          <dl className="vision-grid-drawer-card__specs">
-            {resolvedNodes?.map((row) => (
-              <div key={row.label} className="vision-grid-drawer-card__spec-row">
-                <dt className="vision-grid-drawer-card__spec-label">{row.label}</dt>
-                <dd className="vision-grid-drawer-card__spec-value">{row.value}</dd>
-              </div>
-            ))}
-            {extraRow}
-          </dl>
-        ) : hasCatalogSpecs ? (
-          <CatalogSpecRowsList
-            rows={specRows}
-            className="vision-grid-drawer-card__specs"
-            rowClassName="vision-grid-drawer-card__spec-row"
-            labelClassName="vision-grid-drawer-card__spec-label"
-            valueClassName="vision-grid-drawer-card__spec-value"
-          />
-        ) : null}
-        {meta && !hasCatalogSpecs && !hasNodeSpecs && !extra ? (
-          <Content component="small">{meta}</Content>
-        ) : null}
-        {footerRows.length > 0 ? (
-          <dl className="vision-grid-drawer-card__footer">
-            {footerRows.map((row) => (
-              <div key={row.label} className="vision-grid-drawer-card__footer-row">
-                <dt>{row.label}</dt>
-                <dd>{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-      </CardBody>
+            <Flex
+              spaceItems={{ default: 'spaceItemsSm' }}
+              alignItems={{ default: 'alignItemsCenter' }}
+              flexWrap={{ default: 'nowrap' }}
+            >
+              <FlexItem>
+                {nameLabel ? (
+                  <Content component="small" className="vision-grid-drawer-card__field-label">
+                    {nameLabel}
+                  </Content>
+                ) : null}
+                <CardTitle id={titleId}>
+                  {onViewDetails ? (
+                    <Button
+                      variant="link"
+                      isInline
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onViewDetails()
+                      }}
+                    >
+                      {name}
+                    </Button>
+                  ) : (
+                    name
+                  )}
+                </CardTitle>
+              </FlexItem>
+              {badge ? <FlexItem>{badge}</FlexItem> : null}
+            </Flex>
+          </CardHeader>
+          <CardBody>{body}</CardBody>
+        </>
+      )}
     </Card>
   )
 }

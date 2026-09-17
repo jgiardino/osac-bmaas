@@ -302,7 +302,17 @@ export const mockHeavyUserKeysV34: ApiKeyV34[] = heavyUserKeyNames.map((name, i)
   };
 });
 
-export const getApiKeyByIdV34 = (id: string, isAdmin: boolean): ApiKeyV34 | undefined => {
-  const keys = isAdmin ? mockApiKeysAdminV34 : mockApiKeysEngineerV34;
-  return keys.find((k) => k.id === id);
+export const getApiKeyByIdV34 = (
+  id: string,
+  isAdmin: boolean,
+  username?: string,
+): ApiKeyV34 | undefined => {
+  if (isAdmin) {
+    return [...mockApiKeysAdminV34, ...mockHeavyUserKeysV34].find((k) => k.id === id);
+  }
+  const key = mockApiKeysEngineerV34.find((k) => k.id === id);
+  if (!key) {
+    return undefined;
+  }
+  return { ...key, username: username ?? key.username };
 };

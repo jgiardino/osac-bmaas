@@ -13,6 +13,7 @@ import {
   getCatalogItemStatus,
   getProviderCatalogItems,
 } from '../providerSetup/storage'
+import { mergeVisionCatalogItems } from '../vision/modelFleet'
 import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   ensureProviderCatalogDemoItems,
@@ -73,6 +74,7 @@ export const TENANT_USER_CATALOG_SPECS = {
 
 const CLUSTER_FOOTER_NOTE = 'Cluster pre-configured · Admin-managed'
 const VM_FOOTER_NOTE = 'Instance profile pre-configured · Admin-managed'
+const MODELS_FOOTER_NOTE = 'Serving defaults pre-configured · Admin-managed'
 
 function getFooterNote(serviceId: CatalogServiceId): string {
   if (serviceId === 'cluster') {
@@ -80,6 +82,9 @@ function getFooterNote(serviceId: CatalogServiceId): string {
   }
   if (serviceId === 'virtual-machine') {
     return VM_FOOTER_NOTE
+  }
+  if (serviceId === 'models') {
+    return MODELS_FOOTER_NOTE
   }
   return TENANT_USER_CATALOG_SPECS.footerNote
 }
@@ -96,6 +101,9 @@ function getHardwareProfileLabel(
   }
   if (serviceId === 'virtual-machine') {
     return specRows.find((row) => row.label === 'Instance type')?.value ?? 'Standard VM'
+  }
+  if (serviceId === 'models') {
+    return specRows.find((row) => row.label === 'Serving engine')?.value ?? 'Model serving'
   }
 
   return TENANT_USER_CATALOG_SPECS.hardwareProfile
@@ -223,7 +231,7 @@ export function getTenantUserCatalogCards(
 ): TenantUserCatalogCard[] {
   ensureProviderCatalogDemoItems()
 
-  const providerItems = getProviderCatalogItems().filter((item) =>
+  const providerItems = mergeVisionCatalogItems(getProviderCatalogItems()).filter((item) =>
     isCatalogVisibleToTenantUser(item, organization),
   )
 

@@ -22,6 +22,7 @@ export interface AIModel {
   externalEndpoint?: string
   /** Demo-only: whether this model is already configured in the playground */
   inPlayground?: boolean
+  tenantId?: string
 }
 
 export interface MCPServer {

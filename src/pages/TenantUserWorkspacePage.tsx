@@ -435,7 +435,7 @@ export function TenantUserWorkspacePage() {
         ) ?? defaultCatalogDraft)
       : defaultCatalogDraft
   const catalogDraft = focusedCatalogDraft
-  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems(), visionEnabled)
+  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems())
   const displayName = DEMO_TENANT_DISPLAY_USER[tenantSlug]
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 

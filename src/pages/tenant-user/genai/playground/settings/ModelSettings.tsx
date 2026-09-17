@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   FormGroup,
   FormHelperText,
@@ -16,6 +17,8 @@ import {
 import OsacForm from '../../osacStubs/OsacForm';
 
 import { MOCK_PLAYGROUND_MODELS } from '../mocks';
+import { MaasModelIdentity } from '../../../../../components/catalog/MaasModelIdentity';
+import { visionOrgFilterFromPathname } from '../../../../../vision/modelInstanceSeed';
 
 interface ModelSettingsProps {
   selectedModel: string;
@@ -34,8 +37,14 @@ const ModelSettings = ({
   streamingEnabled,
   onStreamingChange,
 }: ModelSettingsProps) => {
+  const { pathname } = useLocation();
+  const orgId = visionOrgFilterFromPathname(pathname);
+  const models =
+    orgId === 'all'
+      ? MOCK_PLAYGROUND_MODELS
+      : MOCK_PLAYGROUND_MODELS.filter((model) => model.tenantId === orgId);
   const [isOpen, setIsOpen] = useState(false);
-  const selected = MOCK_PLAYGROUND_MODELS.find((m) => m.id === selectedModel);
+  const selected = models.find((m) => m.id === selectedModel);
 
   return (
     <div className="pf-v6-u-p-md">
@@ -67,9 +76,15 @@ const ModelSettings = ({
             )}
           >
             <SelectList>
-              {MOCK_PLAYGROUND_MODELS.map((model) => (
+              {models.map((model) => (
                 <SelectOption key={model.id} value={model.id}>
-                  {model.name}
+                  <MaasModelIdentity
+                    id={`playground-option-${model.id}`}
+                    displayName={model.name}
+                    modelRefId={model.modelRefId}
+                    description={model.description}
+                    labels={model.isMaas ? [{ text: 'MaaS', color: 'blue' }] : undefined}
+                  />
                 </SelectOption>
               ))}
             </SelectList>

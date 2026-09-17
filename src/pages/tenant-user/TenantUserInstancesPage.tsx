@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Alert,
   AlertActionCloseButton,
@@ -35,6 +36,7 @@ import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterE
 import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
+import { ModelsInstanceCard } from '../../components/catalog/ModelsInstanceCard'
 import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import {
@@ -86,6 +88,8 @@ import {
   type ProjectScopeId,
 } from '../../tenantUser/projectScope'
 import { ProjectScopeSwitcher } from '../../components/shared/ProjectScopeSwitcher'
+import { visionOrgIdForTenantSlug } from '../../vision/fleetWorld'
+import { servicesModelsForOrg } from '../../vision/modelInstanceSeed'
 
 type TenantUserInstancesPageProps = {
   tenantSlug: string
@@ -192,6 +196,8 @@ export function TenantUserInstancesPage({
   onOpenInstanceConsumed,
   instanceNetworkingVariant = 'summary',
 }: TenantUserInstancesPageProps) {
+  const { pathname } = useLocation()
+  const isPlatformAdmin = pathname.startsWith('/provider')
   useEffect(() => {
     const normalized = ensureTenantDemoInstances(tenantSlug, organization?.name ?? tenantSlug)
     onInstancesChange((current) => {
@@ -286,6 +292,21 @@ export function TenantUserInstancesPage({
   const isClustersPage = lockedServiceId === 'cluster'
   const isVirtualMachinesPage = lockedServiceId === 'virtual-machine'
   const isModelsPage = lockedServiceId === 'models'
+  const seedOrgId = isPlatformAdmin ? 'all' : visionOrgIdForTenantSlug(tenantSlug)
+  const seedModelInstances = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+    return servicesModelsForOrg(seedOrgId).filter((item) => {
+      if (!query) {
+        return true
+      }
+      return (
+        item.displayName.toLowerCase().includes(query) ||
+        item.modelId.toLowerCase().includes(query) ||
+        (item.catalogSkuName ?? '').toLowerCase().includes(query) ||
+        item.tenantLabel.toLowerCase().includes(query)
+      )
+    })
+  }, [seedOrgId, searchValue])
   const hasActiveServiceFilters =
     (isBareMetalPage &&
       (powerStateFilter !== 'all' || osFilter !== 'all' || gpuFilter !== 'all')) ||
@@ -1174,7 +1195,49 @@ export function TenantUserInstancesPage({
           </Alert>
         ) : null}
 
-        {filteredInstances.length === 0 ? (
+        {isModelsPage ? (
+          seedModelInstances.length === 0 ? (
+            searchValue.trim() ? (
+              <CatalogFilterEmptyState
+                title="No instances match your filters"
+                description="Try a different filter option or search term."
+                onClearFilters={clearAllFilters}
+              />
+            ) : (
+              <EmptyState className="tenant-user-instances__empty">
+                <span className="tenant-user-instances__empty-icon" aria-hidden>
+                  {getCatalogServiceIcon('models')}
+                </span>
+                <Title headingLevel="h2" size="lg">
+                  {emptyStateTitle}
+                </Title>
+                <EmptyStateBody>
+                  Launch a model instance from the catalog to start serving inference.
+                </EmptyStateBody>
+              </EmptyState>
+            )
+          ) : (
+            <>
+              <CatalogFilterResultsSummary
+                filteredCount={seedModelInstances.length}
+                totalCount={servicesModelsForOrg(seedOrgId).length}
+                singular="instance"
+                filterParts={filterDescriptionParts}
+                onClearFilters={clearAllFilters}
+              />
+              <div className="catalog-card-grid tenant-user-instances__grid">
+                {seedModelInstances.map((item) => (
+                  <ModelsInstanceCard
+                    key={item.id}
+                    item={item}
+                    showTenant={isPlatformAdmin}
+                    idPrefix="services-models"
+                  />
+                ))}
+              </div>
+            </>
+          )
+        ) : filteredInstances.length === 0 ? (
           filterDescriptionParts.length > 0 ? (
             <CatalogFilterEmptyState
               title="No instances match your filters"

@@ -1,0 +1,35 @@
+---
+description: Catalog item cards must match Ethan’s latest catalog chrome and kebab-case names.
+alwaysApply: true
+---
+
+# Catalog cards match Ethan
+
+Ethan’s Catalog item card is the pattern for every service, including Models. Copy his latest chrome. Do not invent a Models-only card.
+
+## Card chrome (required)
+
+Same structure as Ethan’s latest cards (for example `cluster-node-sets-object`):
+
+- Service icon, service chip, Live / Unpublished, kebab
+- Display name as the title link
+- Spec rows with Locked / Editable badges
+- Rate
+- Visibility footer (globe + Global public, or VIP)
+
+**Do not** show the catalog item id (`cat-node-sets-fc430`, `cat-llm-instruct`, and similar) on the card.
+
+If this repo’s copy of Ethan’s cards is behind his latest, **sync to his latest**. Do not keep extra fields on Models cards “so we don’t touch Ethan.”
+
+## Display names
+
+Use lowercase kebab-case object names, like Ethan:
+
+- Yes: `cluster-node-sets-object`, `bare-metal-gpu-training-server`, `llm-instruct`
+- No: `LLM — instruct`, `LLM — lightweight text gen`, `Cluster Node Sets`
+
+The `cat-…` id stays in data only. It is not the title.
+
+## Scope
+
+Change Models catalog cards and any shared catalog chrome needed to match Ethan. Do not restyle Ethan’s bare metal / cluster / VM **offers** (different SKUs, rates, specs). Do match their **card pattern**.

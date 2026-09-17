@@ -189,6 +189,14 @@ export function ProviderAdminShell({
                 >
                   AI Grid
                 </NavItem>
+                <NavItem
+                  itemId="vision-model-catalog-patterns"
+                  isActive={activeNavId === 'vision-model-catalog-patterns'}
+                  to="#"
+                  preventDefault
+                >
+                  Patterns
+                </NavItem>
               </>
             ) : null}
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>

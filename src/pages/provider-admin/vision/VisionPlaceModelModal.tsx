@@ -53,11 +53,10 @@ export const VisionPlaceModelModal = ({
       onClose={onClose}
       aria-labelledby="vision-place-model-title"
     >
-      <ModalHeader title="Place on AI Grid" labelId="vision-place-model-title" />
+      <ModalHeader title="Launch instance" labelId="vision-place-model-title" />
       <ModalBody>
         <Content component="p">
-          Choose clusters for <strong>{preset?.displayName ?? 'this preset'}</strong>. This is a
-          published serving preset — you are not configuring accelerators from scratch.
+          Choose clusters for <strong>{preset?.displayName ?? 'this catalog item'}</strong>.
         </Content>
         <Form className="vision-place-on-sites-form">
           <FormGroup label="Clusters" fieldId="vision-place-clusters" isRequired>
@@ -86,7 +85,7 @@ export const VisionPlaceModelModal = ({
           isDisabled={selectedIds.length === 0}
           onClick={() => onPlace(selectedIds)}
         >
-          Place on AI Grid
+          Launch instance
         </Button>
         <Button variant="link" onClick={onClose}>
           Cancel

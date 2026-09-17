@@ -66,6 +66,9 @@ import type { IAction, TdProps, ThProps } from '@patternfly/react-table';
 
 import { TenantUserPageChrome } from '../../../tenant-user/genai/TenantUserPageChrome';
 import { GenaiPageStack } from '../../../tenant-user/genai/GenaiPageStack';
+import { MaasModelIdentity } from '../../../../components/catalog/MaasModelIdentity';
+import { gatewayAssignmentLabel } from '../../../../vision/modelInstanceSeed';
+import { visionOrgIdForTenantSlug } from '../../../../vision/fleetWorld';
 
 
 import {
@@ -92,6 +95,7 @@ import {
   PhasePopoverLabel,
   getAuthPolicyPhaseMessage,
   getSubscriptionPhaseMessage,
+  phaseConfig,
 } from './PopoverLabels';
 
 type MainTab = 'overview' | 'subscriptions' | 'policies';
@@ -188,15 +192,45 @@ const TruncatedDescription: React.FC<{ text: string; id: string }> = ({ text, id
   return <Tooltip content={text} id={`${id}-desc-tip`}>{content}</Tooltip>;
 };
 
-const OVERVIEW_COL_COUNT = 5;
+const OVERVIEW_COL_COUNT_WITH_TENANT = 10;
+const OVERVIEW_COL_COUNT_WITHOUT_TENANT = 9;
 const SUB_COL_COUNT = 6;
 const POLICY_COL_COUNT = 5;
 const GROUP_COL_COUNT = 6;
+
+const modelCoverageStatus = (model: GovernanceModel): 'Pending' | 'Ready' =>
+  model.subscriptions.length === 0 || model.policies.length === 0 ? 'Pending' : 'Ready';
+
+const ModelCoverageStatusLabel = ({ model }: { model: GovernanceModel }) => {
+  const status = modelCoverageStatus(model);
+  const config = phaseConfig(status === 'Pending' ? 'Pending' : 'Active');
+  return (
+    <Label
+      id={`j2-status-${model.id}`}
+      variant="filled"
+      isCompact
+      status={config.status}
+      color={config.color}
+      icon={config.icon}
+    >
+      {status}
+    </Label>
+  );
+};
 
 const MaaSGovernancePage = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
+
+  const isPlatformAdmin = pathname.startsWith('/provider');
+  const tenantSlugMatch = pathname.match(/^\/tenant-admin\/([^/]+)/);
+  const lockedOrgId = isPlatformAdmin
+    ? null
+    : visionOrgIdForTenantSlug(tenantSlugMatch?.[1] ?? 'northsummit');
+  const overviewColCount = isPlatformAdmin
+    ? OVERVIEW_COL_COUNT_WITH_TENANT
+    : OVERVIEW_COL_COUNT_WITHOUT_TENANT;
 
   const goMaas = (extra: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
@@ -306,12 +340,25 @@ const MaaSGovernancePage = () => {
   // dataVersion busts memo when the in-memory mock store mutates
   const governanceModels = React.useMemo(() => {
     void dataVersion;
-    return computeGovernanceModels();
-  }, [dataVersion]);
+    const all = computeGovernanceModels();
+    if (!lockedOrgId) {
+      return all;
+    }
+    return all.filter((model) => model.tenantId === lockedOrgId);
+  }, [dataVersion, lockedOrgId]);
+  const allowedModelIds = React.useMemo(
+    () => new Set(governanceModels.map((model) => model.identityId)),
+    [governanceModels],
+  );
   const governanceGroups = React.useMemo(() => {
     void dataVersion;
-    return computeGovernanceGroups();
-  }, [dataVersion]);
+    return computeGovernanceGroups()
+      .map((group) => {
+        const models = group.models.filter((model) => allowedModelIds.has(model.modelId));
+        return { ...group, models, modelCount: models.length };
+      })
+      .filter((group) => group.modelCount > 0);
+  }, [dataVersion, allowedModelIds]);
 
   const toggleSet = (_set: Set<string>, id: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
     setter((prev) => { const next = new Set(prev); if (next.has(id)) {next.delete(id);} else {next.add(id);} return next; });
@@ -379,7 +426,7 @@ const MaaSGovernancePage = () => {
     const t = term.toLowerCase();
     switch (key) {
       case 'model':
-        return model.name.toLowerCase().includes(t) || model.description.toLowerCase().includes(t) || model.modelId.toLowerCase().includes(t);
+        return model.name.toLowerCase().includes(t) || model.description.toLowerCase().includes(t) || model.modelId.toLowerCase().includes(t) || model.cluster.toLowerCase().includes(t);
       case 'subscription':
         return model.subscriptions.some((s) => s.name.toLowerCase().includes(t));
       case 'policy':
@@ -453,7 +500,7 @@ const MaaSGovernancePage = () => {
         if (!sub.groups.some((g) => g.toLowerCase().includes(term))) {return false;}
       } else if (key === 'model') {
         if (!sub.models.some((mId) => {
-          const gm = governanceModels.find((m) => m.id === mId);
+          const gm = governanceModels.find((m) => m.identityId === mId);
           return (gm?.name ?? mId).toLowerCase().includes(term) || (gm?.modelId ?? mId).toLowerCase().includes(term);
         })) {return false;}
       }
@@ -472,7 +519,7 @@ const MaaSGovernancePage = () => {
         if (!pol.groups.some((g) => g.toLowerCase().includes(term))) {return false;}
       } else if (key === 'model') {
         if (!pol.models.some((mId) => {
-          const gm = governanceModels.find((m) => m.id === mId);
+          const gm = governanceModels.find((m) => m.identityId === mId);
           return (gm?.name ?? mId).toLowerCase().includes(term) || (gm?.modelId ?? mId).toLowerCase().includes(term);
         })) {return false;}
       }
@@ -496,14 +543,20 @@ const MaaSGovernancePage = () => {
   }, [activeOverviewFilterEntries, governanceGroups]);
 
   const filteredSubscriptions = React.useMemo(() => {
-    return mockSubscriptionsList.filter(matchesSubListFilters);
+    return mockSubscriptionsList.filter(
+      (sub) =>
+        sub.models.some((modelId) => allowedModelIds.has(modelId)) && matchesSubListFilters(sub),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subFilters, subPhaseFilters, dataVersion, governanceModels]);
+  }, [subFilters, subPhaseFilters, dataVersion, governanceModels, allowedModelIds]);
 
   const filteredPolicies = React.useMemo(() => {
-    return mockAuthPoliciesList.filter(matchesPolicyListFilters);
+    return mockAuthPoliciesList.filter(
+      (pol) =>
+        pol.models.some((modelId) => allowedModelIds.has(modelId)) && matchesPolicyListFilters(pol),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [policyFilters, policyPhaseFilters, dataVersion, governanceModels]);
+  }, [policyFilters, policyPhaseFilters, dataVersion, governanceModels, allowedModelIds]);
 
   const sortedModels = React.useMemo(() => {
     if (modelSortIndex === null) {return filteredModels;}
@@ -512,8 +565,13 @@ const MaaSGovernancePage = () => {
       let diff = 0;
       switch (modelSortIndex) {
         case 1: diff = a.name.localeCompare(b.name); break;
-        case 2: diff = a.subscriptions.length - b.subscriptions.length; break;
-        case 3: diff = a.policies.length - b.policies.length; break;
+        case 2: diff = a.tenantLabel.localeCompare(b.tenantLabel); break;
+        case 3: diff = a.project.localeCompare(b.project); break;
+        case 4: diff = a.cluster.localeCompare(b.cluster); break;
+        case 5: diff = a.gateways.join(',').localeCompare(b.gateways.join(',')); break;
+        case 6: diff = modelCoverageStatus(a).localeCompare(modelCoverageStatus(b)); break;
+        case 7: diff = a.subscriptions.length - b.subscriptions.length; break;
+        case 8: diff = a.policies.length - b.policies.length; break;
         default: return 0;
       }
       return modelSortDirection === 'asc' ? diff : -diff;
@@ -619,7 +677,7 @@ const MaaSGovernancePage = () => {
           if (modelFilterTerm) {
             const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
             if (fullSub?.models.some((mId) => {
-              const gm = governanceModels.find((m) => m.id === mId);
+              const gm = governanceModels.find((m) => m.identityId === mId);
               return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
             })) {
               cardIds.push(`j2-gv-sub-${group.id}-card-${sub.id}`);
@@ -636,7 +694,7 @@ const MaaSGovernancePage = () => {
           if (modelFilterTerm) {
             const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
             if (fullPol?.models.some((mId) => {
-              const gm = governanceModels.find((m) => m.id === mId);
+              const gm = governanceModels.find((m) => m.identityId === mId);
               return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
             })) {
               cardIds.push(`j2-gv-pol-${group.id}-card-${pol.id}`);
@@ -650,8 +708,8 @@ const MaaSGovernancePage = () => {
 
   // --- Actions ---
   const getModelRowActions = (model: GovernanceModel): IAction[] => [
-    { title: 'Create subscription', onClick: () => goMaas({ maasWizard: 'create-subscription', prefillModel: model.id, maasSubId: null, maasPolId: null }) },
-    { title: 'Create authorization policy', onClick: () => goMaas({ maasWizard: 'create-auth-policy', prefillModel: model.id, maasSubId: null, maasPolId: null }) },
+    { title: 'Create subscription', onClick: () => goMaas({ maasWizard: 'create-subscription', prefillModel: model.identityId, maasSubId: null, maasPolId: null }) },
+    { title: 'Create authorization policy', onClick: () => goMaas({ maasWizard: 'create-auth-policy', prefillModel: model.identityId, maasSubId: null, maasPolId: null }) },
   ];
 
   const getSubRowActions = (sub: SubscriptionListItem): IAction[] => [
@@ -993,7 +1051,7 @@ const MaaSGovernancePage = () => {
   const renderModelLabel = (contextKey: string, modelId: string, modelName: string, tokenText: string | null, key: string) => {
     const clickHighlighted = highlightedModel[contextKey] || null;
     const isClickHighlighted = clickHighlighted === modelId;
-    const gm = governanceModels.find((m) => m.id === modelId);
+    const gm = governanceModels.find((m) => m.identityId === modelId);
     const isFilterHighlighted = modelFilterTerm && (
       modelName.toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? modelId).toLowerCase().includes(modelFilterTerm)
     );
@@ -1006,8 +1064,8 @@ const MaaSGovernancePage = () => {
             onClick={() => handleModelClick(contextKey, modelId)} id={`${key}-label`}
           >{modelName}</Label>
           {gm?.source === 'external'
-            ? <Label color="purple" variant="outline" isCompact id={`${key}-source`}>External</Label>
-            : <Label color="orange" variant="outline" isCompact id={`${key}-source`}>Internal</Label>}
+            ? <Label color="purple" variant="filled" isCompact id={`${key}-source`}>External</Label>
+            : <Label color="orange" variant="filled" isCompact id={`${key}-source`}>Internal</Label>}
         </div>
         {tokenText && (
           <span style={{ fontSize: 'var(--pf-t--global--font--size--xs)', color: 'var(--pf-t--global--text--color--subtle)', display: 'block', marginTop: '2px', paddingLeft: '2px' }}>{tokenText}</span>
@@ -1045,7 +1103,7 @@ const MaaSGovernancePage = () => {
     const clickedModel = highlightedModel[contextKey];
     const isClickModelMatch = clickedModel && fullSub?.models.includes(clickedModel);
     const isModelFilterMatch = showModels && modelFilterTerm && fullSub?.models.some((mId) => {
-      const gm = governanceModels.find((m) => m.id === mId);
+      const gm = governanceModels.find((m) => m.identityId === mId);
       return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
     });
     const isCardSelected = !!isNameMatch || !!isGroupMatch || !!isClickGroupMatch || !!isClickModelMatch || !!isModelFilterMatch;
@@ -1131,7 +1189,7 @@ const MaaSGovernancePage = () => {
     const clickedModel = highlightedModel[contextKey];
     const isClickModelMatch = clickedModel && fullPol?.models.includes(clickedModel);
     const isModelFilterMatch = showModels && modelFilterTerm && fullPol?.models.some((mId) => {
-      const gm = governanceModels.find((m) => m.id === mId);
+      const gm = governanceModels.find((m) => m.identityId === mId);
       return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
     });
     const isCardSelected = !!isNameMatch || !!isGroupMatch || !!isClickGroupMatch || !!isClickModelMatch || !!isModelFilterMatch;
@@ -1250,7 +1308,7 @@ const MaaSGovernancePage = () => {
             ) : (
               model.subscriptions.map((sub) => {
                 const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
-                return renderSubCard(sub, model.id, fullSub, `j2-mv-sub-${model.id}`, { showModels: false, tokenLimitsForModelId: model.id });
+                return renderSubCard(sub, model.id, fullSub, `j2-mv-sub-${model.id}`, { showModels: false, tokenLimitsForModelId: model.identityId });
               })
             )}
           </div>
@@ -1467,13 +1525,18 @@ const MaaSGovernancePage = () => {
             </Button>
           </Th>
           <Th sort={getModelSortParams(1)} id="j2-th-model-name">Model</Th>
-          <Th sort={getModelSortParams(2)} id="j2-th-subs">Subscriptions</Th>
-          <Th sort={getModelSortParams(3)} id="j2-th-pols">Authorization policies</Th>
+          {isPlatformAdmin ? <Th sort={getModelSortParams(2)} id="j2-th-tenant">Tenant</Th> : null}
+          <Th sort={getModelSortParams(3)} id="j2-th-project">Project</Th>
+          <Th sort={getModelSortParams(4)} id="j2-th-cluster">Cluster</Th>
+          <Th sort={getModelSortParams(5)} id="j2-th-gateway">Gateway</Th>
+          <Th sort={getModelSortParams(6)} id="j2-th-status">Status</Th>
+          <Th sort={getModelSortParams(7)} id="j2-th-subs">Subscriptions</Th>
+          <Th sort={getModelSortParams(8)} id="j2-th-pols">Authorization policies</Th>
           <Th screenReaderText="Actions" id="j2-th-actions" />
         </Tr>
       </Thead>
       {pagedModels.length === 0 ? (
-        <Tbody><Tr><Td colSpan={OVERVIEW_COL_COUNT} id="j2-models-empty">
+        <Tbody><Tr><Td colSpan={overviewColCount} id="j2-models-empty">
           <EmptyState headingLevel="h3" titleText="No models match this filter" id="j2-models-empty-state"><EmptyStateBody>Try adjusting your filters or search term.</EmptyStateBody></EmptyState>
         </Td></Tr></Tbody>
       ) : (
@@ -1484,14 +1547,30 @@ const MaaSGovernancePage = () => {
               <Tr isContentExpanded={isRowExpanded} id={`j2-row-${model.id}`}>
                 <Td expand={{ rowIndex, isExpanded: isRowExpanded, onToggle: () => toggleSet(expandedModels, model.id, setExpandedModels), expandId: `j2-expand-${model.id}` }} id={`j2-expand-td-${model.id}`} />
                 <Td dataLabel="Model name" style={{ maxWidth: '350px' }} id={`j2-name-${model.id}`}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <TruncatedModelName name={model.name} id={`j2-model-${model.id}`} />
-                    {model.source === 'external'
-                      ? <Label color="purple" variant="outline" isCompact id={`j2-source-${model.id}`}>External</Label>
-                      : <Label color="orange" variant="outline" isCompact id={`j2-source-${model.id}`}>Internal</Label>}
-                  </span>
-                  <TruncatedModelId modelId={model.modelId} id={`j2-model-id-${model.id}`} />
-                  <TruncatedDescription text={model.description} id={`j2-model-desc-${model.id}`} />
+                  <MaasModelIdentity
+                    id={`j2-model-${model.id}`}
+                    displayName={model.name}
+                    modelRefId={model.modelId}
+                    description={model.description}
+                    labels={[
+                      model.source === 'external'
+                        ? { text: 'External', color: 'purple' }
+                        : { text: 'Internal', color: 'orange' },
+                    ]}
+                  />
+                </Td>
+                {isPlatformAdmin ? (
+                  <Td dataLabel="Tenant" id={`j2-tenant-${model.id}`}>{model.tenantLabel}</Td>
+                ) : null}
+                <Td dataLabel="Project" id={`j2-project-${model.id}`}>{model.project}</Td>
+                <Td dataLabel="Cluster" id={`j2-cluster-${model.id}`}>{model.cluster}</Td>
+                <Td dataLabel="Gateway" id={`j2-gateway-${model.id}`}>
+                  {model.gateways.length === 0
+                    ? 'Unassigned'
+                    : gatewayAssignmentLabel(model.gateways[0])}
+                </Td>
+                <Td dataLabel="Status" id={`j2-status-cell-${model.id}`}>
+                  <ModelCoverageStatusLabel model={model} />
                 </Td>
                 <Td dataLabel="Subscriptions" id={`j2-subs-cell-${model.id}`}>
                   {model.subscriptions.length}{model.subscriptions.length === 0 && renderWarningIcon(
@@ -1521,7 +1600,7 @@ const MaaSGovernancePage = () => {
                 </Td>
               </Tr>
               <Tr isExpanded={isRowExpanded} id={`j2-expand-details-${model.id}`}>
-                <Td colSpan={OVERVIEW_COL_COUNT} id={`j2-expand-details-td-${model.id}`}>
+                <Td colSpan={overviewColCount} id={`j2-expand-details-td-${model.id}`}>
                   {renderSideBySideDetails(model)}
                 </Td>
               </Tr>
@@ -1589,7 +1668,7 @@ const MaaSGovernancePage = () => {
         <Thead><Tr><Th id={`j2-sub-models-detail-name-th-${sub.id}`}>Model name</Th><Th id={`j2-sub-models-detail-limits-th-${sub.id}`}>Token limits</Th></Tr></Thead>
         <Tbody>
           {sub.models.map((modelId) => {
-            const gm = governanceModels.find((m) => m.id === modelId);
+            const gm = governanceModels.find((m) => m.identityId === modelId);
             const limits = sub.tokenLimits[modelId] || [];
             return (
               <Tr key={modelId} id={`j2-sub-model-row-${sub.id}-${modelId}`}>
@@ -1597,8 +1676,8 @@ const MaaSGovernancePage = () => {
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <TruncatedModelName name={gm?.name ?? modelId} id={`j2-sub-model-${sub.id}-${modelId}`} />
                     {gm?.source === 'external'
-                      ? <Label color="purple" variant="outline" isCompact id={`j2-sub-source-${sub.id}-${modelId}`}>External</Label>
-                      : <Label color="orange" variant="outline" isCompact id={`j2-sub-source-${sub.id}-${modelId}`}>Internal</Label>}
+                      ? <Label color="purple" variant="filled" isCompact id={`j2-sub-source-${sub.id}-${modelId}`}>External</Label>
+                      : <Label color="orange" variant="filled" isCompact id={`j2-sub-source-${sub.id}-${modelId}`}>Internal</Label>}
                   </span>
                   <TruncatedModelId modelId={gm?.modelId ?? modelId} id={`j2-sub-modelid-${sub.id}-${modelId}`} />
                   <TruncatedDescription text={gm?.description ?? ''} id={`j2-sub-modeldesc-${sub.id}-${modelId}`} />
@@ -1732,15 +1811,15 @@ const MaaSGovernancePage = () => {
         <Thead><Tr><Th id={`j2-pol-models-detail-th-${polId}`}>Model name</Th></Tr></Thead>
         <Tbody>
           {models.map((modelId) => {
-            const gm = governanceModels.find((m) => m.id === modelId);
+            const gm = governanceModels.find((m) => m.identityId === modelId);
             return (
               <Tr key={modelId} id={`j2-pol-model-row-${polId}-${modelId}`}>
                 <Td dataLabel="Model name" id={`j2-pol-model-cell-${polId}-${modelId}`}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <TruncatedModelName name={gm?.name ?? modelId} id={`j2-pol-model-${polId}-${modelId}`} />
                     {gm?.source === 'external'
-                      ? <Label color="purple" variant="outline" isCompact id={`j2-pol-source-${polId}-${modelId}`}>External</Label>
-                      : <Label color="orange" variant="outline" isCompact id={`j2-pol-source-${polId}-${modelId}`}>Internal</Label>}
+                      ? <Label color="purple" variant="filled" isCompact id={`j2-pol-source-${polId}-${modelId}`}>External</Label>
+                      : <Label color="orange" variant="filled" isCompact id={`j2-pol-source-${polId}-${modelId}`}>Internal</Label>}
                   </span>
                   <TruncatedModelId modelId={gm?.modelId ?? modelId} id={`j2-pol-modelid-${polId}-${modelId}`} />
                   <TruncatedDescription text={gm?.description ?? ''} id={`j2-pol-modeldesc-${polId}-${modelId}`} />

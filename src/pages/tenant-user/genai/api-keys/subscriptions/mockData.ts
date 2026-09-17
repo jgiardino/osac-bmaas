@@ -41,14 +41,10 @@ export const mockOwnerGroups = [
 
 // Available models (MaaSModel references)
 export const mockMaaSModels = [
-  { id: 'granite-3b-instruct', name: 'IBM Granite 3B Instruct', provider: 'Internal', namespace: 'ai-models', description: 'Lightweight instruction-following model optimized for enterprise tasks' },
-  { id: 'llama-3-1-8b-instruct', name: 'Llama 3.1 8B Instruct', provider: 'Internal', namespace: 'ai-models', description: 'General-purpose instruction-tuned model with strong reasoning capabilities' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'External', namespace: 'external-providers', description: 'High-performance model for complex reasoning and code generation' },
-  { id: 'mistral-7b-instruct', name: 'Mistral 7B Instruct', provider: 'Internal', namespace: 'ai-models', description: 'Efficient instruction model with strong multilingual support' },
-  { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'External', namespace: 'external-providers', description: 'Balanced model for analysis, coding, and creative tasks' },
-  // Unaffiliated models - available but not assigned to any subscription
-  { id: 'codellama-34b', name: 'Code Llama 34B', provider: 'Internal', namespace: 'dev-tools', description: 'Specialized model for code generation, completion, and debugging across multiple programming languages' },
-  { id: 'gemma-2-9b', name: 'Gemma 2 9B', provider: 'Internal', namespace: 'research-models', description: 'Compact open-weights model for research and experimentation' },
+  { id: 'granite-3b-instruct', name: 'Granite 3B instruct', provider: 'Internal', namespace: 'ml-project', description: 'Instruction-tuned model for automated pipelines and scheduled workflows.' },
+  { id: 'mistral-7b', name: 'Mistral 7B', provider: 'Internal', namespace: 'ml-project', description: 'Small-footprint text generation, summarization, and classification.' },
+  { id: 'titan-express', name: 'Titan Text Express', provider: 'External', namespace: 'ml-project', description: 'Amazon Bedrock text generation, published on North Summit Bank front doors.' },
+  { id: 'llama-4-scout', name: 'Llama 4 Scout', provider: 'Internal', namespace: 'bsfg-models', description: 'High-capacity reasoning and extended-context analysis.' },
 ];
 
 // Mock subscriptions based on the MaaSSubscription CRD spec
@@ -73,12 +69,12 @@ export const mockSubscriptions: Subscription[] = [
         billingRate: { perToken: 0.000001 },
       },
       {
-        name: 'gpt-4-turbo',
+        name: 'titan-express',
         tokenRateLimits: { limit: 50000, window: '24h' },
         billingRate: { perToken: 0.00003 },
       },
       {
-        name: 'llama-3-1-8b-instruct',
+        name: 'mistral-7b',
         tokenRateLimits: { limit: 200000, window: '24h' },
         billingRate: { perToken: 0.000001 },
       },
@@ -114,7 +110,7 @@ export const mockSubscriptions: Subscription[] = [
         billingRate: { perToken: 0.000001 },
       },
       {
-        name: 'mistral-7b-instruct',
+        name: 'mistral-7b',
         tokenRateLimits: { limit: 25000, window: '24h' },
         billingRate: { perToken: 0.0000015 },
       },
@@ -144,21 +140,12 @@ export const mockSubscriptions: Subscription[] = [
         tokenRateLimits: { limit: 1000000, window: '24h' },
       },
       {
-        name: 'gpt-4-turbo',
+        name: 'titan-express',
         tokenRateLimits: { limit: 500000, window: '24h' },
         billingRate: { perToken: 0.00003 },
       },
       {
-        name: 'claude-3-sonnet',
-        tokenRateLimits: { limit: 500000, window: '24h' },
-        billingRate: { perToken: 0.000015 },
-      },
-      {
-        name: 'llama-3-1-8b-instruct',
-        tokenRateLimits: { limit: 1000000, window: '24h' },
-      },
-      {
-        name: 'mistral-7b-instruct',
+        name: 'mistral-7b',
         tokenRateLimits: { limit: 1000000, window: '24h' },
       },
     ],
@@ -176,7 +163,7 @@ export const mockSubscriptions: Subscription[] = [
     id: 'premium-external',
     name: 'premium-external',
     displayName: 'Premium External Models',
-    description: 'Access to external AI providers (OpenAI, Anthropic) for premium users',
+    description: 'Access to Titan Text Express on Amazon Bedrock for premium users',
     priority: 1,
     status: 'Pending',
     owner: {
@@ -186,14 +173,9 @@ export const mockSubscriptions: Subscription[] = [
     },
     modelRefs: [
       {
-        name: 'gpt-4-turbo',
+        name: 'titan-express',
         tokenRateLimits: { limit: 100000, window: '24h' },
         billingRate: { perToken: 0.00003 },
-      },
-      {
-        name: 'claude-3-sonnet',
-        tokenRateLimits: { limit: 100000, window: '24h' },
-        billingRate: { perToken: 0.000015 },
       },
     ],
     billingMetadata: {

@@ -235,7 +235,7 @@ export function TenantAdminWorkspacePage() {
   }
 
   const catalogDraft = getProviderCatalogDraft()
-  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems(), visionEnabled)
+  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems())
   const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 

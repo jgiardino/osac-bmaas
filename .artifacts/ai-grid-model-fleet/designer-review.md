@@ -6,6 +6,65 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 
 ---
 
+## 2026-09-14
+
+### Instance cards (Patterns → Instance lists)
+
+- Services and AI Grid Services cards are the same four properties: **Model**, **Size** (or **Served by** for externals), **Cluster**, **Gateway**.
+- No PatternFly cluster-id labels. Gateway value is `host-cluster: gateway-id` (example: `ocp-us-east-1: nsb-markets`). **MaaS** stays a filled label on Gateway when published. **Unassigned** is plain text.
+- **Created** only on Services page cards, not AI Grid (compact).
+- Title is a link. Secondary text is the catalog item name (`llm-instruct`). AI Grid adds a smaller service icon inline with the title.
+- Nested AI Grid lists: omit the parent object (no Cluster on cluster details; no Gateway on gateway details). Nested lists include externals whose gateway is hosted on that cluster.
+- **Tenant** is platform admin only. Patterns shows it because that page is viewed as platform admin. Tenant admin and tenant user omit it. Later Myriam discussions should use **tenant admin** as the persona who sees the whole organization fleet.
+
+### Consume lists (Patterns)
+
+- Model column is display name, **MaaS model ref id** (not catalog item id), and description — same stack and styles on MaaS governance, API keys, AI asset endpoints, and Playground picker.
+- MaaS governance keeps filled **Internal** / **External** labels. AI assets and Playground use a filled **MaaS** label when the model is published (Mistral has none). Match Ethan’s filled labels, not outline.
+
+### Live GenAI studio API keys (not 2.8)
+
+- Keys on GenAI studio → API keys belong to the signed-in user: `ajohnson` (Alex Johnson / provider), `cmorgan` / `ecruz` (tenant user), `pnair` / `marcuschen` (tenant admin GenAI studio). Admin API keys (`nav=ai-admin-api-keys`) still lists keys across users.
+
+Live Services / MaaS / assets / Playground **lists** stay on old mocks until the 2.8 seed is wired.
+
+### Keep-set and chrome (later 2026-09-14)
+
+- Granite stays **story A** (regional doors). One gateway serving models on other clusters is shown with **Mistral 7B ×3 on `nsb-west`** (US West, US East, EU West). Mistral is MaaS. **Credit-risk scorer** is the non-MaaS AI asset. **Claude Sonnet 4** stays unassigned MaaS: MaaS governance only — not API keys, assets, or Playground.
+- Nested gateway cards omit Gateway, so **MaaS** sits to the right of the display name for now (revisit in context).
+- Model column: no PatternFly Content, no custom CSS. Display name + filled labels (Flex), then id and description with `pf-v6-u-font-size-xs`, `pf-v6-u-font-family-monospace`, and `pf-v6-u-text-color-subtle`.
+- Playground: stacked identity in the **menu only**. Toggle is the selected display name.
+
+### Custom CSS stripped from Patterns → Instance lists
+
+Over-correction: instance cards were rebuilt on default PatternFly DescriptionList and no longer matched Ethan’s Services cards. Restored Ethan’s instance-card classes for the page card. Compact AI Grid card keeps the small inline-icon CSS (`models-instance-card__title-row`, `__icon--compact`) only. Page card footer action: **View subscriptions** (MaaS) / **View endpoints** (not MaaS). Compact AI Grid card: that action is in the kebab, not the footer.
+
+### 2026-09-17
+
+- Compact AI Grid Cluster and Gateway cards use the same chrome as Models instance cards: compact service icon inline with the title, status and kebab (View details) in the header, spec rows, Tenant footer for platform admin. Gateway uses the globe-route icon already used on the type toggle.
+- MaaS governance models table (live and Patterns): **Status** column. **Pending** (filled purple, pending icon, no second line) when subscriptions or authorization policies is 0; warning icon on that 0. Otherwise **Ready** (filled success).
+
+### 2026-09-17 (keep-set on live pages)
+
+- Live Services → Models, AI Grid Services (plus nested cluster/gateway lists), MaaS governance, API keys models, AI asset endpoints, and Playground use the 2.8 keep-set for **everyone** (not vision-gated).
+- MaaS governance is **one row per serving instance** (not per catalog item). Granite is two rows (US East and EU West), Mistral is three, Titan is two (one per assigned gateway). Columns: Model, Tenant (platform admin only), Project (all admins), Cluster, Gateway, Status, Subscriptions, Authorization policies. Cluster is the instance cluster; for off-platform models it is the gateway host cluster, or — if unassigned. Filled Internal / External (including expand, Subscriptions tab, and Authorization policies tab). Expand still lists that instance’s model identity subscriptions and policies. Group view stays unique by published model. No 0-subs / 1+ policies mirror case.
+- **Llama 4 Scout** is assigned (`bsfg-us`) with 1 subscription and 0 policies → Pending (warning on policies). Claude stays unassigned 0 / 0, MaaS governance only.
+
+---
+
+## 2026-09-11
+
+### Catalog SKUs (2.5) in the UI
+
+- Five Models catalog items are live on platform Catalog, tenant admin Catalog, tenant user Catalog, and AI Grid Catalog. Same seed; BYOM is not in the UI.
+- Models catalog **cards** follow Ethan’s latest catalog chrome: service + Live, kebab-case display name (`llm-instruct`, like `cluster-node-sets-object`), Locked / Editable properties, rate, visibility footer. Catalog item ids (`cat-…`) stay in data only — not on Models cards and not on this repo’s cluster/BM/VM catalog cards. Ethan’s offers stay as-is; the card pattern matches his latest.
+- Instantiate label is **Launch instance**. Designer-iteration copy is off model details.
+- Vision-gated **Patterns** page (`?vision=model-fleet&nav=vision-model-catalog-patterns`): **Catalog item** tab (page + compact) and **Fleet list** tab (the old list-pattern variations).
+- Instance / MaaS / assets / Playground **live pages** still use old mocks. The 2.8 keep-set is on Patterns → **Instance lists** (`?vision=model-fleet&nav=vision-model-catalog-patterns`) so the same seed can be compared in each list chrome before those pages are switched.
+- **Gateway routing is open.** Story A = regional doors (working mock: Granite US East → `nsb-markets`, Granite EU West → `nsb-retail`). Story B = one gateway routing to both regional instances. Cardinality either way: one instance → zero or one gateway; one gateway → many instances; instance and gateway may be on different clusters. Do not pick A vs B in the UI until stakeholders. Traffic lines stay parked.
+
+---
+
 ## 2026-08-26
 
 ### Issues to address
@@ -53,6 +112,7 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 - **Tenant on every details view as a systematic pattern.** Cluster, gateway, and model details already show Tenant in places. Do not expand that in this pass.
 - **Expandable Clusters / Models / Gateway sections in the drawer.** We used accordion chrome before and replaced it with section headings plus the type-toggle. Revisit an expand/collapse control on those lists later. Not this pass.
 - **One shared model list across pages.** Catalog, AI Grid, Services → Models, MaaS governance, API keys, AI asset endpoints, and Playground each show a different set of models (names, IDs, and object types). Do not unify those mocks in this pass. Capture the gaps in `.artifacts/ai-grid-model-fleet/model-list-inventory.md` and treat a single demo catalog as a later refinement.
+- **Services card icons in the AI Grid drawer.** Catalog and Services list cards use the RH UI service icons (cluster, models, and more). The drawer cards do not. Add those icons to the drawer later so the two lists match. Not this pass.
 
 ### Done this pass (alignment + map)
 
@@ -121,6 +181,28 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 - Gateway details keep Cluster labels on models so same-cluster vs other-cluster is visible. No Gateway list on those cards.
 - Gateway cards show a **Models** count (`1 model` / `N models`). Cluster is omitted on gateway cards inside cluster details.
 
+## 2026-09-10
+
+### Object dictionary (Step 1 — object set revised)
+
+Jenn’s review of §1, captured in `.artifacts/ai-grid-model-fleet/model-list-inventory.md`:
+
+- Catalog page and AI Grid Catalog are the **same list**. OSAC Services and AI Grid Services are the **same list**. Chrome may differ because of width.
+- Model file: catalog *sources* are in Admin → AI (Model catalog settings). Picking a file from the RHOAI catalog is not in this prototype; instantiate uses a simple form input until that work lands.
+- On-cluster instance = RHOAI `LLMInferenceService`. OSAC needs **this cluster / another cluster / off-platform**, not RHOAI’s single **External** chip.
+- External model: not Catalog or Services for now; **MaaS governance only**. That page also lists on-cluster instances that are MaaS models.
+- **MaaS model** = former “MaaS enablement” + API keys / subscriptions (same object). Admin view (MaaS governance): all MaaS models plus subscription and policy assignment. User view (API keys): only MaaS models on a subscription they can access. External models are MaaS-only. An on-cluster instance can be an AI asset **without** MaaS.
+- **AI asset** = AI asset endpoints + Playground (same object).
+
+## 2026-09-08
+
+### Object dictionary (Step 1 — in review)
+
+- Unparked **one shared model list**. Defining objects first in `.artifacts/ai-grid-model-fleet/model-list-inventory.md`. No UI or seed wiring until Jenn reviews that file.
+- **Scope:** models, AI / GenAI studio, external models, Gateway. Not Ethan’s bare metal / cluster / VM SKUs.
+- **Agreed:** Decision 1 starting object set; Decision 3 option A (same live Models SKUs across the three roles); Decision 4 **Launch instance**; Decision 5 strip designer-iteration copy from model catalog details.
+- **Open (Decision 2):** Five Catalog SKUs for UI (BYOM documented only). Next for consume: **review existing lists** (2.8) then one master instance + external set. AI assets = LIS marked as assets **∪ all MaaS models** (including externals).
+
 ## 2026-08-31
 
 ### Done this pass (gateway heading, footer links, tenant fleet)
@@ -133,6 +215,7 @@ Evaluate report: `.artifacts/ai-grid-model-fleet/eval/evaluation-report.html`
 - Landing-page **AI Grid (future vision)** is the last prototype link for Provider Admin, Tenant Admin, and Tenant User.
 - Sidebar order: consume first (**Services**, **GenAI studio**), then setup/management (**Projects**, then AI settings / Networking / Administration). Same order for Provider Admin, Tenant Admin, and Tenant User.
 - **Parked:** model lists are inconsistent across Catalog, AI Grid, Services → Models, MaaS governance, API keys, AI asset endpoints, and Playground. See inventory. Not this pass.
+- Landing credits name **Jenn Giardino** for AI Grid (future vision) and keep Ethan Kim and Kyle Baker as authors of the underlying prototype. Name links go to GitHub (the Slack DM URLs did not open).
 
 ### Future refine
 
