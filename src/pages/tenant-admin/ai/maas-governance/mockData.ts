@@ -25,6 +25,12 @@ export interface AuthPolicyRef {
   groups: string[];
 }
 
+export interface GovernanceDeployment {
+  id: string;
+  clusterLabel: string;
+  gatewayId: string | null;
+}
+
 export interface GovernanceModel {
   id: string;
   identityId: string;
@@ -33,9 +39,11 @@ export interface GovernanceModel {
   description: string;
   project: string;
   cluster: string;
+  clusters: string[];
   tenantId: string;
   tenantLabel: string;
   gateways: string[];
+  deployments: GovernanceDeployment[];
   source?: 'internal' | 'external';
   providerSecret?: { name: string; namespace: string };
   status: CoverageStatus;
@@ -115,6 +123,10 @@ const IDS = {
   llama: 'llama-4-scout',
   titan: 'titan-express',
   claude: 'claude-sonnet-4',
+  codeAssist: 'code-assist-ha',
+  gemini: 'gemini-pro',
+  embeddings: 'embeddings-pool',
+  bsfgResearch: 'bsfg-research-ha',
 } as const;
 
 export const mockSubscriptionsList: SubscriptionListItem[] = [
@@ -198,6 +210,38 @@ export const mockSubscriptionsList: SubscriptionListItem[] = [
     dateCreated: new Date('2026-01-10'),
     lastModified: new Date('2026-01-10'),
   },
+  {
+    id: 'sub-nsb-external-pool',
+    name: 'NSB external model access',
+    resourceName: 'nsb-external-model-access',
+    description: 'North Summit Bank access for Code Assist, Gemini, and the embeddings pool.',
+    phase: 'Active',
+    priority: 8,
+    groups: ['data-science-team', 'ml-engineers'],
+    models: [IDS.codeAssist, IDS.gemini, IDS.embeddings],
+    tokenLimits: {
+      [IDS.codeAssist]: [{ tokens: 800, per: 1, unit: 'minute' }],
+      [IDS.gemini]: [{ tokens: 400, per: 1, unit: 'minute' }],
+      [IDS.embeddings]: [{ tokens: 2000, per: 1, unit: 'minute' }],
+    },
+    dateCreated: new Date('2026-09-02'),
+    lastModified: new Date('2026-09-10'),
+  },
+  {
+    id: 'sub-bsfg-research',
+    name: 'BlueSolace research access',
+    resourceName: 'bluesolace-research-access',
+    description: 'Research summarizer subscription for BlueSolace.',
+    phase: 'Active',
+    priority: 8,
+    groups: ['data-science-team'],
+    models: [IDS.bsfgResearch],
+    tokenLimits: {
+      [IDS.bsfgResearch]: [{ tokens: 600, per: 1, unit: 'minute' }],
+    },
+    dateCreated: new Date('2026-09-11'),
+    lastModified: new Date('2026-09-11'),
+  },
 ];
 
 export const mockAuthPoliciesList: AuthPolicyListItem[] = [
@@ -211,6 +255,28 @@ export const mockAuthPoliciesList: AuthPolicyListItem[] = [
     models: [IDS.granite, IDS.mistral, IDS.titan],
     dateCreated: new Date('2025-10-01'),
     lastModified: new Date('2026-04-20T13:10:00'),
+  },
+  {
+    id: 'pol-nsb-external',
+    name: 'NSB external providers',
+    resourceName: 'nsb-external-providers',
+    description: 'Authorization for Code Assist and Gemini. Embeddings pool is still waiting on a policy.',
+    phase: 'Active',
+    groups: ['data-science-team', 'ml-engineers'],
+    models: [IDS.codeAssist, IDS.gemini],
+    dateCreated: new Date('2026-09-02'),
+    lastModified: new Date('2026-09-08'),
+  },
+  {
+    id: 'pol-bsfg-research',
+    name: 'BlueSolace research policy',
+    resourceName: 'bluesolace-research-policy',
+    description: 'Authorization for the BlueSolace research summarizer.',
+    phase: 'Active',
+    groups: ['data-science-team'],
+    models: [IDS.bsfgResearch],
+    dateCreated: new Date('2026-09-11'),
+    lastModified: new Date('2026-09-11'),
   },
 ];
 
@@ -255,43 +321,66 @@ export const removeGroupFromPolicy = (polId: string, groupName: string): void =>
   }
 };
 
-export const computeGovernanceModels = (): GovernanceModel[] =>
-  maasGovernanceModelRows().map((row) => {
-    const subs: SubscriptionRef[] = mockSubscriptionsList
-      .filter((s) => s.models.includes(row.modelId))
-      .map((s) => ({
-        id: s.id,
-        name: s.name,
-        phase: s.phase,
-        priority: s.priority,
-        groups: s.groups,
-        tokenLimits: s.tokenLimits[row.modelId] || [],
-      }));
-    const pols: AuthPolicyRef[] = mockAuthPoliciesList
-      .filter((p) => p.models.includes(row.modelId))
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        phase: p.phase,
-        groups: p.groups,
-      }));
-    return {
+export const computeGovernanceModels = (): GovernanceModel[] => {
+  const grouped = new Map<string, GovernanceModel>();
+  maasGovernanceModelRows().forEach((row) => {
+    const existing = grouped.get(row.modelId);
+    const clusterLabel = row.clusterLabel;
+    const deployment: GovernanceDeployment = {
       id: row.instanceId,
-      identityId: row.modelId,
-      name: row.displayName,
-      modelId: row.maasModelRefId,
-      description: row.description,
-      project: row.projectName,
-      cluster: row.clusterLabel,
-      tenantId: row.tenantId,
-      tenantLabel: row.tenantLabel,
-      gateways: row.gatewayId ? [row.gatewayId] : [],
-      source: row.locationKind === 'off-platform' ? 'external' : 'internal',
-      status: getStatus(subs.length > 0, pols.length > 0),
-      subscriptions: subs,
-      policies: pols,
+      clusterLabel,
+      gatewayId: row.gatewayId,
     };
+    if (!existing) {
+      const subs: SubscriptionRef[] = mockSubscriptionsList
+        .filter((s) => s.models.includes(row.modelId))
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          phase: s.phase,
+          priority: s.priority,
+          groups: s.groups,
+          tokenLimits: s.tokenLimits[row.modelId] || [],
+        }));
+      const pols: AuthPolicyRef[] = mockAuthPoliciesList
+        .filter((p) => p.models.includes(row.modelId))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          phase: p.phase,
+          groups: p.groups,
+        }));
+      grouped.set(row.modelId, {
+        id: row.modelId,
+        identityId: row.modelId,
+        name: row.displayName,
+        modelId: row.maasModelRefId,
+        description: row.description,
+        project: row.projectName,
+        cluster: clusterLabel,
+        clusters: clusterLabel && clusterLabel !== '—' ? [clusterLabel] : [],
+        tenantId: row.tenantId,
+        tenantLabel: row.tenantLabel,
+        gateways: row.gatewayId ? [row.gatewayId] : [],
+        deployments: [deployment],
+        source: row.locationKind === 'off-platform' ? 'external' : 'internal',
+        status: getStatus(subs.length > 0, pols.length > 0),
+        subscriptions: subs,
+        policies: pols,
+      });
+      return;
+    }
+    existing.deployments.push(deployment);
+    if (clusterLabel && clusterLabel !== '—' && !existing.clusters.includes(clusterLabel)) {
+      existing.clusters.push(clusterLabel);
+    }
+    if (row.gatewayId && !existing.gateways.includes(row.gatewayId)) {
+      existing.gateways.push(row.gatewayId);
+    }
+    existing.cluster = existing.clusters.join(', ');
   });
+  return [...grouped.values()];
+};
 
 const originalGroupNames = ['data-science-team', 'analytics-team', 'ml-engineers'];
 

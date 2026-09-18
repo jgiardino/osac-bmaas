@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 export type MaasModelIdentityLabel = {
   text: string
-  color: 'blue' | 'orange' | 'purple' | 'green' | 'grey'
+  color: 'blue' | 'orange' | 'purple' | 'green' | 'grey' | 'teal'
 }
 
 type MaasModelIdentityProps = {

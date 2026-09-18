@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, Content, Flex, FlexItem, Label } from '@patternfly/react-core'
+import { Button, Card, CardBody, Content, Flex, FlexItem, Label, LabelGroup } from '@patternfly/react-core'
 import { ActionsColumn, type IAction } from '@patternfly/react-table'
 import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
@@ -17,13 +17,19 @@ type ModelsInstanceCardProps = {
   parent?: ModelsInstanceCardParent
   showTenant?: boolean
   idPrefix?: string
+  clusterLabel?: string
+  clusterIds?: string[]
+  gatewayLabel?: string
+  onViewDetails?: () => void
 }
-
-const VIEW_DETAILS_KEBAB: IAction[] = [{ title: 'View details' }]
 
 const instanceSpecRows = (
   item: ModelInstanceSeedItem,
   parent: ModelsInstanceCardParent,
+  clusterLabel: string | undefined,
+  gatewayLabel: string | undefined,
+  showGateway: boolean,
+  showClusterText: boolean,
 ): CatalogSpecRow[] => {
   const rows: CatalogSpecRow[] = [{ label: 'Model', value: item.modelId }]
 
@@ -33,12 +39,21 @@ const instanceSpecRows = (
     rows.push({ label: 'Size', value: item.size ?? '—' })
   }
 
-  if (parent !== 'cluster' && item.clusterId) {
-    rows.push({ label: 'Cluster', value: item.clusterId })
+  if (showClusterText && parent !== 'cluster') {
+    const value = clusterLabel ?? item.clusterId
+    if (value) {
+      rows.push({ label: 'Cluster', value })
+    }
   }
 
-  if (parent !== 'gateway') {
-    if (!item.gatewayId) {
+  if (showGateway && parent !== 'gateway') {
+    if (gatewayLabel) {
+      rows.push({
+        label: 'Gateway',
+        value: gatewayLabel,
+        badge: item.isMaas && gatewayLabel !== 'Unassigned' ? { text: 'MaaS', color: 'blue' } : undefined,
+      })
+    } else if (!item.gatewayId) {
       rows.push({ label: 'Gateway', value: 'Unassigned' })
     } else {
       const hostCluster = gatewayHostClusterId(item.gatewayId) ?? item.clusterId ?? '—'
@@ -59,6 +74,10 @@ export const ModelsInstanceCard = ({
   parent = 'none',
   showTenant = false,
   idPrefix = 'models-instance',
+  clusterLabel,
+  clusterIds,
+  gatewayLabel,
+  onViewDetails,
 }: ModelsInstanceCardProps) => {
   const cardId = `${idPrefix}-${item.id}`
   const isCompact = variant === 'compact'
@@ -72,8 +91,8 @@ export const ModelsInstanceCard = ({
     : 'tenant-user-catalog__spec-value'
   const footerActionLabel = item.isMaas ? 'View subscriptions' : 'View endpoints'
   const kebabItems: IAction[] = isCompact
-    ? [...VIEW_DETAILS_KEBAB, { title: footerActionLabel }]
-    : VIEW_DETAILS_KEBAB
+    ? [{ title: 'View details', onClick: onViewDetails }, { title: footerActionLabel }]
+    : [{ title: 'View details', onClick: onViewDetails }]
 
   const titleBlock = (
     <div className="tenant-user-instances__card-title-block">
@@ -89,10 +108,23 @@ export const ModelsInstanceCard = ({
               isInline
               className="tenant-user-instances__name-link catalog-item-name-link"
               id={`${cardId}-name`}
+              onClick={onViewDetails}
             >
               {item.displayName}
             </Button>
           </FlexItem>
+          {variant === 'page' ? (
+            <FlexItem>
+              <Label
+                color={item.locationKind === 'off-platform' ? 'teal' : 'orange'}
+                variant="filled"
+                isCompact
+                id={`${cardId}-source`}
+              >
+                {item.locationKind === 'off-platform' ? 'External' : 'Internal'}
+              </Label>
+            </FlexItem>
+          ) : null}
           {parent === 'gateway' && item.isMaas ? (
             <FlexItem>
               <Label color="blue" variant="filled" isCompact id={`${cardId}-maas`}>
@@ -112,9 +144,19 @@ export const ModelsInstanceCard = ({
 
   const statusLabel = (
     <Label color="green" isCompact id={`${cardId}-status`}>
-      {item.locationKind === 'off-platform' ? 'Ready' : 'Running'}
+      Ready
     </Label>
   )
+
+  const servedOnIds =
+    clusterIds && clusterIds.length > 0
+      ? clusterIds
+      : clusterLabel
+        ? clusterLabel.split(', ').filter(Boolean)
+        : item.clusterId
+          ? [item.clusterId]
+          : []
+  const showServedOn = !isCompact && parent !== 'cluster' && servedOnIds.length > 0
 
   const footerRows = [
     ...(showTenant ? [{ label: 'Tenant', value: item.tenantLabel }] : []),
@@ -164,12 +206,33 @@ export const ModelsInstanceCard = ({
           </>
         )}
         <CatalogSpecRowsList
-          rows={instanceSpecRows(item, parent)}
+          rows={instanceSpecRows(item, parent, clusterLabel, gatewayLabel, isCompact, isCompact)}
           className={specClass}
           rowClassName={specRowClass}
           labelClassName={specLabelClass}
           valueClassName={specValueClass}
           idPrefix={cardId}
+          afterRows={
+            showServedOn ? (
+              <div className={specRowClass}>
+                <dt className={specLabelClass}>Served on</dt>
+                <dd className={specValueClass} id={`${cardId}-served-on`}>
+                  <LabelGroup id={`${cardId}-served-on-labels`} numLabels={4}>
+                    {servedOnIds.map((clusterId) => (
+                      <Label
+                        key={clusterId}
+                        color="grey"
+                        isCompact
+                        id={`${cardId}-served-on-${clusterId}`}
+                      >
+                        {clusterId}
+                      </Label>
+                    ))}
+                  </LabelGroup>
+                </dd>
+              </div>
+            ) : null
+          }
         />
         <dl className={isCompact ? 'vision-grid-drawer-card__footer' : 'tenant-user-instances__card-footer'}>
           {footerRows.map((row) => (

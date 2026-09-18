@@ -80,6 +80,7 @@ export const VisionGridDrawerCard = ({
       variant="link"
       isInline
       className="tenant-user-instances__name-link catalog-item-name-link"
+      id={`${id}-name`}
       onClick={(event) => {
         event.stopPropagation()
         onViewDetails()
@@ -94,14 +95,32 @@ export const VisionGridDrawerCard = ({
     ...(onViewDetails ? [{ title: 'View details', onClick: () => onViewDetails() }] : []),
     ...kebabItems.map((item) => ({ title: item.label, onClick: item.onClick })),
   ]
+  const titleBlock = (
+    <div className="tenant-user-instances__card-title-block">
+      <Content component="p" className="tenant-user-instances__primary-cell">
+        <Flex
+          spaceItems={{ default: 'spaceItemsSm' }}
+          alignItems={{ default: 'alignItemsCenter' }}
+          flexWrap={{ default: 'wrap' }}
+        >
+          <FlexItem>{titleLink}</FlexItem>
+        </Flex>
+      </Content>
+      {secondary ? (
+        <Content component="p" className="tenant-user-instances__secondary-cell">
+          {secondary}
+        </Content>
+      ) : null}
+    </div>
+  )
   const body = (
     <>
-      {secondaryLabel ? (
+      {icon ? null : secondaryLabel ? (
         <Content component="small" className="vision-grid-drawer-card__field-label">
           {secondaryLabel}
         </Content>
       ) : null}
-      {secondary ? (
+      {icon ? null : secondary ? (
         <Content
           component="p"
           className={
@@ -130,6 +149,7 @@ export const VisionGridDrawerCard = ({
           rowClassName="vision-grid-drawer-card__spec-row"
           labelClassName="vision-grid-drawer-card__spec-label"
           valueClassName="vision-grid-drawer-card__spec-value"
+          idPrefix={id}
         />
       ) : null}
       {meta && !hasCatalogSpecs && !hasNodeSpecs && !extra ? (
@@ -151,12 +171,16 @@ export const VisionGridDrawerCard = ({
   return (
     <Card
       id={id}
-      className={
-        icon ? 'vision-grid-drawer-card tenant-user-instances__card' : 'vision-grid-drawer-card'
-      }
+      className={[
+        'vision-grid-drawer-card',
+        icon ? 'tenant-user-instances__card' : '',
+        icon && isSelected ? 'pf-m-selected' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       isCompact
-      isSelectable
-      isSelected={isSelected}
+      isSelectable={!icon}
+      isSelected={!icon && isSelected}
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('button, a')) {
@@ -175,11 +199,7 @@ export const VisionGridDrawerCard = ({
               >
                 {icon}
               </span>
-              <div className="tenant-user-instances__card-title-block">
-                <Content component="p" className="tenant-user-instances__primary-cell">
-                  {titleLink}
-                </Content>
-              </div>
+              {titleBlock}
             </div>
             <div className="tenant-user-instances__card-header-actions">
               {badge}

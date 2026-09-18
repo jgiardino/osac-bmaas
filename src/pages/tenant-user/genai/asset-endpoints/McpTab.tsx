@@ -201,8 +201,9 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
               aria-label="Select"
             />
             <Th>Name</Th>
-            <Th>Status</Th>
             <Th>Endpoint</Th>
+            <Th modifier="fitContent">Status</Th>
+            <Th modifier="fitContent" screenReaderText="Actions" />
           </Tr>
         </Thead>
         <Tbody>
@@ -223,7 +224,6 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
                 </div>
                 <div className="pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">{server.description}</div>
               </Td>
-              <Td dataLabel="Status">{statusLabel(server.status)}</Td>
               <Td dataLabel="Endpoint">
                 <Popover
                   headerContent="Endpoint"
@@ -238,6 +238,10 @@ export function McpTab({ onTryInPlayground }: McpTabProps) {
                   </Button>
                 </Popover>
               </Td>
+              <Td dataLabel="Status" modifier="fitContent">
+                {statusLabel(server.status)}
+              </Td>
+              <Td isActionCell modifier="fitContent" />
             </Tr>
           ))}
         </Tbody>

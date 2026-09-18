@@ -13,6 +13,7 @@ import {
   type VisionDeployment,
   type VisionGatewayId,
 } from './fleetWorld'
+import { MODEL_INSTANCE_SEED } from './modelInstanceSeed'
 import { provisionedClustersForCatalogItem } from './visionCatalogRows'
 
 export type VisionDrawerTab = 'catalog' | 'services'
@@ -32,6 +33,7 @@ export type VisionDrawerSelection =
   | { kind: 'catalog-item'; catalogItemId: string }
   | { kind: 'gateway'; gatewayId: VisionGatewayId }
   | { kind: 'off-platform-model'; modelId: string }
+  | { kind: 'model-group'; modelId: string }
 
 export const toggleVisionObjectType = (
   current: readonly VisionGridObjectType[],
@@ -73,6 +75,9 @@ export const visionSelectionsEqual = (
     return left.gatewayId === right.gatewayId
   }
   if (left.kind === 'off-platform-model' && right.kind === 'off-platform-model') {
+    return left.modelId === right.modelId
+  }
+  if (left.kind === 'model-group' && right.kind === 'model-group') {
     return left.modelId === right.modelId
   }
   return false
@@ -129,6 +134,11 @@ export const getVisionDrawerSelectionLabel = (
       return VISION_GATEWAYS.find((gateway) => gateway.id === selection.gatewayId)?.label ?? selection.gatewayId
     case 'off-platform-model':
       return getVisionOffPlatformModel(selection.modelId)?.displayName ?? selection.modelId
+    case 'model-group':
+      return (
+        MODEL_INSTANCE_SEED.find((item) => item.modelId === selection.modelId)?.displayName ??
+        selection.modelId
+      )
   }
 }
 
@@ -175,5 +185,13 @@ export const relatedClusterIdsForSelection = (
       const model = getVisionOffPlatformModel(selection.modelId)
       return model ? clustersForOffPlatformModel(model, clusters) : []
     }
+    case 'model-group':
+      return [
+        ...new Set(
+          MODEL_INSTANCE_SEED.filter((item) => item.modelId === selection.modelId)
+            .map((item) => item.clusterId)
+            .filter((clusterId): clusterId is string => Boolean(clusterId)),
+        ),
+      ]
   }
 }

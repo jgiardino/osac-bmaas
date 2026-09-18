@@ -2,7 +2,12 @@ import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { CatalogSpecRow } from '../../../catalog/catalogSpecs'
 import { getGatewayIcon } from '../../../catalog/serviceIcons'
-import { getVisionOrg, type VisionCluster, type VisionGateway } from '../../../vision/fleetWorld'
+import {
+  getVisionOrg,
+  visionProjectForOrg,
+  type VisionCluster,
+  type VisionGateway,
+} from '../../../vision/fleetWorld'
 import type { VisionFleetSpecNode } from './visionFleetModelSpec'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
 import { VisionGridStatusLabel } from './VisionGridStatusLabel'
@@ -56,7 +61,10 @@ export const VisionGridGatewayCard = ({
             }))
       }
       specNodes={specNodes}
-      footerRows={showTenant ? [{ label: 'Tenant', value: org.label }] : []}
+      footerRows={[
+        ...(showTenant ? [{ label: 'Tenant', value: org.label }] : []),
+        { label: 'Project', value: visionProjectForOrg(gateway.orgId) },
+      ]}
       isSelected={isSelected}
       onSelect={onSelect}
       onViewDetails={onViewDetails}

@@ -56,6 +56,7 @@ type VisionGridPanelProps = {
   onViewDeployment: (deploymentId: string) => void
   onViewGateway: (gatewayId: VisionGateway['id']) => void
   onViewOffPlatform: (modelId: string) => void
+  onViewModelGroup: (modelId: string) => void
   onPlacePreset: (presetId: string) => void
   onAddOffering: (offeringId: string) => void
   onOpenCatalogItem: (catalogItemId: string) => void
@@ -91,6 +92,7 @@ export const VisionGridPanel = ({
   onViewDeployment,
   onViewGateway,
   onViewOffPlatform,
+  onViewModelGroup,
   onPlacePreset,
   onAddOffering,
   onOpenCatalogItem,
@@ -160,6 +162,7 @@ export const VisionGridPanel = ({
       onViewDeployment={onViewDeployment}
       onViewGateway={onViewGateway}
       onViewOffPlatform={onViewOffPlatform}
+      onViewModelGroup={onViewModelGroup}
     />
   )
 

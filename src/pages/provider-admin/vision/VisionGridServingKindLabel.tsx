@@ -18,7 +18,7 @@ export const VisionGridServingKindLabel = ({
   }
 
   return (
-    <Label id={id} color="purple" variant={variant} isCompact>
+    <Label id={id} color="teal" variant={variant} isCompact>
       External
     </Label>
   )

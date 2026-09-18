@@ -278,6 +278,100 @@ export const MODEL_INSTANCE_SEED: readonly ModelInstanceSeedItem[] = [
     subscriptionCount: 0,
     policyCount: 0,
   },
+  {
+    id: 'ext-code-assist-ha',
+    displayName: 'Code Assist (HA)',
+    modelId: 'code-assist-ha',
+    maasModelRefId: 'code-assist-ha',
+    description:
+      'High-availability code completion endpoint — 4-provider weighted split across OpenAI, Anthropic, Azure, and Bedrock for low-latency failover.',
+    locationKind: 'off-platform',
+    catalogSkuId: null,
+    catalogSkuName: null,
+    ...nsb,
+    clusterId: null,
+    regionLabel: 'Off-platform',
+    size: null,
+    servedBy: 'OpenAI',
+    gatewayId: null,
+    isMaas: true,
+    isAiAsset: false,
+    onUserSubscription: false,
+    createdAtLabel: '2 Sep 2026',
+    useCase: 'Code completion',
+    subscriptionCount: 1,
+    policyCount: 1,
+  },
+  {
+    id: 'ext-gemini-pro',
+    displayName: 'Gemini 2.5 Pro',
+    modelId: 'gemini-pro',
+    maasModelRefId: 'gemini-pro',
+    description: 'Google Gemini 2.5 Pro via Vertex AI.',
+    locationKind: 'off-platform',
+    catalogSkuId: null,
+    catalogSkuName: null,
+    ...nsb,
+    clusterId: null,
+    regionLabel: 'Off-platform',
+    size: null,
+    servedBy: 'Google Vertex AI',
+    gatewayId: null,
+    isMaas: true,
+    isAiAsset: false,
+    onUserSubscription: false,
+    createdAtLabel: '8 Sep 2026',
+    useCase: 'General chat',
+    subscriptionCount: 1,
+    policyCount: 1,
+  },
+  {
+    id: 'ext-embeddings-pool',
+    displayName: 'Embeddings Pool',
+    modelId: 'embeddings-pool',
+    maasModelRefId: 'embeddings-pool',
+    description:
+      'Multi-provider embedding endpoint — distributes embedding workloads across OpenAI, Bedrock (east), and Vertex AI.',
+    locationKind: 'off-platform',
+    catalogSkuId: null,
+    catalogSkuName: null,
+    ...nsb,
+    clusterId: null,
+    regionLabel: 'Off-platform',
+    size: null,
+    servedBy: 'OpenAI',
+    gatewayId: null,
+    isMaas: true,
+    isAiAsset: false,
+    onUserSubscription: false,
+    createdAtLabel: '10 Sep 2026',
+    useCase: 'Embeddings',
+    subscriptionCount: 1,
+    policyCount: 0,
+  },
+  {
+    id: 'ext-bsfg-research-ha',
+    displayName: 'Research summarizer (HA)',
+    modelId: 'bsfg-research-ha',
+    maasModelRefId: 'bsfg-research-ha',
+    description: 'BlueSolace research summarization with an OpenAI and Vertex split.',
+    locationKind: 'off-platform',
+    catalogSkuId: null,
+    catalogSkuName: null,
+    ...bluesolace,
+    clusterId: null,
+    regionLabel: 'Off-platform',
+    size: null,
+    servedBy: 'OpenAI',
+    gatewayId: null,
+    isMaas: true,
+    isAiAsset: false,
+    onUserSubscription: false,
+    createdAtLabel: '11 Sep 2026',
+    useCase: 'Summarization',
+    subscriptionCount: 1,
+    policyCount: 1,
+  },
 ]
 
 export const firstByModelId = (
@@ -323,7 +417,15 @@ export const gatewayAssignmentLabel = (gatewayId: string | null): string => {
   return `${host}: ${gatewayId}`
 }
 
-/** One MaaS governance row per serving instance (not per catalog item). */
+/** Equal split across n deployments, matching external-provider weight copy. */
+export const formatEqualSplitWeight = (count: number, index: number): string => {
+  if (count <= 0 || index < 0 || index >= count) {
+    return '—'
+  }
+  return `1 (${Math.round(100 / count)}%)`
+}
+
+/** One row per serving instance. MaaS governance groups these by model. */
 export const maasGovernanceModelRows = (): MaasGovernanceModelRow[] =>
   maasGovernanceInstances().map((item) => ({
     instanceId: item.id,
@@ -351,6 +453,58 @@ export const servicesModelsForOrg = (
     return [...rows]
   }
   return rows.filter((item) => item.tenantId === orgId)
+}
+
+export type ModelInstanceGroup = {
+  modelId: string
+  representative: ModelInstanceSeedItem
+  instances: ModelInstanceSeedItem[]
+  clusterLabel: string
+  gatewayLabel: string
+  clusterIds: string[]
+}
+
+const clusterIdsForInstance = (item: ModelInstanceSeedItem): string[] => {
+  if (item.clusterId) {
+    return [item.clusterId]
+  }
+  if (item.gatewayId) {
+    const host = gatewayHostClusterId(item.gatewayId)
+    return host ? [host] : []
+  }
+  return []
+}
+
+/** Collapse serving instances of the same model into one list entry. */
+export const groupModelInstancesByModelId = (
+  items: ModelInstanceSeedItem[],
+): ModelInstanceGroup[] => {
+  const order: string[] = []
+  const map = new Map<string, ModelInstanceSeedItem[]>()
+  items.forEach((item) => {
+    const existing = map.get(item.modelId)
+    if (!existing) {
+      order.push(item.modelId)
+      map.set(item.modelId, [item])
+      return
+    }
+    existing.push(item)
+  })
+  return order.map((modelId) => {
+    const instances = map.get(modelId) ?? []
+    const clusterIds = [...new Set(instances.flatMap(clusterIdsForInstance))]
+    const gatewayLabels = [
+      ...new Set(instances.map((item) => gatewayAssignmentLabel(item.gatewayId))),
+    ]
+    return {
+      modelId,
+      representative: instances[0],
+      instances,
+      clusterLabel: clusterIds.length > 0 ? clusterIds.join(', ') : '—',
+      gatewayLabel: gatewayLabels.join(', '),
+      clusterIds,
+    }
+  })
 }
 
 /** MaaS only reaches subscriptions / consumer lists when it is on a gateway. */

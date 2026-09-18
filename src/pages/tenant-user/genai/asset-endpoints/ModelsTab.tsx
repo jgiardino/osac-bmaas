@@ -28,7 +28,6 @@ import {
 import EllipsisVIcon from '@patternfly/react-icons/dist/esm/icons/ellipsis-v-icon'
 import FilterIcon from '@patternfly/react-icons/dist/esm/icons/filter-icon'
 import InfoCircleIcon from '@patternfly/react-icons/dist/esm/icons/info-circle-icon'
-import OutlinedQuestionCircleIcon from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon'
 import PlusCircleIcon from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import TimesIcon from '@patternfly/react-icons/dist/esm/icons/times-icon'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
@@ -52,19 +51,19 @@ const statusLabel = (status: string) => {
   switch (status) {
     case 'Running':
       return (
-        <Label status="success" variant="outline">
+        <Label color="green" isCompact>
           Ready
         </Label>
       )
     case 'Stop':
       return (
-        <Label status="danger" variant="outline">
+        <Label color="red" isCompact>
           Inactive
         </Label>
       )
     default:
       return (
-        <Label variant="outline" color="grey" icon={<OutlinedQuestionCircleIcon />}>
+        <Label color="grey" isCompact>
           Unknown
         </Label>
       )
@@ -357,10 +356,10 @@ export function ModelsTab() {
             </Th>
             <Th>Use case</Th>
             <Th>Capabilities</Th>
-            <Th>Status</Th>
             <Th>Endpoints</Th>
             <Th>Playground</Th>
-            {hasCustomEndpoints ? <Th screenReaderText="Actions" /> : null}
+            <Th modifier="fitContent">Status</Th>
+            <Th modifier="fitContent" screenReaderText="Actions" />
           </Tr>
         </Thead>
         <Tbody>
@@ -511,7 +510,6 @@ function ModelRow({
             '—'
           )}
         </Td>
-        <Td dataLabel="Status">{statusLabel(model.status)}</Td>
         <Td dataLabel="Endpoints">
           {endpoint ? (
             <Popover
@@ -533,39 +531,40 @@ function ModelRow({
         <Td dataLabel="Playground">
           <PlaygroundCell model={model} />
         </Td>
-        {showActions ? (
-          <Td isActionCell>
-            {model.model_source_type === 'custom_endpoint' ? (
-              <Dropdown
-                isOpen={isKebabOpen}
-                onOpenChange={setIsKebabOpen}
-                toggle={(toggleRef) => (
-                  <MenuToggle
-                    ref={toggleRef}
-                    variant="plain"
-                    aria-label={`Actions for ${model.display_name || model.model_id}`}
-                    onClick={() => setIsKebabOpen(!isKebabOpen)}
-                    id={`aae-prod-actions-${model.model_id}`}
-                  >
-                    <EllipsisVIcon />
-                  </MenuToggle>
-                )}
-              >
-                <DropdownList>
-                  <DropdownItem
-                    isDanger
-                    onClick={() => {
-                      setIsKebabOpen(false)
-                      setIsDeleteOpen(true)
-                    }}
-                  >
-                    Delete endpoint
-                  </DropdownItem>
-                </DropdownList>
-              </Dropdown>
-            ) : null}
-          </Td>
-        ) : null}
+        <Td dataLabel="Status" modifier="fitContent">
+          {statusLabel(model.status)}
+        </Td>
+        <Td isActionCell modifier="fitContent">
+          {showActions && model.model_source_type === 'custom_endpoint' ? (
+            <Dropdown
+              isOpen={isKebabOpen}
+              onOpenChange={setIsKebabOpen}
+              toggle={(toggleRef) => (
+                <MenuToggle
+                  ref={toggleRef}
+                  variant="plain"
+                  aria-label={`Actions for ${model.display_name || model.model_id}`}
+                  onClick={() => setIsKebabOpen(!isKebabOpen)}
+                  id={`aae-prod-actions-${model.model_id}`}
+                >
+                  <EllipsisVIcon />
+                </MenuToggle>
+              )}
+            >
+              <DropdownList>
+                <DropdownItem
+                  isDanger
+                  onClick={() => {
+                    setIsKebabOpen(false)
+                    setIsDeleteOpen(true)
+                  }}
+                >
+                  Delete endpoint
+                </DropdownItem>
+              </DropdownList>
+            </Dropdown>
+          ) : null}
+        </Td>
       </Tr>
 
       <Modal

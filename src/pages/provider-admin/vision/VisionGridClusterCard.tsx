@@ -1,12 +1,17 @@
 import { useLocation } from 'react-router-dom'
 import type { CatalogSpecRow } from '../../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../../catalog/serviceIcons'
-import { getVisionOrg, getVisionSite, type VisionCluster } from '../../../vision/fleetWorld'
+import {
+  getVisionOrg,
+  getVisionSite,
+  visionProjectForOrg,
+  type VisionCluster,
+} from '../../../vision/fleetWorld'
 import { VisionGridDrawerCard } from './VisionGridDrawerCard'
 import { VisionGridStatusLabel } from './VisionGridStatusLabel'
 
 const visionClusterSpecRows = (cluster: VisionCluster): CatalogSpecRow[] => [
-  { label: 'Cluster version', value: cluster.openshiftVersion },
+  { label: 'OpenShift version', value: cluster.openshiftVersion },
   { label: 'Platform', value: `${cluster.platform} · ${cluster.region}` },
   { label: 'Host type', value: cluster.gpuCount > 0 ? 'GPU' : 'CPU' },
 ]
@@ -40,7 +45,10 @@ export const VisionGridClusterCard = ({
       secondary={site.regionLabel}
       secondaryIsMono={false}
       specRows={visionClusterSpecRows(cluster)}
-      footerRows={showTenant ? [{ label: 'Tenant', value: org.label }] : []}
+      footerRows={[
+        ...(showTenant ? [{ label: 'Tenant', value: org.label }] : []),
+        { label: 'Project', value: visionProjectForOrg(cluster.orgId) },
+      ]}
       isSelected={isSelected}
       onSelect={onSelect}
       onViewDetails={onViewDetails}

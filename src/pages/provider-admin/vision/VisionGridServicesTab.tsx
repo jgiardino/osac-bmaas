@@ -11,13 +11,14 @@ import {
   type VisionOffPlatformModel,
   type VisionOrgId,
 } from '../../../vision/fleetWorld'
-import { servicesModelsForOrg } from '../../../vision/modelInstanceSeed'
+import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../../vision/modelInstanceSeed'
 import type { VisionDrawerSelection, VisionGridObjectType } from '../../../vision/visionDrawer'
 import { VisionClusterInspector } from './VisionClusterInspector'
 import { VisionGatewayInspector } from './VisionGatewayInspector'
 import { VisionGridClusterCard } from './VisionGridClusterCard'
 import { VisionGridCountHeading } from './VisionGridCountHeading'
 import { VisionGridGatewayCard } from './VisionGridGatewayCard'
+import { VisionModelGroupInspector } from './VisionModelGroupInspector'
 import { VisionOffPlatformModelInspector } from './VisionOffPlatformModelInspector'
 import { VisionServiceModelInspector } from './VisionServiceModelInspector'
 
@@ -43,6 +44,7 @@ type VisionGridServicesTabProps = {
   onViewDeployment: (deploymentId: string) => void
   onViewGateway: (gatewayId: VisionGateway['id']) => void
   onViewOffPlatform: (modelId: string) => void
+  onViewModelGroup: (modelId: string) => void
 }
 
 export const VisionGridServicesTab = ({
@@ -67,6 +69,7 @@ export const VisionGridServicesTab = ({
   onViewDeployment,
   onViewGateway,
   onViewOffPlatform,
+  onViewModelGroup,
 }: VisionGridServicesTabProps) => {
   const { pathname } = useLocation()
   const showTenant = pathname.startsWith('/provider')
@@ -170,6 +173,20 @@ export const VisionGridServicesTab = ({
         )
       }
     }
+    if (selection.kind === 'model-group') {
+      const orgIds = new Set(clusters.map((cluster) => cluster.orgId))
+      const seedOrgId: VisionOrgId | 'all' = orgIds.size === 1 ? [...orgIds][0] : 'all'
+      const instances = servicesModelsForOrg(seedOrgId).filter(
+        (item) => item.modelId === selection.modelId,
+      )
+      return (
+        <VisionModelGroupInspector
+          displayName={instances[0]?.displayName ?? selection.modelId}
+          instances={instances}
+          showTenant={showTenant}
+        />
+      )
+    }
     return (
       <Content component="p">This service is not available in the current filter.</Content>
     )
@@ -199,7 +216,8 @@ export const VisionGridServicesTab = ({
       matches(item.projectName) ||
       matches(item.clusterId ?? ''),
   )
-  const modelCount = visibleSeedModels.length
+  const modelGroups = groupModelInstancesByModelId(visibleSeedModels)
+  const modelCount = modelGroups.length
 
   if (!showClusters && !showModels && !showGateways) {
     return <Content component="p">Select a type to show services.</Content>
@@ -291,13 +309,16 @@ export const VisionGridServicesTab = ({
                 <Content component="p">No model instances running in the current filter.</Content>
               </StackItem>
             ) : (
-              visibleSeedModels.map((item) => (
-                <StackItem key={item.id}>
+              modelGroups.map((group) => (
+                <StackItem key={group.modelId}>
                   <ModelsInstanceCard
-                    item={item}
+                    item={group.representative}
                     variant="compact"
                     showTenant={showTenant}
+                    clusterLabel={group.clusterLabel}
+                    gatewayLabel={group.gatewayLabel}
                     idPrefix="vision-service-model"
+                    onViewDetails={() => onViewModelGroup(group.modelId)}
                   />
                 </StackItem>
               ))

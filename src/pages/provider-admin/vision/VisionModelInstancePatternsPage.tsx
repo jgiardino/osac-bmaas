@@ -15,9 +15,7 @@ import {
   StackItem,
   Title,
 } from '@patternfly/react-core'
-import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle-icon'
 import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon'
-import PendingIcon from '@patternfly/react-icons/dist/esm/icons/pending-icon'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import { MaasModelIdentity } from '../../../components/catalog/MaasModelIdentity'
 import { ModelsInstanceCard } from '../../../components/catalog/ModelsInstanceCard'
@@ -83,11 +81,11 @@ const CoverageStatusLabel = ({
   id: string
 }) =>
   coverageIsPending(subscriptionCount, policyCount) ? (
-    <Label color="purple" variant="filled" isCompact icon={<PendingIcon />} id={id}>
+    <Label color="purple" isCompact id={id}>
       Pending
     </Label>
   ) : (
-    <Label status="success" variant="filled" isCompact icon={<CheckCircleIcon />} id={id}>
+    <Label color="green" isCompact id={id}>
       Ready
     </Label>
   )
@@ -100,7 +98,7 @@ const identityLabels = (
     return [
       {
         text: item.locationKind === 'off-platform' ? 'External' : 'Internal',
-        color: (item.locationKind === 'off-platform' ? 'purple' : 'orange') as 'purple' | 'orange',
+        color: (item.locationKind === 'off-platform' ? 'teal' : 'orange') as 'teal' | 'orange',
       },
     ]
   }
@@ -173,7 +171,7 @@ const PatternMaasTable = () => (
               labels={[
                 {
                   text: row.locationKind === 'off-platform' ? 'External' : 'Internal',
-                  color: row.locationKind === 'off-platform' ? 'purple' : 'orange',
+                  color: row.locationKind === 'off-platform' ? 'teal' : 'orange',
                 },
               ]}
             />

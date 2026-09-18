@@ -337,6 +337,9 @@ export const VisionModelFleetPage = ({
                   onViewOffPlatform={(modelId) =>
                     openDetails({ kind: 'off-platform-model', modelId }, 'services')
                   }
+                  onViewModelGroup={(modelId) =>
+                    openDetails({ kind: 'model-group', modelId }, 'services')
+                  }
                   onPlacePreset={setPlacePresetId}
                   onAddOffering={setAddOfferingId}
                   onOpenCatalogItem={onOpenCatalogPreset}

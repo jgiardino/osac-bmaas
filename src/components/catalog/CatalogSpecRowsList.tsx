@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { CatalogClusterVersionValue } from './CatalogClusterVersionValue'
 import { CatalogDiskImageValue } from './CatalogDiskImageValue'
@@ -12,6 +13,7 @@ type CatalogSpecRowsListProps = {
   labelClassName?: string
   valueClassName?: string
   idPrefix?: string
+  afterRows?: ReactNode
 }
 
 export function CatalogSpecRowsList({
@@ -21,6 +23,7 @@ export function CatalogSpecRowsList({
   labelClassName = 'provider-admin-catalog-items__spec-label',
   valueClassName = 'provider-admin-catalog-items__spec-value',
   idPrefix = 'catalog-spec',
+  afterRows,
 }: CatalogSpecRowsListProps) {
   return (
     <dl className={className}>
@@ -42,6 +45,7 @@ export function CatalogSpecRowsList({
           </dd>
         </div>
       ))}
+      {afterRows}
     </dl>
   )
 }

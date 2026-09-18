@@ -13,6 +13,8 @@ type TenantUserPageChromeProps = {
   className?: string
   /** Optional section label above the title (e.g. Networking / AI). */
   kicker?: string
+  /** Optional control on the kicker row, after the AI (or other) label. */
+  kickerExtra?: ReactNode
   /** Optional actions aligned with the title row (catalog pattern). */
   actions?: ReactNode
 }
@@ -28,6 +30,7 @@ export function TenantUserPageChrome({
   children,
   className,
   kicker,
+  kickerExtra,
   actions,
 }: TenantUserPageChromeProps) {
   return (
@@ -43,10 +46,23 @@ export function TenantUserPageChrome({
         gap={{ default: 'gapMd' }}
       >
         <FlexItem>
-          {kicker ? (
-            <Label color="grey" className="tenant-genai-page__kicker">
-              {kicker}
-            </Label>
+          {kicker || kickerExtra ? (
+            <Flex
+              className="pf-v6-u-mb-sm"
+              display={{ default: 'inlineFlex' }}
+              alignItems={{ default: 'alignItemsCenter' }}
+              spaceItems={{ default: 'spaceItemsSm' }}
+              flexWrap={{ default: 'wrap' }}
+            >
+              {kicker ? (
+                <FlexItem>
+                  <Label color="grey" className="tenant-genai-page__kicker">
+                    {kicker}
+                  </Label>
+                </FlexItem>
+              ) : null}
+              {kickerExtra ? <FlexItem>{kickerExtra}</FlexItem> : null}
+            </Flex>
           ) : null}
           <Title headingLevel="h1" size="3xl" className="tenant-genai-page__title">
             {title}

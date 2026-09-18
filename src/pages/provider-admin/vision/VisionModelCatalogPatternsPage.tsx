@@ -5,10 +5,11 @@ import { ProviderAdminWorkspacePageHeader } from '../../../components/provider-a
 import { ModelsCatalogItemCard } from '../../../components/catalog/ModelsCatalogItemCard'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../../tenantUser/launchInstanceWizard'
 import { createModelCatalogDrafts } from '../../../vision/modelCatalogSeed'
+import { VisionGridObjectCardPatterns } from './VisionGridObjectCardPatterns'
 import { VisionModelInstancePatternsPage } from './VisionModelInstancePatternsPage'
 import { VisionModelListPatternsPage } from './VisionModelListPatternsPage'
 
-type PatternsTab = 'catalog' | 'instance-lists' | 'fleet-list'
+type PatternsTab = 'catalog' | 'ai-grid-cards' | 'instance-lists' | 'fleet-list'
 
 const PATTERN_ITEMS = createModelCatalogDrafts()
 
@@ -22,14 +23,14 @@ const launchKebab = (): IAction[] => [
 ]
 
 export const VisionModelCatalogPatternsPage = () => {
-  const [activeTab, setActiveTab] = useState<PatternsTab>('instance-lists')
+  const [activeTab, setActiveTab] = useState<PatternsTab>('ai-grid-cards')
 
   return (
     <div className="provider-admin-workspace-page">
       <ProviderAdminWorkspacePageHeader
         kicker="Vision"
         title="Patterns"
-        lede="Catalog item cards follow Ethan’s catalog chrome. Instance lists are the 2.8 keep-set in each page’s list chrome. Fleet list variations are older AI Grid card treatments."
+        lede="AI Grid cards compares Cluster, Gateway, and Model compact layout. Catalog item cards follow Ethan’s catalog chrome. Instance lists are the 2.8 keep-set in each page’s list chrome. Fleet list variations are older AI Grid card treatments."
       />
       <Tabs
         activeKey={activeTab}
@@ -82,6 +83,13 @@ export const VisionModelCatalogPatternsPage = () => {
               </Stack>
             </StackItem>
           </Stack>
+        </Tab>
+        <Tab
+          eventKey="ai-grid-cards"
+          title={<TabTitleText>AI Grid cards</TabTitleText>}
+          id="vision-patterns-tab-ai-grid-cards"
+        >
+          <VisionGridObjectCardPatterns />
         </Tab>
         <Tab
           eventKey="instance-lists"

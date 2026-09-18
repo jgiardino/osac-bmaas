@@ -1,42 +1,25 @@
 import React from 'react';
 import { Label, Popover } from '@patternfly/react-core';
-import CheckCircleIcon from '@patternfly/react-icons/dist/esm/icons/check-circle-icon';
-import ExclamationCircleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-circle-icon';
-import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon';
-import InProgressIcon from '@patternfly/react-icons/dist/esm/icons/in-progress-icon';
-import OutlinedQuestionCircleIcon from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
-import PendingIcon from '@patternfly/react-icons/dist/esm/icons/pending-icon';
 
 import type { PhaseStatus } from './mockData';
 
-interface PhaseLabelConfig {
-  status?: 'success' | 'danger' | 'warning';
-  color?: 'purple' | 'grey';
-  icon?: React.ReactNode;
-}
+type PhaseLabelColor = 'green' | 'red' | 'purple' | 'orange' | 'grey';
 
-const phaseConfig = (phase: PhaseStatus): PhaseLabelConfig => {
+const phaseColor = (phase: PhaseStatus): PhaseLabelColor => {
   switch (phase) {
     case 'Active':
-      return { status: 'success', icon: <CheckCircleIcon /> };
+      return 'green';
     case 'Failed':
-      return { status: 'danger', icon: <ExclamationCircleIcon /> };
+      return 'red';
     case 'Pending':
-      return { color: 'purple', icon: <PendingIcon /> };
-    case 'Deleting':
-      return { color: 'grey', icon: <InProgressIcon /> };
+      return 'purple';
     case 'Degraded':
-      return { status: 'warning', icon: <ExclamationTriangleIcon /> };
     case 'Unhealthy':
-      return { status: 'warning', icon: <ExclamationTriangleIcon /> };
-    case 'Unknown':
-      return { color: 'grey', icon: <OutlinedQuestionCircleIcon /> };
+      return 'orange';
     default:
-      return { color: 'grey', icon: <OutlinedQuestionCircleIcon /> };
+      return 'grey';
   }
 };
-
-export { phaseConfig };
 
 interface PhasePopoverLabelProps {
   phase: PhaseStatus;
@@ -44,41 +27,19 @@ interface PhasePopoverLabelProps {
   id?: string;
 }
 
-export const PhasePopoverLabel: React.FC<PhasePopoverLabelProps> = ({ phase, message, id }) => {
-  const config = phaseConfig(phase);
-
-  return (
-    <Popover headerContent={phase} bodyContent={message} id={id ? `${id}-popover` : undefined}>
-      <Label
-        id={id}
-        variant="filled"
-        isCompact
-        status={config.status}
-        color={config.color}
-        icon={config.icon}
-        style={{ cursor: 'pointer' }}
-      >
-        {phase}
-      </Label>
-    </Popover>
-  );
-};
-
-export const PhaseStaticLabel: React.FC<{ phase: PhaseStatus; id?: string }> = ({ phase, id }) => {
-  const config = phaseConfig(phase);
-  return (
-    <Label
-      id={id}
-      variant="outline"
-      isCompact
-      status={config.status}
-      color={config.color}
-      icon={config.icon}
-    >
+export const PhasePopoverLabel: React.FC<PhasePopoverLabelProps> = ({ phase, message, id }) => (
+  <Popover headerContent={phase} bodyContent={message} id={id ? `${id}-popover` : undefined}>
+    <Label id={id} isCompact color={phaseColor(phase)} style={{ cursor: 'pointer' }}>
       {phase}
     </Label>
-  );
-};
+  </Popover>
+);
+
+export const PhaseStaticLabel: React.FC<{ phase: PhaseStatus; id?: string }> = ({ phase, id }) => (
+  <Label id={id} isCompact color={phaseColor(phase)}>
+    {phase}
+  </Label>
+);
 
 interface GroupsPopoverLabelProps {
   groups: string[];

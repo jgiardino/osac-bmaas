@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   AlertActionCloseButton,
@@ -36,7 +36,9 @@ import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterE
 import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
+import { ExternalModelCard } from '../../components/catalog/ExternalModelCard'
 import { ModelsInstanceCard } from '../../components/catalog/ModelsInstanceCard'
+import { ServicesModelsTable } from '../../components/catalog/ServicesModelsTable'
 import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import {
@@ -88,8 +90,9 @@ import {
   type ProjectScopeId,
 } from '../../tenantUser/projectScope'
 import { ProjectScopeSwitcher } from '../../components/shared/ProjectScopeSwitcher'
+import { externalModelsForOrg } from '../../vision/externalModelSeed'
 import { visionOrgIdForTenantSlug } from '../../vision/fleetWorld'
-import { servicesModelsForOrg } from '../../vision/modelInstanceSeed'
+import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../vision/modelInstanceSeed'
 
 type TenantUserInstancesPageProps = {
   tenantSlug: string
@@ -197,6 +200,7 @@ export function TenantUserInstancesPage({
   instanceNetworkingVariant = 'summary',
 }: TenantUserInstancesPageProps) {
   const { pathname } = useLocation()
+  const [searchParams] = useSearchParams()
   const isPlatformAdmin = pathname.startsWith('/provider')
   useEffect(() => {
     const normalized = ensureTenantDemoInstances(tenantSlug, organization?.name ?? tenantSlug)
@@ -213,8 +217,19 @@ export function TenantUserInstancesPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount sync per tenant
   }, [tenantSlug])
 
-  const [viewMode, setViewMode] = useState<ViewMode>(() => getInstancesViewMode('grid'))
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const viewParam = searchParams.get('view')
+    const expandParam = searchParams.get('expand')
+    if (viewParam === 'list' || expandParam) {
+      return 'list'
+    }
+    return getInstancesViewMode('grid')
+  })
   const [searchValue, setSearchValue] = useState('')
+  const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(() => {
+    const expandParam = searchParams.get('expand')
+    return expandParam ? new Set([expandParam]) : new Set()
+  })
   const [powerStateFilter, setPowerStateFilter] = useState<'all' | TenantInstanceStatus>('all')
   const [osFilter, setOsFilter] = useState('all')
   const [gpuFilter, setGpuFilter] = useState('all')
@@ -307,6 +322,24 @@ export function TenantUserInstancesPage({
       )
     })
   }, [seedOrgId, searchValue])
+  const filteredExternalModels = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+    return externalModelsForOrg(seedOrgId).filter((model) => {
+      if (!query) {
+        return true
+      }
+      return (
+        model.displayName.toLowerCase().includes(query) ||
+        model.name.toLowerCase().includes(query) ||
+        model.description.toLowerCase().includes(query) ||
+        model.providerRefs.some((ref) => ref.displayName.toLowerCase().includes(query))
+      )
+    })
+  }, [seedOrgId, searchValue])
+  const groupedSeedModels = useMemo(
+    () => groupModelInstancesByModelId(seedModelInstances),
+    [seedModelInstances],
+  )
   const hasActiveServiceFilters =
     (isBareMetalPage &&
       (powerStateFilter !== 'all' || osFilter !== 'all' || gpuFilter !== 'all')) ||
@@ -804,6 +837,18 @@ export function TenantUserInstancesPage({
     setInstancesViewMode(nextViewMode)
   }
 
+  const toggleExpandedModel = (id: string) => {
+    setExpandedModelIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
     setSelectedFilters((current) => toggleCatalogServiceFilter(current, serviceId, isSelected))
   }
@@ -814,8 +859,8 @@ export function TenantUserInstancesPage({
   const pageLede = (() => {
     if (isModelsPage) {
       return isAllProjectsScope(projectScopeId)
-        ? 'Monitor and manage Models as a Service (MaaS) endpoints across all projects.'
-        : 'Monitor and manage Models as a Service (MaaS) endpoints in this project.'
+        ? 'On-cluster serving instances and external models in one list. Expand a row in the table view to see instance details or provider weights.'
+        : 'On-cluster serving instances and external models in this project. Expand a row in the table view to see instance details or provider weights.'
     }
     if (lockedServiceId) {
       return isAllProjectsScope(projectScopeId)
@@ -1159,14 +1204,14 @@ export function TenantUserInstancesPage({
             ) : null}
             <SearchInput
               className="catalog-search"
-              placeholder="Search instances"
+              placeholder={isModelsPage ? 'Search models' : 'Search instances'}
               value={searchValue}
               onChange={(_event, value) => setSearchValue(value)}
               onClear={() => setSearchValue('')}
-              aria-label="Search instances"
+              aria-label={isModelsPage ? 'Search models' : 'Search instances'}
             />
           </div>
-          {instances.length > 0 ? (
+          {isModelsPage || instances.length > 0 ? (
             <ViewModeToggle
               viewMode={viewMode}
               onChange={handleViewModeChange}
@@ -1196,10 +1241,10 @@ export function TenantUserInstancesPage({
         ) : null}
 
         {isModelsPage ? (
-          seedModelInstances.length === 0 ? (
+          seedModelInstances.length === 0 && filteredExternalModels.length === 0 ? (
             searchValue.trim() ? (
               <CatalogFilterEmptyState
-                title="No instances match your filters"
+                title="No models match your filters"
                 description="Try a different filter option or search term."
                 onClearFilters={clearAllFilters}
               />
@@ -1212,29 +1257,53 @@ export function TenantUserInstancesPage({
                   {emptyStateTitle}
                 </Title>
                 <EmptyStateBody>
-                  Launch a model instance from the catalog to start serving inference.
+                  Launch a model instance from the catalog or register an external model.
                 </EmptyStateBody>
               </EmptyState>
             )
           ) : (
             <>
               <CatalogFilterResultsSummary
-                filteredCount={seedModelInstances.length}
-                totalCount={servicesModelsForOrg(seedOrgId).length}
-                singular="instance"
+                filteredCount={groupedSeedModels.length + filteredExternalModels.length}
+                totalCount={
+                  groupModelInstancesByModelId(servicesModelsForOrg(seedOrgId)).length +
+                  externalModelsForOrg(seedOrgId).length
+                }
+                singular="model"
                 filterParts={filterDescriptionParts}
                 onClearFilters={clearAllFilters}
               />
-              <div className="catalog-card-grid tenant-user-instances__grid">
-                {seedModelInstances.map((item) => (
-                  <ModelsInstanceCard
-                    key={item.id}
-                    item={item}
-                    showTenant={isPlatformAdmin}
-                    idPrefix="services-models"
-                  />
-                ))}
-              </div>
+              {viewMode === 'list' ? (
+                <ServicesModelsTable
+                  instances={seedModelInstances}
+                  externalModels={filteredExternalModels}
+                  expandedIds={expandedModelIds}
+                  onToggleExpand={toggleExpandedModel}
+                  idPrefix="services-models-table"
+                />
+              ) : (
+                <div className="catalog-card-grid tenant-user-instances__grid">
+                  {groupedSeedModels.map((group) => (
+                    <ModelsInstanceCard
+                      key={group.modelId}
+                      item={group.representative}
+                      clusterLabel={group.clusterLabel}
+                      clusterIds={group.clusterIds}
+                      gatewayLabel={group.gatewayLabel}
+                      showTenant={isPlatformAdmin}
+                      idPrefix="services-models"
+                    />
+                  ))}
+                  {filteredExternalModels.map((model) => (
+                    <ExternalModelCard
+                      key={model.name}
+                      model={model}
+                      showTenant={isPlatformAdmin}
+                      idPrefix="services-external-models"
+                    />
+                  ))}
+                </div>
+              )}
             </>
           )
         ) : filteredInstances.length === 0 ? (

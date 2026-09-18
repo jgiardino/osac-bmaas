@@ -20,7 +20,6 @@
 }
 
 .tenant-genai-page__kicker.pf-v6-c-label {
-  margin-block-end: var(--pf-t--global--spacer--sm);
   --pf-v6-c-label--FontSize: var(--pf-t--global--font--size--body--sm);
   --pf-v6-c-label--PaddingBlockStart: 0.25rem;
   --pf-v6-c-label--PaddingBlockEnd: 0.25rem;

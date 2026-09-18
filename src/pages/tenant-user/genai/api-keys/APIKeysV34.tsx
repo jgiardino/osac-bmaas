@@ -163,29 +163,29 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
             aVal = a.name.toLowerCase();
             bVal = b.name.toLowerCase();
             break;
-          case 1: // Status
-            aVal = a.status;
-            bVal = b.status;
-            break;
-          case 2: // Owner
+          case 1: // Owner
             aVal = a.username.toLowerCase();
             bVal = b.username.toLowerCase();
             break;
-          case 3: // Subscription
+          case 2: // Subscription
             aVal = (a.subscriptionName ?? '').toLowerCase();
             bVal = (b.subscriptionName ?? '').toLowerCase();
             break;
-          case 4: // Created
+          case 3: // Created
             aVal = a.creationDate.getTime();
             bVal = b.creationDate.getTime();
             break;
-          case 5: // Last used
+          case 4: // Last used
             aVal = a.lastUsedAt?.getTime() ?? 0;
             bVal = b.lastUsedAt?.getTime() ?? 0;
             break;
-          case 6: // Expiration
+          case 5: // Expiration
             aVal = a.expirationDate?.getTime() ?? Infinity;
             bVal = b.expirationDate?.getTime() ?? Infinity;
+            break;
+          case 6: // Status
+            aVal = a.status;
+            bVal = b.status;
             break;
           default:
             return 0;
@@ -243,7 +243,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
   const getStatusLabel = (status: ApiKeyStatusV34) => {
     if (status === 'active') {
       return (
-        <Label id="status-active" variant="outline" status="success">
+        <Label id="status-active" color="green" isCompact>
           Ready
         </Label>
       );
@@ -587,13 +587,13 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
           <Thead>
             <Tr>
               <Th sort={getSortParams(0)}>Name</Th>
-              <Th sort={getSortParams(1)}>Status</Th>
-              <Th sort={getSortParams(2)}>Owner</Th>
-              <Th sort={getSortParams(3)}>Subscription</Th>
-              <Th sort={getSortParams(4)}>Created</Th>
-              <Th sort={getSortParams(5)}>Last used</Th>
-              <Th sort={getSortParams(6)}>Expiration</Th>
-              <Th screenReaderText="Actions" />
+              <Th sort={getSortParams(1)}>Owner</Th>
+              <Th sort={getSortParams(2)}>Subscription</Th>
+              <Th sort={getSortParams(3)}>Created</Th>
+              <Th sort={getSortParams(4)}>Last used</Th>
+              <Th sort={getSortParams(5)}>Expiration</Th>
+              <Th modifier="fitContent" sort={getSortParams(6)}>Status</Th>
+              <Th modifier="fitContent" screenReaderText="Actions" />
             </Tr>
           </Thead>
           <Tbody>
@@ -616,7 +616,6 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
                     )}
                   </div>
                 </Td>
-                <Td dataLabel="Status">{getStatusLabel(apiKey.status)}</Td>
                 <Td dataLabel="Owner">{apiKey.username}</Td>
                 <Td dataLabel="Subscription">
                   {apiKey.subscriptionId ? (
@@ -644,7 +643,8 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
                 <Td dataLabel="Expiration">
                   {apiKey.expirationDate ? formatDate(apiKey.expirationDate) : 'Never'}
                 </Td>
-                <Td isActionCell>
+                <Td dataLabel="Status" modifier="fitContent">{getStatusLabel(apiKey.status)}</Td>
+                <Td isActionCell modifier="fitContent">
                   <Dropdown
                     isOpen={openKebabMenus.has(apiKey.id)}
                     onOpenChange={(isOpen) => {

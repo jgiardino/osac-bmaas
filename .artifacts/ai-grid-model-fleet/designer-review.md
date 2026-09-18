@@ -41,10 +41,29 @@ Over-correction: instance cards were rebuilt on default PatternFly DescriptionLi
 
 ### 2026-09-17
 
-- Compact AI Grid Cluster and Gateway cards use the same chrome as Models instance cards: compact service icon inline with the title, status and kebab (View details) in the header, spec rows, Tenant footer for platform admin. Gateway uses the globe-route icon already used on the type toggle.
+- Compact AI Grid Cluster and Gateway cards use the same chrome as Models instance cards: compact service icon inline with the title and secondary line, status and kebab (View details) in the header, spec rows, Tenant and Project footer for platform admin. Gateway uses the globe-route icon already used on the type toggle. Patterns → **AI Grid cards** shows Cluster, Gateway, and Model in columns (Services list plus nested cluster/gateway variants).
 - MaaS governance models table (live and Patterns): **Status** column. **Pending** (filled purple, pending icon, no second line) when subscriptions or authorization policies is 0; warning icon on that 0. Otherwise **Ready** (filled success).
 
-### 2026-09-17 (keep-set on live pages)
+### 2026-09-17 (PM revisions, pass 3)
+
+- MaaS governance and Services → Models **group by model**: Granite is one row, Mistral is one row. Expand **Deployments** to see each cluster (3 for Mistral).
+- Primary table **Deployments** column: cluster labels for internal models, provider labels for external models.
+- Expanded nested tables use `pf-v6-u-pb-lg` below the table. External provider columns are provider, API format, target model ID, weight, and status. Internal deployments add weight and status.
+- Services → Models table and cards show filled **Internal** / **External** labels.
+
+### 2026-09-17 (PM revisions, pass 2)
+
+- MaaS governance expand: **Governance** tab first, then **Deployments**. Kebab includes **Manage deployments** → Services → Models (`nav=services-models&view=list&expand=<id>`), with that row expanded.
+- Services → Models is one combined list: keep-set on-cluster instance cards **and** external models. Grid and table views. Expand only in the table view.
+- Expandable rows on Services → Models and MaaS governance use the API keys → Subscriptions layout: empty expand cell, `noPadding` content cell, nested compact `isNested` table, `resetOffset` on inner rows.
+- AI Grid Services first layer **groups by model**: one card lists multiple clusters. **View details** drills into individual instances.
+
+### 2026-09-17 (PM revisions)
+
+- MaaS governance (platform admin): tenant selector like AI Grid, **one tenant at a time** (no All tenants). Default North Summit Bank. Tenant admin stays locked to their org.
+- Services → Models starts with a **table of External models** (ODH `packages/maas` expandable pattern: model + resource name + description, provider labels, status; expand shows providers, View URL, path, auth, secret, API format, target model ID, weight %, status). Toggle **External | On-cluster** keeps the current instance cards for LLMInferenceService until that grouping is designed.
+- MaaS overview expand for those external models has **Deployments** (provider/weight table) and **Governance** (subs + policies). Internal models still expand to governance only.
+- Seed: Code Assist (HA) 4-way split, Gemini 2.5 Pro (Failed), Embeddings Pool (Pending, 33/33/33), plus BlueSolace Research summarizer (HA) so the tenant switch changes the list.
 
 - Live Services → Models, AI Grid Services (plus nested cluster/gateway lists), MaaS governance, API keys models, AI asset endpoints, and Playground use the 2.8 keep-set for **everyone** (not vision-gated).
 - MaaS governance is **one row per serving instance** (not per catalog item). Granite is two rows (US East and EU West), Mistral is three, Titan is two (one per assigned gateway). Columns: Model, Tenant (platform admin only), Project (all admins), Cluster, Gateway, Status, Subscriptions, Authorization policies. Cluster is the instance cluster; for off-platform models it is the gateway host cluster, or — if unassigned. Filled Internal / External (including expand, Subscriptions tab, and Authorization policies tab). Expand still lists that instance’s model identity subscriptions and policies. Group view stays unique by published model. No 0-subs / 1+ policies mirror case.
