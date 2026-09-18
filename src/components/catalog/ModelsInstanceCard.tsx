@@ -2,10 +2,7 @@ import { Button, Card, CardBody, Content, Flex, FlexItem, Label, LabelGroup } fr
 import { ActionsColumn, type IAction } from '@patternfly/react-table'
 import type { CatalogSpecRow } from '../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
-import {
-  gatewayHostClusterId,
-  type ModelInstanceSeedItem,
-} from '../../vision/modelInstanceSeed'
+import type { ModelInstanceSeedItem } from '../../vision/modelInstanceSeed'
 import { CatalogSpecRowsList } from './CatalogSpecRowsList'
 
 export type ModelsInstanceCardVariant = 'page' | 'compact'
@@ -19,52 +16,15 @@ type ModelsInstanceCardProps = {
   idPrefix?: string
   clusterLabel?: string
   clusterIds?: string[]
-  gatewayLabel?: string
+  weightLabel?: string
   onViewDetails?: () => void
 }
 
-const instanceSpecRows = (
-  item: ModelInstanceSeedItem,
-  parent: ModelsInstanceCardParent,
-  clusterLabel: string | undefined,
-  gatewayLabel: string | undefined,
-  showGateway: boolean,
-  showClusterText: boolean,
-): CatalogSpecRow[] => {
+const instanceSpecRows = (item: ModelInstanceSeedItem): CatalogSpecRow[] => {
   const rows: CatalogSpecRow[] = [{ label: 'Model', value: item.modelId }]
-
-  if (item.locationKind === 'off-platform') {
-    rows.push({ label: 'Served by', value: item.servedBy ?? '—' })
-  } else {
+  if (item.locationKind !== 'off-platform') {
     rows.push({ label: 'Size', value: item.size ?? '—' })
   }
-
-  if (showClusterText && parent !== 'cluster') {
-    const value = clusterLabel ?? item.clusterId
-    if (value) {
-      rows.push({ label: 'Cluster', value })
-    }
-  }
-
-  if (showGateway && parent !== 'gateway') {
-    if (gatewayLabel) {
-      rows.push({
-        label: 'Gateway',
-        value: gatewayLabel,
-        badge: item.isMaas && gatewayLabel !== 'Unassigned' ? { text: 'MaaS', color: 'blue' } : undefined,
-      })
-    } else if (!item.gatewayId) {
-      rows.push({ label: 'Gateway', value: 'Unassigned' })
-    } else {
-      const hostCluster = gatewayHostClusterId(item.gatewayId) ?? item.clusterId ?? '—'
-      rows.push({
-        label: 'Gateway',
-        value: `${hostCluster}: ${item.gatewayId}`,
-        badge: item.isMaas ? { text: 'MaaS', color: 'blue' } : undefined,
-      })
-    }
-  }
-
   return rows
 }
 
@@ -76,7 +36,7 @@ export const ModelsInstanceCard = ({
   idPrefix = 'models-instance',
   clusterLabel,
   clusterIds,
-  gatewayLabel,
+  weightLabel,
   onViewDetails,
 }: ModelsInstanceCardProps) => {
   const cardId = `${idPrefix}-${item.id}`
@@ -113,25 +73,16 @@ export const ModelsInstanceCard = ({
               {item.displayName}
             </Button>
           </FlexItem>
-          {variant === 'page' ? (
-            <FlexItem>
-              <Label
-                color={item.locationKind === 'off-platform' ? 'teal' : 'orange'}
-                variant="filled"
-                isCompact
-                id={`${cardId}-source`}
-              >
-                {item.locationKind === 'off-platform' ? 'External' : 'Internal'}
-              </Label>
-            </FlexItem>
-          ) : null}
-          {parent === 'gateway' && item.isMaas ? (
-            <FlexItem>
-              <Label color="blue" variant="filled" isCompact id={`${cardId}-maas`}>
-                MaaS
-              </Label>
-            </FlexItem>
-          ) : null}
+          <FlexItem>
+            <Label
+              color={item.locationKind === 'off-platform' ? 'teal' : 'orange'}
+              variant="filled"
+              isCompact
+              id={`${cardId}-source`}
+            >
+              {item.locationKind === 'off-platform' ? 'External' : 'Internal'}
+            </Label>
+          </FlexItem>
         </Flex>
       </Content>
       {item.catalogSkuName ? (
@@ -155,11 +106,14 @@ export const ModelsInstanceCard = ({
         ? clusterLabel.split(', ').filter(Boolean)
         : item.clusterId
           ? [item.clusterId]
-          : []
-  const showServedOn = !isCompact && parent !== 'cluster' && servedOnIds.length > 0
+          : item.servedBy
+            ? [item.servedBy]
+            : []
+  const servedOnColor = item.locationKind === 'off-platform' ? 'teal' : 'grey'
+  const showServedOn = parent !== 'cluster' && servedOnIds.length > 0
 
   const footerRows = [
-    ...(showTenant ? [{ label: 'Tenant', value: item.tenantLabel }] : []),
+    ...(showTenant && !isCompact ? [{ label: 'Tenant', value: item.tenantLabel }] : []),
     { label: 'Project', value: item.projectName },
     ...(!isCompact ? [{ label: 'Created', value: item.createdAtLabel }] : []),
   ]
@@ -206,32 +160,42 @@ export const ModelsInstanceCard = ({
           </>
         )}
         <CatalogSpecRowsList
-          rows={instanceSpecRows(item, parent, clusterLabel, gatewayLabel, isCompact, isCompact)}
+          rows={instanceSpecRows(item)}
           className={specClass}
           rowClassName={specRowClass}
           labelClassName={specLabelClass}
           valueClassName={specValueClass}
           idPrefix={cardId}
           afterRows={
-            showServedOn ? (
-              <div className={specRowClass}>
-                <dt className={specLabelClass}>Served on</dt>
-                <dd className={specValueClass} id={`${cardId}-served-on`}>
-                  <LabelGroup id={`${cardId}-served-on-labels`} numLabels={4}>
-                    {servedOnIds.map((clusterId) => (
-                      <Label
-                        key={clusterId}
-                        color="grey"
-                        isCompact
-                        id={`${cardId}-served-on-${clusterId}`}
-                      >
-                        {clusterId}
-                      </Label>
-                    ))}
-                  </LabelGroup>
-                </dd>
-              </div>
-            ) : null
+            <>
+              {showServedOn ? (
+                <div className={specRowClass}>
+                  <dt className={specLabelClass}>Served on</dt>
+                  <dd className={specValueClass} id={`${cardId}-served-on`}>
+                    <LabelGroup id={`${cardId}-served-on-labels`} numLabels={4}>
+                      {servedOnIds.map((servedOnId) => (
+                        <Label
+                          key={servedOnId}
+                          color={servedOnColor}
+                          isCompact
+                          id={`${cardId}-served-on-${servedOnId}`}
+                        >
+                          {servedOnId}
+                        </Label>
+                      ))}
+                    </LabelGroup>
+                  </dd>
+                </div>
+              ) : null}
+              {weightLabel ? (
+                <div className={specRowClass}>
+                  <dt className={specLabelClass}>Weight</dt>
+                  <dd className={specValueClass} id={`${cardId}-weight`}>
+                    {weightLabel}
+                  </dd>
+                </div>
+              ) : null}
+            </>
           }
         />
         <dl className={isCompact ? 'vision-grid-drawer-card__footer' : 'tenant-user-instances__card-footer'}>

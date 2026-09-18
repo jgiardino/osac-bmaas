@@ -1,4 +1,5 @@
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
+import { getExternalModelByName } from './externalModelSeed'
 import {
   VISION_GATEWAYS,
   VISION_MODEL_PRESETS,
@@ -22,7 +23,7 @@ export type VisionGridObjectType = 'clusters' | 'models' | 'gateways'
 
 export const DEFAULT_VISION_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
 export const CATALOG_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
-export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'gateways', 'models']
+export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
 
 export type VisionDrawerSelection =
   | { kind: 'none' }
@@ -34,6 +35,7 @@ export type VisionDrawerSelection =
   | { kind: 'gateway'; gatewayId: VisionGatewayId }
   | { kind: 'off-platform-model'; modelId: string }
   | { kind: 'model-group'; modelId: string }
+  | { kind: 'external-model-group'; name: string }
 
 export const toggleVisionObjectType = (
   current: readonly VisionGridObjectType[],
@@ -79,6 +81,9 @@ export const visionSelectionsEqual = (
   }
   if (left.kind === 'model-group' && right.kind === 'model-group') {
     return left.modelId === right.modelId
+  }
+  if (left.kind === 'external-model-group' && right.kind === 'external-model-group') {
+    return left.name === right.name
   }
   return false
 }
@@ -139,6 +144,8 @@ export const getVisionDrawerSelectionLabel = (
         MODEL_INSTANCE_SEED.find((item) => item.modelId === selection.modelId)?.displayName ??
         selection.modelId
       )
+    case 'external-model-group':
+      return getExternalModelByName(selection.name)?.displayName ?? selection.name
   }
 }
 
@@ -193,5 +200,7 @@ export const relatedClusterIdsForSelection = (
             .filter((clusterId): clusterId is string => Boolean(clusterId)),
         ),
       ]
+    case 'external-model-group':
+      return []
   }
 }

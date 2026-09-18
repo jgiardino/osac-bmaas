@@ -30,10 +30,12 @@ export const VisionGridObjectCardPatterns = () => {
           AI Grid compact cards
         </Title>
         <Content component="p">
-          Cluster, Gateway, and Model use the same compact chrome: service icon inline with the
-          title and secondary line, status and kebab in the header, spec rows, then Tenant and
-          Project in the footer. Spec labels differ by object. Nested lists omit the parent
-          object’s spec.
+          Cluster and Model use the same compact chrome: service icon inline with the
+          title and secondary line, status and kebab in the header, spec rows, then
+          Project in the footer. Tenant, MaaS, Gateway, and Created are omitted because
+          AI Grid views one tenant at a time and every model is MaaS. Model cards match
+          Services → Models (Internal or External, Served on). Individual instances add
+          Weight. Nested lists omit the parent object’s spec.
         </Content>
       </StackItem>
       <StackItem>
@@ -86,7 +88,6 @@ export const VisionGridObjectCardPatterns = () => {
                 item={model}
                 variant="compact"
                 parent="none"
-                showTenant
                 idPrefix="pattern-ai-grid-model"
               />
             ) : null}
@@ -98,7 +99,8 @@ export const VisionGridObjectCardPatterns = () => {
           Nested on a cluster
         </Title>
         <Content component="p">
-          Gateway omits Cluster. Model omits Cluster. MaaS stays on the Gateway spec.
+          Model omits Cluster (already implied by the parent). Gateway is not shown on
+          model cards.
         </Content>
       </StackItem>
       <StackItem>
@@ -135,7 +137,6 @@ export const VisionGridObjectCardPatterns = () => {
                 item={model}
                 variant="compact"
                 parent="cluster"
-                showTenant
                 idPrefix="pattern-ai-grid-model-nested-cluster"
               />
             ) : null}
@@ -147,7 +148,8 @@ export const VisionGridObjectCardPatterns = () => {
           Nested on a gateway
         </Title>
         <Content component="p">
-          Model omits Gateway. MaaS sits next to the display name because the Gateway spec is gone.
+          Model omits Gateway. Served on and Internal stay; Weight is for drill-in
+          instances of the same model.
         </Content>
       </StackItem>
       <StackItem>
@@ -173,7 +175,6 @@ export const VisionGridObjectCardPatterns = () => {
                 item={model}
                 variant="compact"
                 parent="gateway"
-                showTenant
                 idPrefix="pattern-ai-grid-model-nested-gateway"
               />
             ) : null}

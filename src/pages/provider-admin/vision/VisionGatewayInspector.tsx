@@ -1,4 +1,3 @@
-import { useLocation } from 'react-router-dom'
 import {
   Content,
   DescriptionList,
@@ -42,8 +41,6 @@ export const VisionGatewayInspector = ({
   onHighlightCluster,
   onViewCluster,
 }: VisionGatewayInspectorProps) => {
-  const { pathname } = useLocation()
-  const showTenant = pathname.startsWith('/provider')
   const org = getVisionOrg(gateway.orgId)
   const cluster = clusters.find((entry) => entry.id === gateway.clusterId)
   const nestedModels = modelsOnGateway(gateway.id)
@@ -95,7 +92,6 @@ export const VisionGatewayInspector = ({
               item={item}
               variant="compact"
               parent="gateway"
-              showTenant={showTenant}
               idPrefix="vision-gateway-model"
             />
           </StackItem>

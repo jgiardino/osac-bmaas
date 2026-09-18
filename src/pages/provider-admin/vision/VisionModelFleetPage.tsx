@@ -31,7 +31,6 @@ import {
   type VisionCluster,
   type VisionDeployment,
   type VisionGatewayId,
-  type VisionOrgFilter,
   type VisionOrgId,
   type VisionServingPath,
   type VisionSiteId,
@@ -76,8 +75,8 @@ export const VisionModelFleetPage = ({
   const [paths, setPaths] = useState<VisionServingPath[]>(() =>
     seed.emptyGrid ? [] : createInitialPaths(),
   )
-  const [orgFilter, setOrgFilter] = useState<VisionOrgFilter>(
-    lockedOrgId ?? seed.orgFilter,
+  const [orgFilter, setOrgFilter] = useState<VisionOrgId>(
+    lockedOrgId ?? (seed.orgFilter === 'all' ? 'nsb' : seed.orgFilter),
   )
   const [highlight, setHighlight] = useState<VisionDrawerSelection>(() =>
     seedVisionDrawerSelection(seed),
@@ -238,11 +237,10 @@ export const VisionModelFleetPage = ({
       return
     }
 
-    const fallbackOrg: VisionOrgId = orgFilter === 'all' ? 'nsb' : orgFilter
-    const allowedGateways = gatewaysForOrgFilter(fallbackOrg)
+    const allowedGateways = gatewaysForOrgFilter(orgFilter)
     const gatewayId: VisionGatewayId = allowedGateways[0]?.id ?? 'nsb-retail'
 
-    const created = createClusterFromOffering(offering, siteId, fallbackOrg, gatewayId, clusters)
+    const created = createClusterFromOffering(offering, siteId, orgFilter, gatewayId, clusters)
     setClusters((current) => [...current, created])
     openDetails({ kind: 'cluster', clusterId: created.id }, 'services')
     setAddOfferingId(null)
@@ -339,6 +337,9 @@ export const VisionModelFleetPage = ({
                   }
                   onViewModelGroup={(modelId) =>
                     openDetails({ kind: 'model-group', modelId }, 'services')
+                  }
+                  onViewExternalModelGroup={(name) =>
+                    openDetails({ kind: 'external-model-group', name }, 'services')
                   }
                   onPlacePreset={setPlacePresetId}
                   onAddOffering={setAddOfferingId}

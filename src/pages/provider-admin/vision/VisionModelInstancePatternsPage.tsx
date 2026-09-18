@@ -365,9 +365,10 @@ export const VisionModelInstancePatternsPage = () => {
           AI Grid Services → Models
         </Title>
         <Content component="p">
-          Same {services.length} instances and properties. Compact AI Grid card: small icon
-          inline with the title link; secondary text is the catalog item name. No Created row.
-          Footer action lives in the kebab: View subscriptions for MaaS, View endpoints otherwise.
+          Same {services.length} instances and properties as Services, without Tenant,
+          MaaS, Gateway, or Created. Compact AI Grid card: small icon inline with the
+          title link; secondary text is the catalog item name. Served on uses cluster
+          chips. Footer action lives in the kebab.
         </Content>
         <Stack hasGutter>
           {services.map((item) => (
@@ -375,7 +376,6 @@ export const VisionModelInstancePatternsPage = () => {
               <ModelsInstanceCard
                 item={item}
                 variant="compact"
-                showTenant
                 idPrefix="pattern-fleet"
               />
             </StackItem>
@@ -390,7 +390,7 @@ export const VisionModelInstancePatternsPage = () => {
         <Content component="p">
           Nested on cluster details: Cluster is omitted. Includes on-cluster instances (Granite,
           Mistral 7B, Credit-risk scorer) and externals whose gateway is hosted on this cluster
-          (Titan on nsb-markets). Mistral here is served by nsb-west on US West.
+          (Titan on nsb-markets).
         </Content>
         <Stack hasGutter>
           {clusterEastModels.map((item) => (
@@ -399,7 +399,6 @@ export const VisionModelInstancePatternsPage = () => {
                 item={item}
                 variant="compact"
                 parent="cluster"
-                showTenant
                 idPrefix="pattern-cluster-east"
               />
             </StackItem>
@@ -412,8 +411,8 @@ export const VisionModelInstancePatternsPage = () => {
           AI Grid · models on gateway nsb-markets
         </Title>
         <Content component="p">
-          Nested on gateway details: Gateway is omitted. Filled MaaS label sits to the right of
-          the display name. Includes Granite on US East and Titan Text Express (external).
+          Nested on gateway details: Gateway is omitted. Includes Granite on US East and Titan
+          Text Express (external).
         </Content>
         <Stack hasGutter>
           {gatewayMarketsModels.map((item) => (
@@ -422,7 +421,6 @@ export const VisionModelInstancePatternsPage = () => {
                 item={item}
                 variant="compact"
                 parent="gateway"
-                showTenant
                 idPrefix="pattern-gateway-markets"
               />
             </StackItem>
@@ -436,8 +434,7 @@ export const VisionModelInstancePatternsPage = () => {
         </Title>
         <Content component="p">
           Cross-cluster example: nsb-west lives on ocp-us-west-1 and serves Mistral 7B on US West,
-          US East, and EU West. Gateway is omitted; Cluster stays so the different locations are
-          visible. MaaS is next to the display name.
+          US East, and EU West. Gateway is omitted; Served on shows the cluster.
         </Content>
         <Stack hasGutter>
           {gatewayWestModels.map((item) => (
@@ -446,7 +443,6 @@ export const VisionModelInstancePatternsPage = () => {
                 item={item}
                 variant="compact"
                 parent="gateway"
-                showTenant
                 idPrefix="pattern-gateway-west"
               />
             </StackItem>

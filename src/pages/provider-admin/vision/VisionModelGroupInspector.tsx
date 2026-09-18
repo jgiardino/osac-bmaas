@@ -1,17 +1,18 @@
 import { Content, Stack, StackItem } from '@patternfly/react-core'
 import { ModelsInstanceCard } from '../../../components/catalog/ModelsInstanceCard'
-import type { ModelInstanceSeedItem } from '../../../vision/modelInstanceSeed'
+import {
+  formatEqualSplitWeight,
+  type ModelInstanceSeedItem,
+} from '../../../vision/modelInstanceSeed'
 
 type VisionModelGroupInspectorProps = {
   displayName: string
   instances: ModelInstanceSeedItem[]
-  showTenant?: boolean
 }
 
 export const VisionModelGroupInspector = ({
   displayName,
   instances,
-  showTenant = false,
 }: VisionModelGroupInspectorProps) => {
   if (instances.length === 0) {
     return <Content component="p">This model is not available in the current filter.</Content>
@@ -24,12 +25,13 @@ export const VisionModelGroupInspector = ({
           {instances.length} {instances.length === 1 ? 'instance' : 'instances'} of {displayName}
         </Content>
       </StackItem>
-      {instances.map((item) => (
+      {instances.map((item, index) => (
         <StackItem key={item.id}>
           <ModelsInstanceCard
             item={item}
             variant="compact"
-            showTenant={showTenant}
+            clusterIds={item.clusterId ? [item.clusterId] : undefined}
+            weightLabel={formatEqualSplitWeight(instances.length, index)}
             idPrefix="vision-model-instance"
           />
         </StackItem>

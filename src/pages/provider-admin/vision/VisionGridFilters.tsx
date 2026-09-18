@@ -10,13 +10,13 @@ import {
   ToolbarItem,
   Tooltip,
 } from '@patternfly/react-core'
-import { VISION_ORGS, type VisionOrgFilter } from '../../../vision/fleetWorld'
+import { VISION_ORGS, type VisionOrgId } from '../../../vision/fleetWorld'
 import type { VisionDrawerTab } from '../../../vision/visionDrawer'
 
 type VisionGridFiltersProps = {
-  orgFilter: VisionOrgFilter
+  orgFilter: VisionOrgId
   view: VisionDrawerTab
-  onOrgChange: (value: VisionOrgFilter) => void
+  onOrgChange: (value: VisionOrgId) => void
   onViewChange: (view: VisionDrawerTab) => void
   showTenantFilter?: boolean
 }
@@ -45,10 +45,9 @@ export const VisionGridFilters = ({
               <FormSelect
                 id="vision-filter-org"
                 value={orgFilter}
-                onChange={(_event, value) => onOrgChange(value as VisionOrgFilter)}
+                onChange={(_event, value) => onOrgChange(value as VisionOrgId)}
                 aria-label="Filter by tenant"
               >
-                <FormSelectOption value="all" label="All tenants" />
                 {VISION_ORGS.map((org) => (
                   <FormSelectOption key={org.id} value={org.id} label={org.label} />
                 ))}

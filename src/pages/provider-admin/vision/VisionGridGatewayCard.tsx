@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react'
-import { useLocation } from 'react-router-dom'
 import type { CatalogSpecRow } from '../../../catalog/catalogSpecs'
 import { getGatewayIcon } from '../../../catalog/serviceIcons'
 import {
-  getVisionOrg,
   visionProjectForOrg,
   type VisionCluster,
   type VisionGateway,
@@ -39,12 +37,7 @@ export const VisionGridGatewayCard = ({
   specRows,
   specNodes,
   badge,
-}: VisionGridGatewayCardProps) => {
-  const { pathname } = useLocation()
-  const showTenant = pathname.startsWith('/provider')
-  const org = getVisionOrg(gateway.orgId)
-
-  return (
+}: VisionGridGatewayCardProps) => (
     <VisionGridDrawerCard
       id={id}
       icon={getGatewayIcon()}
@@ -62,7 +55,6 @@ export const VisionGridGatewayCard = ({
       }
       specNodes={specNodes}
       footerRows={[
-        ...(showTenant ? [{ label: 'Tenant', value: org.label }] : []),
         { label: 'Project', value: visionProjectForOrg(gateway.orgId) },
       ]}
       isSelected={isSelected}
@@ -70,5 +62,4 @@ export const VisionGridGatewayCard = ({
       onViewDetails={onViewDetails}
       badge={badge ?? <VisionGridStatusLabel id={`${id}-status`} status="Ready" />}
     />
-  )
-}
+)

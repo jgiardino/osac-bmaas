@@ -1289,7 +1289,6 @@ export function TenantUserInstancesPage({
                       item={group.representative}
                       clusterLabel={group.clusterLabel}
                       clusterIds={group.clusterIds}
-                      gatewayLabel={group.gatewayLabel}
                       showTenant={isPlatformAdmin}
                       idPrefix="services-models"
                     />

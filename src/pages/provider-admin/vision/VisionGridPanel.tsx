@@ -57,6 +57,7 @@ type VisionGridPanelProps = {
   onViewGateway: (gatewayId: VisionGateway['id']) => void
   onViewOffPlatform: (modelId: string) => void
   onViewModelGroup: (modelId: string) => void
+  onViewExternalModelGroup: (name: string) => void
   onPlacePreset: (presetId: string) => void
   onAddOffering: (offeringId: string) => void
   onOpenCatalogItem: (catalogItemId: string) => void
@@ -93,6 +94,7 @@ export const VisionGridPanel = ({
   onViewGateway,
   onViewOffPlatform,
   onViewModelGroup,
+  onViewExternalModelGroup,
   onPlacePreset,
   onAddOffering,
   onOpenCatalogItem,
@@ -163,6 +165,7 @@ export const VisionGridPanel = ({
       onViewGateway={onViewGateway}
       onViewOffPlatform={onViewOffPlatform}
       onViewModelGroup={onViewModelGroup}
+      onViewExternalModelGroup={onViewExternalModelGroup}
     />
   )
 

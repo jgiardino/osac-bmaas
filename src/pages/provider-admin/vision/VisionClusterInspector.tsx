@@ -1,4 +1,3 @@
-import { useLocation } from 'react-router-dom'
 import {
   Content,
   DescriptionList,
@@ -48,8 +47,6 @@ export const VisionClusterInspector = ({
   onHighlightGateway,
   onViewGateway,
 }: VisionClusterInspectorProps) => {
-  const { pathname } = useLocation()
-  const showTenant = pathname.startsWith('/provider')
   if (!cluster) {
     return (
       <Stack hasGutter>
@@ -159,7 +156,6 @@ export const VisionClusterInspector = ({
               item={item}
               variant="compact"
               parent="cluster"
-              showTenant={showTenant}
               idPrefix="vision-cluster-model"
             />
           </StackItem>

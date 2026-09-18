@@ -19,7 +19,7 @@ export type VisionScenarioSeed = {
 
 const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
   default: {
-    orgFilter: 'all',
+    orgFilter: 'nsb',
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,
@@ -51,7 +51,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     emptyGrid: false,
   },
   'unavailable-cluster': {
-    orgFilter: 'all',
+    orgFilter: 'nsb',
     gatewayFilter: 'all',
     selectedClusterId: 'ocp-us-east-gpu',
     selectedPresetId: null,
@@ -59,7 +59,7 @@ const SCENARIO_SEEDS: Record<VisionScenarioId, VisionScenarioSeed> = {
     emptyGrid: false,
   },
   'empty-grid': {
-    orgFilter: 'all',
+    orgFilter: 'nsb',
     gatewayFilter: 'all',
     selectedClusterId: null,
     selectedPresetId: null,

@@ -1,8 +1,6 @@
-import { useLocation } from 'react-router-dom'
 import type { CatalogSpecRow } from '../../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../../catalog/serviceIcons'
 import {
-  getVisionOrg,
   getVisionSite,
   visionProjectForOrg,
   type VisionCluster,
@@ -31,10 +29,7 @@ export const VisionGridClusterCard = ({
   onSelect,
   onViewDetails,
 }: VisionGridClusterCardProps) => {
-  const { pathname } = useLocation()
-  const showTenant = pathname.startsWith('/provider')
   const site = getVisionSite(cluster.siteId)
-  const org = getVisionOrg(cluster.orgId)
   const isAvailable = cluster.health === 'available'
 
   return (
@@ -46,7 +41,6 @@ export const VisionGridClusterCard = ({
       secondaryIsMono={false}
       specRows={visionClusterSpecRows(cluster)}
       footerRows={[
-        ...(showTenant ? [{ label: 'Tenant', value: org.label }] : []),
         { label: 'Project', value: visionProjectForOrg(cluster.orgId) },
       ]}
       isSelected={isSelected}

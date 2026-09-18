@@ -16,7 +16,7 @@
 /* Compact AI Grid instance card only: keep the icon inline with the title. */
 .models-instance-card__title-row {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: var(--pf-t--global--spacer--sm);
   min-width: 0;
   flex: 1 1 auto;
