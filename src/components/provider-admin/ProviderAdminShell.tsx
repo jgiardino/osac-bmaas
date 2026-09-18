@@ -49,6 +49,7 @@ import {
 } from '../../providerAdmin/constants'
 import { clearProviderOnboardingState } from '../../providerSetup/storage'
 import type { WorkspaceTransition } from '../../providerAdmin/workspace'
+import { SHOW_LOCAL_DEV_PATTERNS_NAV } from '../../vision/modelFleet'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { VertexaCloudMastheadLogo } from './VertexaCloudMastheadLogo'
 
@@ -189,14 +190,16 @@ export function ProviderAdminShell({
                 >
                   AI Grid
                 </NavItem>
-                <NavItem
-                  itemId="vision-model-catalog-patterns"
-                  isActive={activeNavId === 'vision-model-catalog-patterns'}
-                  to="#"
-                  preventDefault
-                >
-                  Patterns
-                </NavItem>
+                {SHOW_LOCAL_DEV_PATTERNS_NAV ? (
+                  <NavItem
+                    itemId="vision-model-catalog-patterns"
+                    isActive={activeNavId === 'vision-model-catalog-patterns'}
+                    to="#"
+                    preventDefault
+                  >
+                    Patterns
+                  </NavItem>
+                ) : null}
               </>
             ) : null}
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>

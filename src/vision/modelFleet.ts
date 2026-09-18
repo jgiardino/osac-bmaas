@@ -11,6 +11,16 @@ export const MODEL_FLEET_VISION_NAV_ID = 'vision-model-fleet' satisfies Provider
 export const MODEL_CATALOG_PATTERNS_NAV_ID =
   'vision-model-catalog-patterns' satisfies ProviderAdminNavId
 
+/** Local Vite only. Hidden from GitHub Pages / production builds. */
+export const SHOW_LOCAL_DEV_PATTERNS_NAV = import.meta.env.DEV
+
+export const resolvePublishedProviderNav = (
+  navId: ProviderAdminNavId,
+): ProviderAdminNavId =>
+  SHOW_LOCAL_DEV_PATTERNS_NAV || navId !== MODEL_CATALOG_PATTERNS_NAV_ID
+    ? navId
+    : MODEL_FLEET_VISION_NAV_ID
+
 /** Legacy Granite catalog id — stripped from Catalog; still used by AI Grid instance seeds. */
 export const GRANITE_3B_CATALOG_ITEM_ID = 'cat-granite-3b-instruct'
 export const GRANITE_3B_STABLE_NAME = 'granite-3b'

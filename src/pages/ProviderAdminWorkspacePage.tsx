@@ -38,6 +38,7 @@ import {
   MODEL_FLEET_VISION_VALUE,
   isModelFleetVision,
   mergeVisionCatalogItems,
+  resolvePublishedProviderNav,
 } from '../vision/modelFleet'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
@@ -129,11 +130,12 @@ function getLockedServiceIdFromNav(navId: ProviderAdminNavId): CatalogServiceId 
 function readInitialProviderNav(searchParams: URLSearchParams): ProviderAdminNavId {
   const requestedNav = normalizeProviderNavParam(searchParams.get('nav'))
   if (requestedNav) {
-    ensureProviderPostSetupPrototype(requestedNav)
-    return requestedNav
+    const resolvedNav = resolvePublishedProviderNav(requestedNav)
+    ensureProviderPostSetupPrototype(resolvedNav)
+    return resolvedNav
   }
 
-  return getProviderActiveNav()
+  return resolvePublishedProviderNav(getProviderActiveNav())
 }
 
 export function ProviderAdminWorkspacePage() {
@@ -180,26 +182,30 @@ export function ProviderAdminWorkspacePage() {
   useLayoutEffect(() => {
     const requestedNav = normalizeProviderNavParam(navParam)
     if (requestedNav) {
+      const resolvedNav = resolvePublishedProviderNav(requestedNav)
       // Do not re-run full demo seed/sync on every left-nav click — that rewrote
       // catalog identities and could drop unpublished drafts when returning to Catalog.
       const storedItems = getProviderCatalogItems()
       if (storedItems.length === 0) {
-        ensureProviderPostSetupPrototype(requestedNav)
+        ensureProviderPostSetupPrototype(resolvedNav)
       } else {
-        setProviderActiveNav(requestedNav)
+        setProviderActiveNav(resolvedNav)
       }
       setCatalogItems(getProviderCatalogItems())
       setSelectedServices(getProviderSelectedServices())
       setServicesSelected(true)
       setSetupComplete(true)
-      setActiveNavId(requestedNav)
+      setActiveNavId(resolvedNav)
+      if (resolvedNav !== requestedNav) {
+        syncWorkspaceNavParam(setSearchParams, resolvedNav, { replace: true })
+      }
       setInstances(ensureTenantDemoInstances(PROVIDER_SERVICES_DEMO_TENANT))
       setProjects(ensureTenantDemoProjects(PROVIDER_SERVICES_DEMO_TENANT))
       setProjectScopeIdState(getProjectScopeId(PROVIDER_SERVICES_DEMO_TENANT))
       return
     }
 
-    const fallbackNav = getProviderActiveNav()
+    const fallbackNav = resolvePublishedProviderNav(getProviderActiveNav())
     syncWorkspaceNavParam(setSearchParams, fallbackNav, { replace: true })
 
     if (isProviderSetupComplete()) {
