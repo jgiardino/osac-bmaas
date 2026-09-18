@@ -43,6 +43,8 @@ import type { ThProps } from '@patternfly/react-table';
 import { demoUsernameFromPathname } from '../../../../demoTenant';
 import { GenaiPageStack } from '../GenaiPageStack';
 import ListPage from '../osacStubs/ListPage';
+import VisionOrgSelect from '../../../../vision/VisionOrgSelect';
+import { useVisionOrgFilter } from '../../../../vision/useVisionOrgFilter';
 
 import { addDynamicKey, getDynamicKeys } from './apiKeysStoreV34';
 import { CreateAPIKeyModalV34 } from './components/CreateAPIKeyModalV34';
@@ -73,6 +75,7 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
 }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { orgId, setOrgId, showTenantSelect } = useVisionOrgFilter();
   const [searchParams, setSearchParams] = useSearchParams();
   const { userProfile } = useUserProfile();
   const { isAdmin: isAdminSurface, keyDetailsPath, subscriptionDetailsPath } = useApiKeysPaths();
@@ -738,6 +741,11 @@ const APIKeysV34: React.FunctionComponent<APIKeysV34Props> = ({
       title="API keys"
       description="Manage API keys used to authenticate with AI model endpoints."
       kicker={kicker}
+      kickerExtra={
+        showTenantSelect ? (
+          <VisionOrgSelect id="api-keys-filter-org" value={orgId} onChange={setOrgId} />
+        ) : undefined
+      }
     >
       <AlertGroup isToast isLiveRegion hasAnimations id="api-keys-toast-v34">
         {toastAlerts}

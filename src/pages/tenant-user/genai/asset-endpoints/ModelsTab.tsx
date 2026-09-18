@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import {
   Button,
   ClipboardCopy,
@@ -36,7 +35,7 @@ import { MOCK_AI_MODELS } from './mocks'
 import type { AIModel } from './types'
 import { GenaiPageStack } from '../GenaiPageStack'
 import { MaasModelIdentity } from '../../../../components/catalog/MaasModelIdentity'
-import { visionOrgFilterFromPathname } from '../../../../vision/modelInstanceSeed'
+import { useVisionOrgFilter } from '../../../../vision/useVisionOrgFilter'
 
 const CAPABILITY_DISPLAY: Record<string, { label: string; color: 'green' | 'purple' | 'teal' }> = {
   vision: { label: 'Vision', color: 'green' },
@@ -96,8 +95,7 @@ const filterLabel = (key: FilterType) => {
 }
 
 export function ModelsTab() {
-  const { pathname } = useLocation()
-  const orgId = visionOrgFilterFromPathname(pathname)
+  const { orgId } = useVisionOrgFilter()
   const [filterType, setFilterType] = useState<FilterType>('name')
   const [searchValue, setSearchValue] = useState('')
   const [appliedName, setAppliedName] = useState('')
@@ -108,9 +106,14 @@ export function ModelsTab() {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(10)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [models, setModels] = useState(() =>
-    orgId === 'all' ? MOCK_AI_MODELS : MOCK_AI_MODELS.filter((model) => model.tenantId === orgId),
-  )
+  const seedModels = MOCK_AI_MODELS.filter((model) => model.tenantId === orgId)
+  const [models, setModels] = useState(seedModels)
+  const [modelsOrgId, setModelsOrgId] = useState(orgId)
+  if (orgId !== modelsOrgId) {
+    setModelsOrgId(orgId)
+    setModels(seedModels)
+    setPage(1)
+  }
 
   const hasCustomEndpoints = models.some((m) => m.model_source_type === 'custom_endpoint')
 

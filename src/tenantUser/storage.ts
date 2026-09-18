@@ -50,7 +50,6 @@ export type TenantUserNavId =
   | 'genai-playground'
   | 'genai-api-keys'
   | 'projects-teams'
-  | 'vision-model-fleet'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
@@ -67,7 +66,6 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'genai-playground',
   'genai-api-keys',
   'projects-teams',
-  'vision-model-fleet',
   'networking-virtual-networks',
   'networking-subnets',
   'networking-security-groups',
@@ -78,6 +76,7 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
 const LEGACY_TENANT_USER_NAV_IDS: Record<string, TenantUserNavId> = {
   'my-instances': 'services-baremetal',
   services: 'services-baremetal',
+  'vision-model-fleet': 'catalog',
 }
 
 function getSlugKey(prefix: string, slug: string): string {

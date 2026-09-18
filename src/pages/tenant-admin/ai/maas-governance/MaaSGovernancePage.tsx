@@ -15,11 +15,8 @@ import {
   DescriptionListTerm,
   EmptyState,
   EmptyStateBody,
-   
   Form,
   FormGroup,
-  FormSelect,
-  FormSelectOption,
   Label,
   LabelGroup,
   MenuToggle,
@@ -73,7 +70,8 @@ import { ExternalModelsExpandedProvidersTable } from '../../../../components/cat
 import { InternalDeploymentsTable } from '../../../../components/catalog/InternalDeploymentsTable';
 import { MaasModelIdentity } from '../../../../components/catalog/MaasModelIdentity';
 import { getExternalModelByName } from '../../../../vision/externalModelSeed';
-import { VISION_ORGS, visionOrgIdForTenantSlug, type VisionOrgId } from '../../../../vision/fleetWorld';
+import VisionOrgSelect from '../../../../vision/VisionOrgSelect';
+import { useVisionOrgFilter } from '../../../../vision/useVisionOrgFilter';
 
 
 import {
@@ -222,13 +220,7 @@ const MaaSGovernancePage = () => {
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
 
-  const isPlatformAdmin = pathname.startsWith('/provider');
-  const tenantSlugMatch = pathname.match(/^\/tenant-admin\/([^/]+)/);
-  const lockedOrgId = isPlatformAdmin
-    ? null
-    : visionOrgIdForTenantSlug(tenantSlugMatch?.[1] ?? 'northsummit');
-  const [selectedOrgId, setSelectedOrgId] = React.useState<VisionOrgId>(lockedOrgId ?? 'nsb');
-  const effectiveOrgId = lockedOrgId ?? selectedOrgId;
+  const { orgId: effectiveOrgId, setOrgId, showTenantSelect } = useVisionOrgFilter();
   const [modelDetailTab, setModelDetailTab] = React.useState<Record<string, 'deployments' | 'governance'>>({});
   const overviewColCount = OVERVIEW_COL_COUNT;
 
@@ -1696,6 +1688,7 @@ const MaaSGovernancePage = () => {
 
   const renderSubGroupsExpanded = (groups: string[], subId: string) => (
     <ExpandableRowContent>
+      <div className="pf-v6-u-pb-lg">
       <Table aria-label="Groups in subscription" variant="compact" isNested id={`j2-sub-groups-detail-${subId}`}>
         <Thead><Tr resetOffset><Th id={`j2-sub-groups-detail-th-${subId}`}>Group name</Th></Tr></Thead>
         <Tbody>
@@ -1706,11 +1699,13 @@ const MaaSGovernancePage = () => {
           ))}
         </Tbody>
       </Table>
+      </div>
     </ExpandableRowContent>
   );
 
   const renderSubModelsExpanded = (sub: SubscriptionListItem) => (
     <ExpandableRowContent>
+      <div className="pf-v6-u-pb-lg">
       <Table aria-label="Models in subscription" variant="compact" isNested id={`j2-sub-models-detail-${sub.id}`}>
         <Thead><Tr resetOffset><Th id={`j2-sub-models-detail-name-th-${sub.id}`}>Model name</Th><Th id={`j2-sub-models-detail-limits-th-${sub.id}`}>Token limits</Th></Tr></Thead>
         <Tbody>
@@ -1737,6 +1732,7 @@ const MaaSGovernancePage = () => {
           })}
         </Tbody>
       </Table>
+      </div>
     </ExpandableRowContent>
   );
 
@@ -1843,6 +1839,7 @@ const MaaSGovernancePage = () => {
 
   const renderPolGroupsExpanded = (groups: string[], polId: string) => (
     <ExpandableRowContent>
+      <div className="pf-v6-u-pb-lg">
       <Table aria-label="Groups in policy" variant="compact" isNested id={`j2-pol-groups-detail-${polId}`}>
         <Thead><Tr resetOffset><Th id={`j2-pol-groups-detail-th-${polId}`}>Group name</Th></Tr></Thead>
         <Tbody>
@@ -1853,11 +1850,13 @@ const MaaSGovernancePage = () => {
           ))}
         </Tbody>
       </Table>
+      </div>
     </ExpandableRowContent>
   );
 
   const renderPolModelsExpanded = (models: string[], polId: string) => (
     <ExpandableRowContent>
+      <div className="pf-v6-u-pb-lg">
       <Table aria-label="Models in policy" variant="compact" isNested id={`j2-pol-models-detail-${polId}`}>
         <Thead><Tr resetOffset><Th id={`j2-pol-models-detail-th-${polId}`}>Model name</Th></Tr></Thead>
         <Tbody>
@@ -1880,6 +1879,7 @@ const MaaSGovernancePage = () => {
           })}
         </Tbody>
       </Table>
+      </div>
     </ExpandableRowContent>
   );
 
@@ -2028,23 +2028,18 @@ const MaaSGovernancePage = () => {
       pageClassName="tenant-admin-maas-governance"
       kicker="AI"
       kickerExtra={
-        isPlatformAdmin ? (
-          <FormSelect
+        showTenantSelect ? (
+          <VisionOrgSelect
             id="j2-filter-org"
-            value={selectedOrgId}
-            onChange={(_event, value) => {
-              setSelectedOrgId(value as VisionOrgId)
+            value={effectiveOrgId}
+            onChange={(value) => {
+              setOrgId(value)
               setModelPage(1)
               setGroupPage(1)
               setSubPage(1)
               setPolPage(1)
             }}
-            aria-label="Filter by tenant"
-          >
-            {VISION_ORGS.map((org) => (
-              <FormSelectOption key={org.id} value={org.id} label={org.label} />
-            ))}
-          </FormSelect>
+          />
         ) : undefined
       }
       title="MaaS governance"

@@ -21,7 +21,6 @@ import {
   createInitialDeployments,
   createInitialPaths,
   deploymentMatchesFilters,
-  deploymentsOnCluster,
   ensureServingPath,
   gatewaysForOrgFilter,
   getVisionOffering,
@@ -35,6 +34,9 @@ import {
   type VisionServingPath,
   type VisionSiteId,
 } from '../../../vision/fleetWorld'
+import { externalModelsForOrg } from '../../../vision/externalModelSeed'
+import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../../vision/modelInstanceSeed'
+import { catalogItemVisibleForTenant } from '../../../vision/visionCatalogRows'
 import {
   relatedClusterIdsForSelection,
   seedVisionDrawerSelection,
@@ -45,7 +47,6 @@ import {
   type VisionDrawerTab,
   type VisionGridObjectType,
 } from '../../../vision/visionDrawer'
-import { catalogItemVisibleForTenant } from '../../../vision/visionCatalogRows'
 import { VisionAddClusterModal } from './VisionAddClusterModal'
 import { VisionFleetMap } from './VisionFleetMap'
 import { VisionFleetSummary } from './VisionFleetSummary'
@@ -112,10 +113,15 @@ export const VisionModelFleetPage = ({
     () => visibleOffPlatformModels(orgFilter),
     [orgFilter],
   )
-  const summary = useMemo(
-    () => summarizeFleet(visibleClusters, visibleDeployments, visibleOffPlatform),
-    [visibleClusters, visibleDeployments, visibleOffPlatform],
-  )
+  const summary = useMemo(() => {
+    const fleet = summarizeFleet(visibleClusters, visibleDeployments, visibleOffPlatform)
+    const groupedModels = groupModelInstancesByModelId(servicesModelsForOrg(orgFilter)).length
+    const externalModels = externalModelsForOrg(orgFilter).length
+    return {
+      ...fleet,
+      activeModels: groupedModels + externalModels,
+    }
+  }, [visibleClusters, visibleDeployments, visibleOffPlatform, orgFilter])
   const selectedCluster =
     detail.kind === 'cluster'
       ? (visibleClusters.find((cluster) => cluster.id === detail.clusterId) ??
@@ -130,9 +136,6 @@ export const VisionModelFleetPage = ({
     detail.kind === 'off-platform-model'
       ? (visibleOffPlatform.find((model) => model.id === detail.modelId) ?? null)
       : null
-  const clusterDeployments = selectedCluster
-    ? deploymentsOnCluster(visibleDeployments, selectedCluster.id)
-    : []
   const relatedClusterIds = relatedClusterIdsForSelection(
     highlight,
     visibleClusters,
@@ -299,7 +302,6 @@ export const VisionModelFleetPage = ({
                   selectedGateway={selectedGateway}
                   selectedOffPlatform={selectedOffPlatform}
                   deployments={visibleDeployments}
-                  clusterDeployments={clusterDeployments}
                   clusters={visibleClusters}
                   gateways={visibleGateways}
                   offPlatformModels={visibleOffPlatform}

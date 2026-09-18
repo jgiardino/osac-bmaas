@@ -40,7 +40,6 @@ type VisionGridPanelProps = {
   selectedGateway: VisionGateway | null
   selectedOffPlatform: VisionOffPlatformModel | null
   deployments: VisionDeployment[]
-  clusterDeployments: VisionDeployment[]
   clusters: VisionCluster[]
   gateways: VisionGateway[]
   offPlatformModels: VisionOffPlatformModel[]
@@ -77,7 +76,6 @@ export const VisionGridPanel = ({
   selectedGateway,
   selectedOffPlatform,
   deployments,
-  clusterDeployments,
   clusters,
   gateways,
   offPlatformModels,
@@ -151,7 +149,6 @@ export const VisionGridPanel = ({
       selectedCluster={selectedCluster}
       selectedGateway={selectedGateway}
       selectedOffPlatform={selectedOffPlatform}
-      clusterDeployments={clusterDeployments}
       deployments={deployments}
       clusters={clusters}
       gateways={gateways}

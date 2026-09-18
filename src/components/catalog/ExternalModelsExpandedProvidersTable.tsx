@@ -12,8 +12,7 @@ export const ExternalModelsExpandedProvidersTable = ({
   model,
   idPrefix,
 }: ExternalModelsExpandedProvidersTableProps) => (
-  <div className="pf-v6-u-pb-lg">
-    <Table
+  <Table
       aria-label={`Providers for ${model.displayName}`}
       variant="compact"
       isNested
@@ -69,5 +68,4 @@ export const ExternalModelsExpandedProvidersTable = ({
         ))}
       </Tbody>
     </Table>
-  </div>
 )

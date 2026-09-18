@@ -17,6 +17,8 @@ import { MOCK_PLAYGROUND_MODELS } from './mocks'
 import PlaygroundChatArea from './PlaygroundChatArea'
 import PlaygroundHeaderActions from './PlaygroundHeaderActions'
 import PlaygroundSettingsPanel from './PlaygroundSettingsPanel'
+import VisionOrgSelect from '../../../../vision/VisionOrgSelect'
+import { useVisionOrgFilter } from '../../../../vision/useVisionOrgFilter'
 
 // PatternFly Chatbot CSS overrides core styles; keep this import last among this module's imports.
 import '@patternfly/chatbot/dist/css/main.css'
@@ -26,8 +28,13 @@ import '@patternfly/chatbot/dist/css/main.css'
  * Layout/actions/settings structure only — no chat send/stream simulation.
  */
 export function PlaygroundPage() {
+  const { orgId, setOrgId, showTenantSelect } = useVisionOrgFilter()
   const [isDrawerExpanded, setDrawerExpanded] = useState(true)
-  const [selectedModel, setSelectedModel] = useState(MOCK_PLAYGROUND_MODELS[0].id)
+  const orgModels = MOCK_PLAYGROUND_MODELS.filter((model) => model.tenantId === orgId)
+  const [selectedModel, setSelectedModel] = useState(orgModels[0]?.id ?? MOCK_PLAYGROUND_MODELS[0].id)
+  const activeModelId = orgModels.some((model) => model.id === selectedModel)
+    ? selectedModel
+    : (orgModels[0]?.id ?? selectedModel)
   const [temperature, setTemperature] = useState(1)
   const [streamingEnabled, setStreamingEnabled] = useState(true)
   const [systemInstruction, setSystemInstruction] = useState('')
@@ -38,7 +45,7 @@ export function PlaygroundPage() {
   const [isDeleteOpen, setDeleteOpen] = useState(false)
 
   const modelName =
-    MOCK_PLAYGROUND_MODELS.find((m) => m.id === selectedModel)?.name ?? selectedModel
+    MOCK_PLAYGROUND_MODELS.find((m) => m.id === activeModelId)?.name ?? activeModelId
 
   const toggleMcp = (id: string) => {
     setSelectedMcpIds((prev) =>
@@ -55,6 +62,21 @@ export function PlaygroundPage() {
         justifyContent={{ default: 'justifyContentSpaceBetween' }}
       >
         <FlexItem>
+          {showTenantSelect ? (
+            <Flex
+              className="pf-v6-u-mb-sm"
+              display={{ default: 'inlineFlex' }}
+              alignItems={{ default: 'alignItemsCenter' }}
+            >
+              <FlexItem>
+                <VisionOrgSelect
+                  id="playground-filter-org"
+                  value={orgId}
+                  onChange={setOrgId}
+                />
+              </FlexItem>
+            </Flex>
+          ) : null}
           <Title headingLevel="h1" size="3xl" className="tenant-user-genai-playground__title">
             Playground
           </Title>
@@ -89,7 +111,7 @@ export function PlaygroundPage() {
             panelContent={
               <PlaygroundSettingsPanel
                 onClose={() => setDrawerExpanded(false)}
-                selectedModel={selectedModel}
+                selectedModel={activeModelId}
                 onModelChange={setSelectedModel}
                 temperature={temperature}
                 onTemperatureChange={setTemperature}

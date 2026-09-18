@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   AlertVariant,
@@ -31,10 +31,9 @@ import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from '@patternf
 import { GenaiPageStack } from '../../GenaiPageStack';
 import { mockApiKeysEngineerV34 } from '../mockDataV34';
 import { mockSubscriptions } from '../subscriptions/mockData';
-import {
-  apiKeyModelIdentities,
-  visionOrgFilterFromPathname,
-} from '../../../../../vision/modelInstanceSeed';
+import { apiKeyModelIdentities } from '../../../../../vision/modelInstanceSeed';
+import { useVisionOrgFilter } from '../../../../../vision/useVisionOrgFilter';
+import type { VisionOrgId } from '../../../../../vision/fleetWorld';
 import { MaasModelIdentity } from '../../../../../components/catalog/MaasModelIdentity';
 import type { Subscription, TokenRateLimit } from '../subscriptions/types';
 import { useApiKeysPaths } from '../useApiKeysPaths';
@@ -49,7 +48,7 @@ interface ConsumerModel {
   status: ModelStatus;
 }
 
-const toConsumerModels = (orgId: ReturnType<typeof visionOrgFilterFromPathname>): ConsumerModel[] =>
+const toConsumerModels = (orgId: VisionOrgId): ConsumerModel[] =>
   apiKeyModelIdentities(orgId).map((item) => ({
     id: item.maasModelRefId,
     name: item.maasModelRefId,
@@ -221,8 +220,8 @@ interface ModelAccessTableProps {
 
 const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'subscription' }) => {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const consumerModels = toConsumerModels(visionOrgFilterFromPathname(pathname));
+  const { orgId } = useVisionOrgFilter();
+  const consumerModels = toConsumerModels(orgId);
   const { subscriptionDetailsPath } = useApiKeysPaths();
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroup);
   const [searchValue, setSearchValue] = useState('');
@@ -241,7 +240,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
       string,
       Array<{ sub: Subscription; tokenRateLimits: TokenRateLimit | TokenRateLimit[] }>
     >();
-    for (const sub of userSubscriptions) {
+    for (const sub of mockSubscriptions) {
       for (const ref of sub.modelRefs) {
         const existing = map.get(ref.name) ?? [];
         existing.push({ sub, tokenRateLimits: ref.tokenRateLimits });
@@ -249,24 +248,9 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
       }
     }
     return map;
-  }, [userSubscriptions]);
+  }, []);
 
-  const allUniqueModels = useMemo(() => {
-    const seen = new Set<string>();
-    const result: ConsumerModel[] = [];
-    for (const sub of userSubscriptions) {
-      for (const ref of sub.modelRefs) {
-        if (!seen.has(ref.name)) {
-          seen.add(ref.name);
-          const found = consumerModels.find((m) => m.id === ref.name);
-          if (found) {
-            result.push(found);
-          }
-        }
-      }
-    }
-    return result;
-  }, [userSubscriptions, consumerModels]);
+  const allUniqueModels = consumerModels;
 
   const toggleModel = (id: string) => {
     setExpandedModels((prev) => {
@@ -425,6 +409,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
                   <Td />
                   <Td noPadding>
                     <ExpandableRowContent>
+                      <div className="pf-v6-u-pb-lg">
                       <Table
                         variant="compact"
                         isNested
@@ -481,6 +466,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
                           })}
                         </Tbody>
                       </Table>
+                      </div>
                     </ExpandableRowContent>
                   </Td>
                 </Tr>
@@ -550,6 +536,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
                   <Td />
                   <Td noPadding>
                     <ExpandableRowContent>
+                      <div className="pf-v6-u-pb-lg">
                       <Table
                         variant="compact"
                         isNested
@@ -611,6 +598,7 @@ const ModelAccessTable: React.FC<ModelAccessTableProps> = ({ defaultGroup = 'sub
                           })}
                         </Tbody>
                       </Table>
+                      </div>
                     </ExpandableRowContent>
                   </Td>
                 </Tr>

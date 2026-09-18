@@ -1,4 +1,5 @@
 import type { Subscription } from './types';
+import { maasGovernanceIdentities } from '../../../../../vision/modelInstanceSeed';
 
 // Generate YAML for a subscription
 const generateSubscriptionYAML = (subscription: Subscription): string => {
@@ -39,13 +40,14 @@ export const mockOwnerGroups = [
   { name: 'premium-users' },
 ];
 
-// Available models (MaaSModel references)
-export const mockMaaSModels = [
-  { id: 'granite-3b-instruct', name: 'Granite 3B instruct', provider: 'Internal', namespace: 'ml-project', description: 'Instruction-tuned model for automated pipelines and scheduled workflows.' },
-  { id: 'mistral-7b', name: 'Mistral 7B', provider: 'Internal', namespace: 'ml-project', description: 'Small-footprint text generation, summarization, and classification.' },
-  { id: 'titan-express', name: 'Titan Text Express', provider: 'External', namespace: 'ml-project', description: 'Amazon Bedrock text generation, published on North Summit Bank front doors.' },
-  { id: 'llama-4-scout', name: 'Llama 4 Scout', provider: 'Internal', namespace: 'bsfg-models', description: 'High-capacity reasoning and extended-context analysis.' },
-];
+// Available models (MaaSModel references) — same identities as MaaS governance.
+export const mockMaaSModels = maasGovernanceIdentities().map((item) => ({
+  id: item.maasModelRefId,
+  name: item.displayName,
+  provider: item.locationKind === 'off-platform' ? 'External' : 'Internal',
+  namespace: item.projectName,
+  description: item.description,
+}));
 
 // Mock subscriptions based on the MaaSSubscription CRD spec
 export const mockSubscriptions: Subscription[] = [
@@ -69,14 +71,14 @@ export const mockSubscriptions: Subscription[] = [
         billingRate: { perToken: 0.000001 },
       },
       {
-        name: 'titan-express',
-        tokenRateLimits: { limit: 50000, window: '24h' },
-        billingRate: { perToken: 0.00003 },
-      },
-      {
         name: 'mistral-7b',
         tokenRateLimits: { limit: 200000, window: '24h' },
         billingRate: { perToken: 0.000001 },
+      },
+      {
+        name: 'code-assist-ha',
+        tokenRateLimits: { limit: 50000, window: '24h' },
+        billingRate: { perToken: 0.00003 },
       },
     ],
     billingMetadata: {
@@ -140,9 +142,13 @@ export const mockSubscriptions: Subscription[] = [
         tokenRateLimits: { limit: 1000000, window: '24h' },
       },
       {
-        name: 'titan-express',
+        name: 'llama-4-scout',
         tokenRateLimits: { limit: 500000, window: '24h' },
         billingRate: { perToken: 0.00003 },
+      },
+      {
+        name: 'bsfg-research-ha',
+        tokenRateLimits: { limit: 200000, window: '24h' },
       },
       {
         name: 'mistral-7b',
@@ -163,7 +169,7 @@ export const mockSubscriptions: Subscription[] = [
     id: 'premium-external',
     name: 'premium-external',
     displayName: 'Premium External Models',
-    description: 'Access to Titan Text Express on Amazon Bedrock for premium users',
+    description: 'Access to Code Assist, Gemini, and Embeddings Pool for premium users',
     priority: 1,
     status: 'Pending',
     owner: {
@@ -173,9 +179,18 @@ export const mockSubscriptions: Subscription[] = [
     },
     modelRefs: [
       {
-        name: 'titan-express',
+        name: 'code-assist-ha',
         tokenRateLimits: { limit: 100000, window: '24h' },
         billingRate: { perToken: 0.00003 },
+      },
+      {
+        name: 'gemini-pro',
+        tokenRateLimits: { limit: 80000, window: '24h' },
+        billingRate: { perToken: 0.00003 },
+      },
+      {
+        name: 'embeddings-pool',
+        tokenRateLimits: { limit: 100000, window: '24h' },
       },
     ],
     billingMetadata: {

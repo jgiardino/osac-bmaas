@@ -47,13 +47,12 @@ export const InternalDeploymentsTable = ({
   displayName,
   idPrefix,
 }: InternalDeploymentsTableProps) => (
-  <div className="pf-v6-u-pb-lg">
-    <Table
-      aria-label={`Deployments for ${displayName}`}
-      variant="compact"
-      isNested
-      id={`${idPrefix}-deployments`}
-    >
+  <Table
+    aria-label={`Deployments for ${displayName}`}
+    variant="compact"
+    isNested
+    id={`${idPrefix}-deployments`}
+  >
       <Thead>
         <Tr resetOffset>
           <Th id={`${idPrefix}-th-cluster`}>Cluster</Th>
@@ -84,5 +83,4 @@ export const InternalDeploymentsTable = ({
         ))}
       </Tbody>
     </Table>
-  </div>
 )

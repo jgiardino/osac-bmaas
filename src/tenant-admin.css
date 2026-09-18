@@ -1602,7 +1602,7 @@
 
 .tenant-user-instances__card-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--sm);
 }
@@ -1636,7 +1636,6 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   min-width: 0;
-  padding-top: 0.5rem;
 }
 
 .tenant-user-instances__name-status-row {

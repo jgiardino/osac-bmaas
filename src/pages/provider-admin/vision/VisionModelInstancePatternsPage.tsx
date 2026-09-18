@@ -23,7 +23,7 @@ import {
   MODEL_INSTANCE_SEED,
   aiAssetModelIdentities,
   apiKeyModelIdentities,
-  isAssignedMaas,
+  maasGovernanceIdentities,
   maasGovernanceInstances,
   maasGovernanceModelRows,
   gatewayAssignmentLabel,
@@ -34,10 +34,10 @@ import {
 } from '../../../vision/modelInstanceSeed'
 
 const listedOnApiKeys = (item: ModelInstanceSeedItem) =>
-  isAssignedMaas(item) && item.onUserSubscription
+  maasGovernanceIdentities().some((entry) => entry.modelId === item.modelId)
 
 const listedOnAssets = (item: ModelInstanceSeedItem) =>
-  item.isMaas ? isAssignedMaas(item) : item.isAiAsset
+  aiAssetModelIdentities().some((entry) => entry.modelId === item.modelId)
 
 const presence = (ok: boolean) => (ok ? 'Yes' : '—')
 
@@ -389,8 +389,7 @@ export const VisionModelInstancePatternsPage = () => {
         </Title>
         <Content component="p">
           Nested on cluster details: Cluster is omitted. Includes on-cluster instances (Granite,
-          Mistral 7B, Credit-risk scorer) and externals whose gateway is hosted on this cluster
-          (Titan on nsb-markets).
+          Mistral 7B, Credit-risk scorer).
         </Content>
         <Stack hasGutter>
           {clusterEastModels.map((item) => (
@@ -411,8 +410,7 @@ export const VisionModelInstancePatternsPage = () => {
           AI Grid · models on gateway nsb-markets
         </Title>
         <Content component="p">
-          Nested on gateway details: Gateway is omitted. Includes Granite on US East and Titan
-          Text Express (external).
+          Nested on gateway details: Gateway is omitted. Includes Granite on US East.
         </Content>
         <Stack hasGutter>
           {gatewayMarketsModels.map((item) => (
@@ -458,7 +456,7 @@ export const VisionModelInstancePatternsPage = () => {
           Model column is display name, MaaS model ref id, and description. Filled Internal /
           External labels. One row per serving instance. Columns: Tenant, Project, Cluster,
           Gateway, Status, Subscriptions, Authorization policies. Llama 4 Scout is assigned with
-          subscriptions and 0 policies (Pending). Claude is unassigned 0 / 0 (Pending).
+          subscriptions and 0 policies (Pending).
         </Content>
         <PatternMaasTable />
       </StackItem>
@@ -480,8 +478,7 @@ export const VisionModelInstancePatternsPage = () => {
         </Title>
         <Content component="p">
           Same Model column. Filled MaaS label when the asset is a published MaaS model.
-          Credit-risk scorer is the non-MaaS asset. Unassigned MaaS (Claude Sonnet 4) is not
-          listed.
+          Credit-risk scorer is the non-MaaS asset.
         </Content>
         <PatternAssetTable />
       </StackItem>

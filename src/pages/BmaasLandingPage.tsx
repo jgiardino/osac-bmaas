@@ -204,10 +204,6 @@ export function BmaasLandingPage() {
           label: 'Projects',
           to: '/tenant-user/northsummit/workspace?nav=projects-teams',
         },
-        {
-          label: 'AI Grid (future vision)',
-          to: '/tenant-user/northsummit/workspace?vision=model-fleet&nav=vision-model-fleet',
-        },
       ],
     },
   ]

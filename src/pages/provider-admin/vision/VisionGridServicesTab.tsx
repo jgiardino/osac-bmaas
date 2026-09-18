@@ -34,7 +34,6 @@ type VisionGridServicesTabProps = {
   selectedCluster: VisionCluster | null
   selectedGateway: VisionGateway | null
   selectedOffPlatform: VisionOffPlatformModel | null
-  clusterDeployments: VisionDeployment[]
   deployments: VisionDeployment[]
   clusters: VisionCluster[]
   gateways: VisionGateway[]
@@ -65,7 +64,6 @@ export const VisionGridServicesTab = ({
   selectedCluster,
   selectedGateway,
   selectedOffPlatform,
-  clusterDeployments,
   deployments,
   clusters,
   gateways,
@@ -84,18 +82,7 @@ export const VisionGridServicesTab = ({
   if (mode === 'detail') {
     if (selection.kind === 'cluster') {
       return (
-        <VisionClusterInspector
-          cluster={selectedCluster}
-          deployments={clusterDeployments}
-          fleetDeployments={deployments}
-          offPlatformModels={offPlatformModels}
-          gateways={gateways}
-          highlight={highlight}
-          onHighlightDeployment={onHighlightDeployment}
-          onHighlightGateway={onHighlightGateway}
-          onViewDeployment={onViewDeployment}
-          onViewGateway={onViewGateway}
-        />
+        <VisionClusterInspector cluster={selectedCluster} />
       )
     }
     if (selection.kind === 'deployment') {

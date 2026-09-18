@@ -4,6 +4,8 @@ import { Tab, TabTitleText, Tabs } from '@patternfly/react-core'
 import { TenantUserPageChrome } from '../TenantUserPageChrome'
 import { McpTab } from './McpTab'
 import { ModelsTab } from './ModelsTab'
+import VisionOrgSelect from '../../../../vision/VisionOrgSelect'
+import { useVisionOrgFilter } from '../../../../vision/useVisionOrgFilter'
 
 type TabKey = 'models' | 'mcp'
 
@@ -17,12 +19,18 @@ type AiAssetEndpointsPageProps = {
  */
 export function AiAssetEndpointsPage({ onNavigateToPlayground }: AiAssetEndpointsPageProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('models')
+  const { orgId, setOrgId, showTenantSelect } = useVisionOrgFilter()
 
   return (
     <TenantUserPageChrome
       pageClassName="tenant-user-ai-asset-endpoints"
       title="AI asset endpoints"
       description="Browse endpoints for models and MCP servers that are available as AI assets."
+      kickerExtra={
+        showTenantSelect ? (
+          <VisionOrgSelect id="aae-filter-org" value={orgId} onChange={setOrgId} />
+        ) : undefined
+      }
     >
       <Tabs
         activeKey={activeTab}

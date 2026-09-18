@@ -209,6 +209,9 @@ export const MODEL_INSTANCE_SEED: readonly ModelInstanceSeedItem[] = [
     subscriptionCount: 0,
     policyCount: 0,
   },
+  // Parked off-platform MaaS examples. Restore these objects into MODEL_INSTANCE_SEED
+  // to put Titan (two front doors) and unassigned Claude back on MaaS governance.
+  /*
   {
     id: 'ext-titan-markets',
     displayName: 'Titan Text Express',
@@ -278,6 +281,7 @@ export const MODEL_INSTANCE_SEED: readonly ModelInstanceSeedItem[] = [
     subscriptionCount: 0,
     policyCount: 0,
   },
+  */
   {
     id: 'ext-code-assist-ha',
     displayName: 'Code Assist (HA)',
@@ -507,7 +511,7 @@ export const groupModelInstancesByModelId = (
   })
 }
 
-/** MaaS only reaches subscriptions / consumer lists when it is on a gateway. */
+/** True when a MaaS model is published on a gateway. Consumer lists no longer require this. */
 export const isAssignedMaas = (item: ModelInstanceSeedItem): boolean =>
   item.isMaas && Boolean(item.gatewayId)
 
@@ -525,25 +529,23 @@ const forOrg = (
 ): ModelInstanceSeedItem[] =>
   orgId === 'all' ? [...items] : items.filter((item) => item.tenantId === orgId)
 
+/** Unique MaaS models, same set as MaaS governance (grouped by model identity). */
+export const maasGovernanceIdentities = (
+  orgId: VisionOrgId | 'all' = 'all',
+): ModelInstanceSeedItem[] => forOrg(firstByModelId(maasGovernanceInstances()), orgId)
+
 export const apiKeyModelIdentities = (
   orgId: VisionOrgId | 'all' = 'all',
-): ModelInstanceSeedItem[] =>
-  forOrg(
-    firstByModelId(
-      MODEL_INSTANCE_SEED.filter((item) => isAssignedMaas(item) && item.onUserSubscription),
-    ),
-    orgId,
-  )
+): ModelInstanceSeedItem[] => maasGovernanceIdentities(orgId)
 
 export const aiAssetModelIdentities = (
   orgId: VisionOrgId | 'all' = 'all',
 ): ModelInstanceSeedItem[] =>
   forOrg(
-    firstByModelId(
-      MODEL_INSTANCE_SEED.filter((item) =>
-        item.isMaas ? isAssignedMaas(item) : item.isAiAsset,
-      ),
-    ),
+    firstByModelId([
+      ...maasGovernanceInstances(),
+      ...MODEL_INSTANCE_SEED.filter((item) => !item.isMaas && item.isAiAsset),
+    ]),
     orgId,
   )
 

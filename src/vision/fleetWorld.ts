@@ -443,6 +443,9 @@ export const createInitialDeployments = (): VisionDeployment[] => [
 ]
 
 export const VISION_OFF_PLATFORM_MODELS: VisionOffPlatformModel[] = [
+  // Parked: Titan Text Express (Bedrock, two NSB gateways) and Claude Sonnet 4 (Anthropic, unassigned).
+  // Restore these objects to bring them back as fleet off-platform models.
+  /*
   {
     id: 'ext-bedrock-titan',
     displayName: 'Titan Text Express',
@@ -463,6 +466,7 @@ export const VISION_OFF_PLATFORM_MODELS: VisionOffPlatformModel[] = [
     clusterId: 'ocp-us-east-1',
     gatewayIds: [],
   },
+  */
 ]
 
 export const createInitialPaths = (): VisionServingPath[] => [

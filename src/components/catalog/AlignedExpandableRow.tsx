@@ -23,7 +23,9 @@ export const AlignedExpandableRow = ({
   <Tr isExpanded={isExpanded} id={id}>
     <Td />
     <Td noPadding colSpan={colSpan} id={`${id}-td`}>
-      <ExpandableRowContent>{children}</ExpandableRowContent>
+      <ExpandableRowContent>
+        <div className="pf-v6-u-pb-lg">{children}</div>
+      </ExpandableRowContent>
     </Td>
     <Td />
   </Tr>

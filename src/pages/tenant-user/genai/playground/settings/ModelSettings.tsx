@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import {
   FormGroup,
   FormHelperText,
@@ -18,7 +17,7 @@ import OsacForm from '../../osacStubs/OsacForm';
 
 import { MOCK_PLAYGROUND_MODELS } from '../mocks';
 import { MaasModelIdentity } from '../../../../../components/catalog/MaasModelIdentity';
-import { visionOrgFilterFromPathname } from '../../../../../vision/modelInstanceSeed';
+import { useVisionOrgFilter } from '../../../../../vision/useVisionOrgFilter';
 
 interface ModelSettingsProps {
   selectedModel: string;
@@ -37,12 +36,8 @@ const ModelSettings = ({
   streamingEnabled,
   onStreamingChange,
 }: ModelSettingsProps) => {
-  const { pathname } = useLocation();
-  const orgId = visionOrgFilterFromPathname(pathname);
-  const models =
-    orgId === 'all'
-      ? MOCK_PLAYGROUND_MODELS
-      : MOCK_PLAYGROUND_MODELS.filter((model) => model.tenantId === orgId);
+  const { orgId } = useVisionOrgFilter();
+  const models = MOCK_PLAYGROUND_MODELS.filter((model) => model.tenantId === orgId);
   const [isOpen, setIsOpen] = useState(false);
   const selected = models.find((m) => m.id === selectedModel);
 
