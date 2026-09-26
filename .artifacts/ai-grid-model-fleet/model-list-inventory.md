@@ -32,7 +32,7 @@ In chat, **2.5** means the heading **2.5 Models catalog items** below.
 | ID | Decision | Status |
 | --- | --- | --- |
 | **1** | Object set in §1. Revise as we define, not by expanding into compute SKUs. | **Revised 2026-09-10** from review (same Catalog/Services lists; MaaS model; AI asset = Playground; external = MaaS-only for now) |
-| **2** | Which **Models** catalog items to seed | **Five in the UI** (2.5). BYOM documented, not shipped. Embedding out. |
+| **2** | Which **Models** catalog items to seed | **Five existing items** in the UI (2.5). BYOM is a configuration of an existing item, not a separate item; `predictive` is the confirmed BYOM example. Embedding out. |
 | **3** | Catalog Models lists: same live SKUs for North Summit Bank on platform admin, tenant admin, and tenant user (option A). Curation / pending-approval story later. | Agreed |
 | **4** | Instantiate action is **Launch instance** (not Place on AI Grid), including the AI Grid catalog kebab and modal | Agreed — wired |
 | **5** | Remove designer-iteration copy from model catalog details (Kind, “Model serving preset” heading, “Place this preset…” paragraph, and anything else that reads as build notes) | Agreed — wired |
@@ -162,16 +162,20 @@ OSAC-only (not on this RHOAI wizard): **site / cluster** (where on the grid), **
 
 Maps to objects we already named: **Add as AI asset** → AI asset. **Publish as MaaS** → MaaS model. Hardware profile + accelerator + replicas = **Size**.
 
-### 2.4 Model file is location (not a lock matrix)
+### 2.4 Model selection is configured on existing items (not a new BYOM SKU)
 
 The old 2.4 table (can be locked / list / user-provided on every property) is **withdrawn**. It over-applied the model-file idea to hardware, MaaS, project, and more. That did not define anything useful: almost every column was “yes.”
 
-Keep one distinction, only for **model file / location**, and show it as **different SKUs** in 2.5 — not as a policy grid:
+The model-source choice is a configuration of an existing catalog item, not a separate SKU. The existing Catalog and Services items remain; as the wizard flow is refined, update both item-detail surfaces to show the same properties and choices. The current direction covers these variants:
 
-| How this SKU sets the file | What the user does at launch |
-| --- | --- |
-| Predefined catalog model | Location comes with the model. No connections step. |
-| BYOM | User picks or creates a **connection** to where the file is. |
+| Model-selection configuration | Existing item example | What happens at launch |
+| --- | --- | --- |
+| BYOM | **predictive** | No predictive models are offered from the model catalog; the data scientist supplies a model they are developing. |
+| One specific model | **llm-tool-calling** | The admin configures the runtime for that model in the catalog item; launch is ready without further customization. |
+| Predefined subset | **llm-instruct** | The user chooses from a set of instruction-appropriate models at launch. |
+| Any model in the configured catalog | **Not assigned yet** | Desired variant; decide which existing item, if any, should demonstrate it. |
+
+These examples establish the selection variation, not every field or lock policy. Model location and credentials must be supplied by whoever chooses or provides the model; the Connections versus OSAC Secrets flow remains to be resolved.
 
 ### 2.5 Models catalog items (seed for UI)
 
@@ -179,7 +183,7 @@ Keep one distinction, only for **model file / location**, and show it as **diffe
 
 **Embedding:** out of this seed.
 
-**BYOM (`llm-byom`):** keep in this table for later. **Do not include in the UI seed.** Connections and unscoped hardware are out of this pass.
+**BYOM is not a catalog item.** Do not add an `llm-byom` row or card. Represent BYOM on an existing item; `predictive` is the confirmed example. Connections and unscoped hardware still need to be worked through in the wizard flows.
 
 **UI seed (five items):** lightweight text gen, instruct, tool calling, high-capacity reasoning, predictive.
 
@@ -194,15 +198,15 @@ Display names on the card use the same lowercase kebab-case as Ethan’s items (
 | `llm-tool-calling` | **llm-tool-calling** | Agentic workflows, function calling, structured API parameter generation, multi-step execution chains. | vLLM (function engine) **Locked** | 32 vCPU **Editable** | 128 GB **Editable** | 1× NVIDIA A100 (80 GB) **Editable** | 32,768 tokens **Editable** | < 200 ms **Locked** |
 | `llm-high-capacity-reasoning` | **llm-high-capacity-reasoning** | Multi-GPU blueprint for large-scale models (70B+): complex reasoning, deep analysis, extended context. Example file class: Qwen-scale. | vLLM (tensor parallel) **Locked** | 64 vCPU **Editable** | 512 GB **Editable** | 4× NVIDIA A100 (80 GB) **Editable** | 128,000 tokens **Editable** | < 500 ms **Locked** |
 | `predictive` | **predictive** | Low-latency endpoint for classical tabular models (XGBoost, scikit-learn, LightGBM): real-time scoring, classification, regression. Reminds the catalog that data scientists are in scope. | Triton Inference Server **Locked** | 4 vCPU **Editable** | 16 GB **Editable** | None (CPU optimized) **Locked** | N/A (tabular features) **Locked** | < 10 ms **Locked** |
-| `llm-byom` | **llm-byom** | User supplies the model file (location via connections). Hardware is not predefined because the model can be any size. **Documented only — not in the UI seed.** | vLLM **Editable** | Set at launch **Editable** | Set at launch **Editable** | Set at launch **Editable** | Set at launch **Editable** | Set at launch **Editable** |
 
-At launch, predefined LLM SKUs still need a **model file** from the RHOAI catalog (location provided). Prototype instantiate: simple form input until the catalog picker exists.
+At launch, items configured for a catalog model or subset show those model choices; the user chooses from the available set when applicable. Items configured for a specific model launch with that model and its catalog-defined runtime. BYOM items let the user supply their model location and credentials; `predictive` is the confirmed example. Prototype instantiate may use a simple form input until a model picker and credential flow exist.
 
 External models stay **out of Catalog and out of Services**. Working rule: MaaS governance only.
 
 ### 2.6 Confirm before seeding the UI
 
-- Five SKUs in Catalog (BYOM listed above but not shipped).
+- The five existing Catalog items; no separate BYOM item. Confirmed examples: `predictive` = BYOM, `llm-tool-calling` = one specific model, and `llm-instruct` = a predefined subset. The item for the full configured catalog remains undecided.
+- Refine wizard fields and then update the existing Catalog and Services item details together so their properties match the flow.
 - Six card keys; sentence-case labels (**Serving engine**, **Max context**, **Target latency**).
 - Shared catalog card + a vision-gated **patterns page** to finalize chrome once (see 2.7).
 - **Review existing Services / MaaS / keys / asset lists, then** one master instance + external list (see 2.8). Do not invent that list from Catalog SKUs alone.
