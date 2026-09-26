@@ -153,6 +153,10 @@ export function BmaasLandingPage() {
       label: 'External IP Pools',
       to: '/provider/workspace?nav=networking',
     },
+    {
+      label: 'AI Grid (future vision)',
+      to: '/ai-grid',
+    },
   ]
 
   const roles: RoleBlockProps[] = [
@@ -202,6 +206,10 @@ export function BmaasLandingPage() {
         {
           label: 'Billing account inactive',
           to: '/tenant-admin/northsummit/workspace?nav=catalog&scenario=billing-inactive',
+        },
+        {
+          label: 'AI Grid (future vision)',
+          to: '/ai-grid',
         },
       ],
     },
@@ -316,7 +324,21 @@ export function BmaasLandingPage() {
             </Button>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
-                Created by{' '}
+                AI Grid (future vision) by{' '}
+                <Button
+                  variant="link"
+                  component="a"
+                  isInline
+                  href="https://github.com/jgiardino"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Jenn Giardino
+                </Button>
+                .
+              </Content>
+              <Content component="p">
+                Underlying prototype created by{' '}
                 <Button
                   variant="link"
                   component="a"

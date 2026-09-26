@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { RhUiAiModelIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-ai-model-icon'
+import { GlobeRouteIcon } from '@patternfly/react-icons/dist/esm/icons/globe-route-icon'
 import { RhUiClusterIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-cluster-icon'
 import { RhUiServerStackIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-server-stack-icon'
 import { RhUiVirtualServerIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-virtual-server-icon'
@@ -16,3 +17,6 @@ export const CATALOG_SERVICE_ICONS: Record<CatalogServiceId, ReactNode> = {
 export function getCatalogServiceIcon(serviceId: CatalogServiceId): ReactNode {
   return CATALOG_SERVICE_ICONS[serviceId]
 }
+
+/** A gateway is a serving path in AI Grid rather than a catalog service type. */
+export const getGatewayIcon = (): ReactNode => <GlobeRouteIcon />

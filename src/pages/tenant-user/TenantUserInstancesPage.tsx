@@ -33,6 +33,12 @@ import {
 import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
 import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
+import {
+  ServicesModelsViewToggle,
+  type ServicesModelsViewMode,
+} from '../../components/catalog/ServicesModelsViewToggle'
+import { ServicesModelsLegacyCards } from '../../components/catalog/ServicesModelsLegacyCards'
+import { ServicesModelsLegacyTable } from '../../components/catalog/ServicesModelsLegacyTable'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
 import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
@@ -238,6 +244,9 @@ export function TenantUserInstancesPage({
   }, [tenantSlug])
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => getInstancesViewMode('grid'))
+  const [modelsViewMode, setModelsViewMode] = useState<ServicesModelsViewMode>(() =>
+    getInstancesViewMode('grid') === 'grid' ? 'current-cards' : 'current-table',
+  )
   const [organizationFilter, setOrganizationFilter] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const [powerStateFilter, setPowerStateFilter] = useState<'all' | TenantInstanceStatus>('all')
@@ -410,6 +419,7 @@ export function TenantUserInstancesPage({
   }, [lockedServiceId])
 
   const isClustersPage = lockedServiceId === 'cluster'
+  const isModelsPage = lockedServiceId === 'models'
   const hasServiceSpecFilters = Boolean(lockedServiceId)
   const hasActiveServiceFilters =
     organizationFilter !== '' ||
@@ -830,6 +840,18 @@ export function TenantUserInstancesPage({
   const handleViewModeChange = (nextViewMode: ViewMode) => {
     setViewMode(nextViewMode)
     setInstancesViewMode(nextViewMode)
+    if (isModelsPage) {
+      setModelsViewMode(nextViewMode === 'grid' ? 'current-cards' : 'current-table')
+    }
+  }
+
+  const handleModelsViewModeChange = (nextMode: ServicesModelsViewMode) => {
+    setModelsViewMode(nextMode)
+    if (nextMode === 'current-cards' || nextMode === 'current-table') {
+      const nextViewMode = nextMode === 'current-cards' ? 'grid' : 'list'
+      setViewMode(nextViewMode)
+      setInstancesViewMode(nextViewMode)
+    }
   }
 
   const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
@@ -1091,12 +1113,19 @@ export function TenantUserInstancesPage({
             />
           </div>
           {instances.length > 0 ? (
-            <ViewModeToggle
-              viewMode={viewMode}
-              onChange={handleViewModeChange}
-              ariaLabel="Services view"
-              idPrefix="instances-view"
-            />
+            isModelsPage ? (
+              <ServicesModelsViewToggle
+                viewMode={modelsViewMode}
+                onChange={handleModelsViewModeChange}
+              />
+            ) : (
+              <ViewModeToggle
+                viewMode={viewMode}
+                onChange={handleViewModeChange}
+                ariaLabel="Services view"
+                idPrefix="instances-view"
+              />
+            )
           ) : null}
         </div>
 
@@ -1158,6 +1187,15 @@ export function TenantUserInstancesPage({
             </EmptyStateBody>
           </EmptyState>
           )
+        ) : isModelsPage && modelsViewMode === 'original-cards' ? (
+          <ServicesModelsLegacyCards
+            instances={filteredInstances}
+            onViewDetails={handleViewDetails}
+          />
+        ) : isModelsPage && modelsViewMode === 'original-table' ? (
+          <div className="catalog-table-panel">
+            <ServicesModelsLegacyTable instances={filteredInstances} />
+          </div>
         ) : viewMode === 'grid' ? (
             <div className="catalog-card-grid tenant-user-instances__grid">
               {filteredInstances.map((instance) => {

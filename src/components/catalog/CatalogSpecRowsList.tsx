@@ -14,6 +14,8 @@ type CatalogSpecRowsListProps = {
   rowClassName?: string
   labelClassName?: string
   valueClassName?: string
+  idPrefix?: string
+  afterRows?: ReactNode
 }
 
 type SpecDisplayBlock =
@@ -78,15 +80,27 @@ export function CatalogSpecRowsList({
   rowClassName = 'provider-admin-catalog-items__spec-row',
   labelClassName = 'provider-admin-catalog-items__spec-label',
   valueClassName = 'provider-admin-catalog-items__spec-value',
+  idPrefix,
+  afterRows,
 }: CatalogSpecRowsListProps) {
   const blocks = buildSpecDisplayBlocks(rows)
 
-  const renderRow = (row: CatalogSpecRow) => (
-    <div key={row.label} className={rowClassName}>
-      <dt className={labelClassName}>{row.label}</dt>
-      <dd className={valueClassName}>{renderSpecRowValue(row)}</dd>
-    </div>
-  )
+  const renderRow = (row: CatalogSpecRow) => {
+    const rowId = idPrefix
+      ? `${idPrefix}-${row.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+      : undefined
+
+    return (
+      <div key={row.label} className={rowClassName}>
+        <dt className={labelClassName} id={rowId ? `${rowId}-label` : undefined}>
+          {row.label}
+        </dt>
+        <dd className={valueClassName} id={rowId ? `${rowId}-value` : undefined}>
+          {renderSpecRowValue(row)}
+        </dd>
+      </div>
+    )
+  }
 
   return (
     <dl className={className}>
@@ -108,6 +122,7 @@ export function CatalogSpecRowsList({
           </div>
         )
       })}
+      {afterRows}
     </dl>
   )
 }
