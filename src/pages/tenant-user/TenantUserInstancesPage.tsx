@@ -37,8 +37,9 @@ import {
   ServicesModelsViewToggle,
   type ServicesModelsViewMode,
 } from '../../components/catalog/ServicesModelsViewToggle'
-import { ServicesModelsLegacyCards } from '../../components/catalog/ServicesModelsLegacyCards'
-import { ServicesModelsLegacyTable } from '../../components/catalog/ServicesModelsLegacyTable'
+import { ExternalModelCard } from '../../components/catalog/ExternalModelCard'
+import { ModelsInstanceCard } from '../../components/catalog/ModelsInstanceCard'
+import { ServicesModelsTable } from '../../components/catalog/ServicesModelsTable'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
 import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
@@ -98,6 +99,9 @@ import { shouldHideDemoServicesInstances } from '../../demo/billingInactiveScena
 import { ensureTenantDemoProjects } from '../../tenantAdmin/storage'
 import type { TenantProject } from '../../tenantAdmin/projects'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
+import { externalModelsForOrg } from '../../vision/externalModelSeed'
+import { visionOrgIdForTenantSlug } from '../../vision/fleetWorld'
+import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../vision/legacyModelInstanceSeed'
 import {
   ALL_PROJECTS_SCOPE_ID,
   filterInstancesByProjectScope,
@@ -247,6 +251,7 @@ export function TenantUserInstancesPage({
   const [modelsViewMode, setModelsViewMode] = useState<ServicesModelsViewMode>(() =>
     getInstancesViewMode('grid') === 'grid' ? 'current-cards' : 'current-table',
   )
+  const [expandedModelIds, setExpandedModelIds] = useState<ReadonlySet<string>>(() => new Set())
   const [organizationFilter, setOrganizationFilter] = useState('')
   const [searchValue, setSearchValue] = useState('')
   const [powerStateFilter, setPowerStateFilter] = useState<'all' | TenantInstanceStatus>('all')
@@ -289,6 +294,40 @@ export function TenantUserInstancesPage({
   }, [organizationFilter, organizations])
 
   const scopeTenantSlug = selectedOrganization?.slug ?? tenantSlug
+  const originalModelsOrgId = showTenantFilter && !selectedOrganization
+    ? 'all'
+    : visionOrgIdForTenantSlug(scopeTenantSlug)
+  const originalModelInstances = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+    return servicesModelsForOrg(originalModelsOrgId).filter((item) => {
+      if (!query) {
+        return true
+      }
+      return (
+        item.displayName.toLowerCase().includes(query) ||
+        item.modelId.toLowerCase().includes(query) ||
+        (item.catalogSkuName ?? '').toLowerCase().includes(query)
+      )
+    })
+  }, [originalModelsOrgId, searchValue])
+  const originalExternalModels = useMemo(() => {
+    const query = searchValue.trim().toLowerCase()
+    return externalModelsForOrg(originalModelsOrgId).filter((model) => {
+      if (!query) {
+        return true
+      }
+      return (
+        model.displayName.toLowerCase().includes(query) ||
+        model.name.toLowerCase().includes(query) ||
+        model.description.toLowerCase().includes(query) ||
+        model.providerRefs.some((ref) => ref.displayName.toLowerCase().includes(query))
+      )
+    })
+  }, [originalModelsOrgId, searchValue])
+  const groupedOriginalModels = useMemo(
+    () => groupModelInstancesByModelId(originalModelInstances),
+    [originalModelInstances],
+  )
 
   const switcherProjects = useMemo(() => {
     if (showTenantFilter && selectedOrganization) {
@@ -630,8 +669,10 @@ export function TenantUserInstancesPage({
     specFilterSelections,
   ])
 
+  const isOriginalModelsView =
+    isModelsPage && (modelsViewMode === 'original-cards' || modelsViewMode === 'original-table')
   const showFilterResultsSummary =
-    filterDescriptionParts.length > 0 && filteredInstances.length > 0
+    !isOriginalModelsView && filterDescriptionParts.length > 0 && filteredInstances.length > 0
 
   const clearAllFilters = () => {
     if (!isAllProjectsScope(projectScopeId)) {
@@ -854,6 +895,18 @@ export function TenantUserInstancesPage({
     }
   }
 
+  const toggleExpandedModel = (modelId: string) => {
+    setExpandedModelIds((current) => {
+      const next = new Set(current)
+      if (next.has(modelId)) {
+        next.delete(modelId)
+      } else {
+        next.add(modelId)
+      }
+      return next
+    })
+  }
+
   const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
     setSelectedFilters((current) => toggleCatalogServiceFilter(current, serviceId, isSelected))
   }
@@ -861,7 +914,9 @@ export function TenantUserInstancesPage({
   const pageTitle = lockedServiceId
     ? CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]
     : 'Services'
-  const pageLede = lockedServiceId
+  const pageLede = isOriginalModelsView
+    ? 'On-cluster serving instances and external models in one list. Expand a row in the table view to see instance details or provider weights.'
+    : lockedServiceId
     ? isAllProjectsScope(projectScopeId)
       ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
       : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
@@ -1105,11 +1160,11 @@ export function TenantUserInstancesPage({
             ) : null}
             <SearchInput
               className="catalog-search"
-              placeholder="Search instances"
+              placeholder={isModelsPage ? 'Search models' : 'Search instances'}
               value={searchValue}
               onChange={(_event, value) => setSearchValue(value)}
               onClear={() => setSearchValue('')}
-              aria-label="Search instances"
+              aria-label={isModelsPage ? 'Search models' : 'Search instances'}
             />
           </div>
           {instances.length > 0 ? (
@@ -1159,7 +1214,74 @@ export function TenantUserInstancesPage({
           />
         ) : null}
 
-        {filteredInstances.length === 0 ? (
+        {isOriginalModelsView ? (
+          originalModelInstances.length === 0 && originalExternalModels.length === 0 ? (
+            searchValue.trim() ? (
+              <CatalogFilterEmptyState
+                title="No models match your search"
+                description="Try a different search term or clear the search field."
+                onClearFilters={clearAllFilters}
+              />
+            ) : (
+              <EmptyState className="tenant-user-instances__empty">
+                <span className="tenant-user-instances__empty-icon" aria-hidden>
+                  {getCatalogServiceIcon('models')}
+                </span>
+                <Title headingLevel="h2" size="lg">
+                  No models yet
+                </Title>
+                <EmptyStateBody>
+                  Launch a model instance from the catalog or register an external model.
+                </EmptyStateBody>
+              </EmptyState>
+            )
+          ) : (
+            <>
+              <CatalogFilterResultsSummary
+                filteredCount={groupedOriginalModels.length + originalExternalModels.length}
+                totalCount={
+                  groupModelInstancesByModelId(servicesModelsForOrg(originalModelsOrgId)).length +
+                  externalModelsForOrg(originalModelsOrgId).length
+                }
+                singular="model"
+                filterParts={searchValue.trim() ? [searchValue.trim()] : []}
+                onClearFilters={clearAllFilters}
+              />
+              {modelsViewMode === 'original-table' ? (
+                <div className="catalog-table-panel">
+                  <ServicesModelsTable
+                    instances={originalModelInstances}
+                    externalModels={originalExternalModels}
+                    expandedIds={expandedModelIds}
+                    onToggleExpand={toggleExpandedModel}
+                    idPrefix="services-models-original-table"
+                  />
+                </div>
+              ) : (
+                <div className="catalog-card-grid tenant-user-instances__grid">
+                  {groupedOriginalModels.map((group) => (
+                    <ModelsInstanceCard
+                      key={group.modelId}
+                      item={group.representative}
+                      clusterLabel={group.clusterLabel}
+                      clusterIds={group.clusterIds}
+                      showTenant={showTenantFilter}
+                      idPrefix="services-models-original"
+                    />
+                  ))}
+                  {originalExternalModels.map((model) => (
+                    <ExternalModelCard
+                      key={model.name}
+                      model={model}
+                      showTenant={showTenantFilter}
+                      idPrefix="services-external-models-original"
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        ) : filteredInstances.length === 0 ? (
           filterDescriptionParts.length > 0 ? (
             <CatalogFilterEmptyState
               title="No instances match your filters"
@@ -1187,15 +1309,6 @@ export function TenantUserInstancesPage({
             </EmptyStateBody>
           </EmptyState>
           )
-        ) : isModelsPage && modelsViewMode === 'original-cards' ? (
-          <ServicesModelsLegacyCards
-            instances={filteredInstances}
-            onViewDetails={handleViewDetails}
-          />
-        ) : isModelsPage && modelsViewMode === 'original-table' ? (
-          <div className="catalog-table-panel">
-            <ServicesModelsLegacyTable instances={filteredInstances} />
-          </div>
         ) : viewMode === 'grid' ? (
             <div className="catalog-card-grid tenant-user-instances__grid">
               {filteredInstances.map((instance) => {

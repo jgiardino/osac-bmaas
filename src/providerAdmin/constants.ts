@@ -1,5 +1,6 @@
 export type ProviderAdminNavId =
   | 'overview'
+  | 'ai-grid'
   | 'catalog'
   | 'services-baremetal'
   | 'services-clusters'
@@ -27,6 +28,7 @@ export type ProviderAdminNavItem = {
 
 export const PROVIDER_ADMIN_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'ai-grid', label: 'AI Grid' },
   { id: 'catalog', label: 'Catalog' },
 ]
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Content, Tab, TabTitleText, Tabs } from '@patternfly/react-core'
+import { Content, Tab, TabTitleText, Tabs } from '@patternfly/react-core'
 import '../../../model-authoring-flows.css'
 import {
   DEMO_APPROVED_MODELS,
@@ -42,14 +42,6 @@ export function VisionModelAuthoringFlowsPage() {
       <Content component="p">
         Explore the provider-admin catalog item flow and tenant launch flow. Model-choice and lock policies carry from the catalog preview into the launch preview.
       </Content>
-      <Alert
-        isInline
-        variant="info"
-        title="Illustrative prototype based on the Deploy Model property map."
-        className="vision-model-authoring-flows__alert"
-      >
-        BYOM configures an existing Catalog item. The examples are predictive = BYOM, llm-tool-calling = one fixed model, and llm-instruct = a predefined model set; the item for the full configured catalog remains undecided. Model names, cluster inventory, and Secret references are sample content. The person supplying a source location supplies credentials; OSAC Secret handling remains an open design question. No hidden model properties are assigned yet. View or specify YAML remains a follow-up; neither wizard exposes YAML yet.
-      </Alert>
       <Tabs
         activeKey={activeFlow}
         onSelect={(_event, key) => setActiveFlow(key as 'catalog-item' | 'service-instance')}

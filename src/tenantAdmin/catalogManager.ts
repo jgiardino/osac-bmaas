@@ -29,6 +29,7 @@ import {
   ensureProviderCatalogDemoItems,
   sortByDemoCatalogOrder,
 } from '../providerSetup/prototypeEntry'
+import { MODEL_CATALOG_ITEM_IDS } from '../vision/modelCatalogSeed'
 import {
   toProviderCatalogDraftFromTenantCatalogItem,
   type TenantCatalogItem,
@@ -113,6 +114,7 @@ const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
   LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  ...MODEL_CATALOG_ITEM_IDS,
 ])
 
 function isTenantAdminDemoProviderCatalogItem(catalogItemId: string): boolean {

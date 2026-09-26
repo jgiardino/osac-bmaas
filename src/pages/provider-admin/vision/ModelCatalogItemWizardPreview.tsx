@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  Alert,
   Card,
   CardBody,
   Checkbox,
@@ -68,7 +67,6 @@ export function ModelCatalogItemWizardPreview({
   settingModes,
   onSettingModeChange,
 }: ModelCatalogItemWizardPreviewProps) {
-  const [isPublished, setIsPublished] = useState(false)
   const [visibility, setVisibility] = useState<'global' | 'tenant'>('tenant')
   const [displayName, setDisplayName] = useState('llm-instruct')
   const [description, setDescription] = useState(
@@ -131,7 +129,6 @@ export function ModelCatalogItemWizardPreview({
         className="vision-model-flow-preview__wizard"
         height="46rem"
         navAriaLabel="Create model catalog item steps"
-        onSave={() => setIsPublished(true)}
       >
         <WizardStep name="Service" id="model-catalog-service">
           <Content component="p" className="provider-setup-template__publish-step-lede">
@@ -282,13 +279,6 @@ export function ModelCatalogItemWizardPreview({
               </div>
             </div>
           </Form>
-          <Alert
-            isInline
-            variant="info"
-            title="For the MVP, deployed service access is through MaaS subscriptions."
-          >
-            Project access for a tenant team is a future enhancement.
-          </Alert>
         </WizardStep>
 
         <WizardStep name="Cluster availability" id="model-catalog-clusters">
@@ -514,9 +504,6 @@ export function ModelCatalogItemWizardPreview({
               </FormGroup>
             ) : null}
           </Form>
-          <Alert isInline variant="warning" title="Credential and source handling needs confirmation.">
-            Whoever supplies a model source location supplies its credentials. RHOAI uses Connections; OSAC appears to use Secrets, and the Secret flow remains unresolved.
-          </Alert>
         </WizardStep>
 
         <WizardStep name="Serving configuration" id="model-catalog-serving">
@@ -580,10 +567,6 @@ export function ModelCatalogItemWizardPreview({
               {settingPolicyField('lifecycle', 'Deployment strategy', 'Rolling update')}
             </StackItem>
           </Stack>
-          <Alert isInline variant="info" title="Catalog display category: Hidden / not editable">
-            No model properties are assigned to this category yet. Which properties, if any,
-            should be omitted from catalog item creation remains to be decided.
-          </Alert>
         </WizardStep>
 
         <WizardStep name="Review" id="model-catalog-review">
@@ -638,23 +621,6 @@ export function ModelCatalogItemWizardPreview({
               <DescriptionListDescription>Through MaaS subscriptions</DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
-          {isPublished ? (
-            <Alert
-              isInline
-              variant="success"
-              title="Preview complete."
-              className="vision-model-flow-preview__success"
-            >
-              This prototype illustrates the catalog item; it does not publish a live offering.
-            </Alert>
-          ) : null}
-          <Alert
-            isInline
-            variant="info"
-            title="No hidden properties have been identified for this item yet."
-          >
-            Confirm whether any model settings should be hidden when the field inventory is finalized.
-          </Alert>
         </WizardStep>
       </Wizard>
     </div>

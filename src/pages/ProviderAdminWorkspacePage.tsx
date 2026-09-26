@@ -21,6 +21,7 @@ import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdmi
 import { PlaceholderProviderAdminPage } from './PlaceholderProviderAdminPage'
 import { ProviderServiceSelectionPage } from './provider-setup/ProviderServiceSelectionPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
+import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
@@ -275,6 +276,18 @@ export function ProviderAdminWorkspacePage() {
               catalogEditLeaveAttemptRef.current = attemptLeave
             }}
           />
+        )
+      case 'ai-grid':
+        return (
+          <div className="ai-grid-future-vision">
+            <VisionModelFleetPage
+              catalogItems={catalogItems}
+              onOpenCatalogPreset={(catalogItemId) => {
+                setOpenCatalogItemKey(catalogItemId)
+                handleNavChange('catalog')
+              }}
+            />
+          </div>
         )
       case 'infrastructure-data-centers':
         return <ProviderAdminDataCentersPage />

@@ -706,6 +706,7 @@ export function ensureProviderPostSetupPrototype(
 export function isProviderAdminNavId(value: string | null): value is ProviderAdminNavId {
   return (
     value === 'overview' ||
+    value === 'ai-grid' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||

@@ -86,7 +86,6 @@ export function ModelServiceLaunchWizardPreview({
 }: ModelServiceLaunchWizardPreviewProps) {
   const [settings, setSettings] = useState<LaunchSettingValues>(DEFAULT_LAUNCH_SETTING_VALUES)
   const [clusterId, setClusterId] = useState('east-gpu')
-  const [isSubmitted, setIsSubmitted] = useState(false)
   const [modelChoice, setModelChoice] = useState<string>(DEMO_APPROVED_MODELS[0])
   const [userModelType, setUserModelType] = useState<DeployModelType | null>(null)
 
@@ -136,7 +135,6 @@ export function ModelServiceLaunchWizardPreview({
         className="vision-model-flow-preview__wizard"
         height="46rem"
         navAriaLabel="Launch model instance steps"
-        onSave={() => setIsSubmitted(true)}
       >
         <WizardStep name="General" id="model-launch-general">
           <Title headingLevel="h2" size="xl">
@@ -163,9 +161,6 @@ export function ModelServiceLaunchWizardPreview({
               />
             </FormGroup>
           </Form>
-          <Alert isInline variant="info" title="Access is provided through a MaaS subscription.">
-            Project access for the tenant team is a future enhancement.
-          </Alert>
         </WizardStep>
 
         <WizardStep name="Cluster availability" id="model-launch-cluster">
@@ -268,9 +263,6 @@ export function ModelServiceLaunchWizardPreview({
                       <FormSelectOption value="team-model-source" label="team-model-source · Secret reference" />
                     </FormSelect>
                   </FormGroup>
-                  <Alert isInline variant="warning" title="Credential handling needs confirmation.">
-                    The person supplying the model source also supplies its credentials. OSAC Secret creation and reference details remain unresolved.
-                  </Alert>
                 </Form>
               ) : modelChoicePolicy === 'fixed-model' ? (
                 <Form>
@@ -319,9 +311,6 @@ export function ModelServiceLaunchWizardPreview({
                       <FormSelectOption value="team-model-secret" label="team-model-source · Secret" />
                     </FormSelect>
                   </FormGroup>
-                  <Alert isInline variant="warning" title="Secret handling needs confirmation.">
-                    RHOAI uses Connections. OSAC appears to use Secrets; the intended Secret flow is still open.
-                  </Alert>
                 </Form>
               )}
             </StackItem>
@@ -412,31 +401,12 @@ export function ModelServiceLaunchWizardPreview({
               <DescriptionListDescription>MaaS subscription</DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
-          {isSubmitted ? (
-            <Alert
-              isInline
-              variant="success"
-              title="Preview complete."
-              className="vision-model-flow-preview__success"
-            >
-              This prototype illustrates the launch settings; it does not create a live model instance.
-            </Alert>
-          ) : null}
         </WizardStep>
 
         <WizardStep name="Provisioning" id="model-launch-provisioning">
           <Title headingLevel="h2" size="xl">
             Provisioning
           </Title>
-          {isSubmitted ? (
-            <Alert isInline variant="success" title="Launch preview complete.">
-              The live model instance would appear under Services after provisioning.
-            </Alert>
-          ) : (
-            <Alert isInline variant="info" title="After launch, follow instance progress in Services.">
-              Review and provisioning are service-specific completion steps outside the Deploy Model property groups.
-            </Alert>
-          )}
         </WizardStep>
       </Wizard>
     </div>

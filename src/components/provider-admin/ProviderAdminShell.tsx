@@ -171,6 +171,9 @@ export function ProviderAdminShell({
             >
               Overview
             </NavItem>
+            <NavItem itemId="ai-grid" isActive={activeNavId === 'ai-grid'} to="#" preventDefault>
+              AI Grid
+            </NavItem>
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
               Catalog
             </NavItem>
