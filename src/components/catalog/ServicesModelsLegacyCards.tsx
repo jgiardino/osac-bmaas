@@ -48,7 +48,17 @@ export const ServicesModelsLegacyCards = ({
               </div>
               <dl className="tenant-user-catalog__specs-list">
                 <div className="tenant-user-catalog__spec-row">
-                  <dt className="tenant-user-catalog__spec-label">Deployments</dt>
+                  <dt className="tenant-user-catalog__spec-label">Model</dt>
+                  <dd className="tenant-user-catalog__spec-value">{group.modelId}</dd>
+                </div>
+                <div className="tenant-user-catalog__spec-row">
+                  <dt className="tenant-user-catalog__spec-label">Size</dt>
+                  <dd className="tenant-user-catalog__spec-value">
+                    {representative.hardwareProfile}
+                  </dd>
+                </div>
+                <div className="tenant-user-catalog__spec-row">
+                  <dt className="tenant-user-catalog__spec-label">Served on</dt>
                   <dd className="tenant-user-catalog__spec-value">
                     <LabelGroup numLabels={4}>
                       {clusters.map((cluster) => (
