@@ -6,6 +6,7 @@ import {
   resolveCatalogSpecRows,
 } from '../catalog/catalogSpecs'
 import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import type { CatalogModelChoice, CatalogModelProperty } from '../catalog/catalogPublishConfig'
 import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
@@ -63,6 +64,8 @@ export type TenantUserCatalogCard = {
   hostTypeLabel?: string
   clusterNodeTopologyMode?: 'locked' | 'editable'
   fieldPolicies?: CatalogFieldPolicy[]
+  modelChoice?: CatalogModelChoice
+  modelProperties?: CatalogModelProperty[]
   rateCard: RateCard
   scope: PublishCatalogScope
   createdAt: string
@@ -80,6 +83,7 @@ export const TENANT_USER_CATALOG_SPECS = {
 
 const CLUSTER_FOOTER_NOTE = 'Cluster pre-configured · Admin-managed'
 const VM_FOOTER_NOTE = 'Instance profile pre-configured · Admin-managed'
+const MODEL_FOOTER_NOTE = 'Model choices follow the catalog item'
 
 function getFooterNote(serviceId: CatalogServiceId): string {
   if (serviceId === 'cluster') {
@@ -87,6 +91,9 @@ function getFooterNote(serviceId: CatalogServiceId): string {
   }
   if (serviceId === 'virtual-machine') {
     return VM_FOOTER_NOTE
+  }
+  if (serviceId === 'models') {
+    return MODEL_FOOTER_NOTE
   }
   return TENANT_USER_CATALOG_SPECS.footerNote
 }
@@ -103,6 +110,9 @@ function getHardwareProfileLabel(
   }
   if (serviceId === 'virtual-machine') {
     return specRows.find((row) => row.label === 'Instance type')?.value ?? 'Standard VM'
+  }
+  if (serviceId === 'models') {
+    return 'Model serving configuration'
   }
 
   return TENANT_USER_CATALOG_SPECS.hardwareProfile
@@ -200,7 +210,7 @@ export function getTenantUserCatalogCardFromDraft(
     cpu: getCatalogSpecRowValue(specRows, 'CPU'),
     ram: getCatalogSpecRowValue(specRows, 'RAM'),
     gpu: getCatalogSpecRowValue(specRows, 'GPU'),
-    osImage: resolveCatalogOsImage(catalog),
+    osImage: serviceId === 'models' ? '—' : resolveCatalogOsImage(catalog),
     footerNote: getFooterNote(serviceId),
     catalogItemId: catalog.catalogItemId,
     templateRefId: catalog.templateRefId,
@@ -218,6 +228,8 @@ export function getTenantUserCatalogCardFromDraft(
     hostTypeLabel: catalog.hostTypeLabel,
     clusterNodeTopologyMode: catalog.clusterNodeTopologyMode,
     fieldPolicies: catalog.fieldPolicies,
+    modelChoice: catalog.modelChoice,
+    modelProperties: catalog.modelProperties,
     rateCard,
     scope: catalog.scope,
     createdAt: catalog.createdAt,

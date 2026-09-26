@@ -1,17 +1,13 @@
-import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import type {
+  CatalogFieldPolicy,
+  CatalogModelChoice,
+  CatalogModelProperty,
+} from '../catalog/catalogPublishConfig'
 import type { CatalogSpecRow } from '../catalog/catalogSpecs'
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import type { RateCard } from '../providerSetup/templateDemo'
 
-export type ModelCatalogPropertyMode = 'locked' | 'editable'
-
-export type ModelCatalogProperty = {
-  label: string
-  value: string
-  mode: ModelCatalogPropertyMode
-}
-
-export type ModelCatalogSeedItem = {
+export interface ModelCatalogSeedItem {
   id: string
   catalogItemId: string
   displayName: string
@@ -19,7 +15,8 @@ export type ModelCatalogSeedItem = {
   templateRefId: string
   templateName: string
   rateCard: RateCard
-  properties: readonly ModelCatalogProperty[]
+  modelChoice: CatalogModelChoice
+  properties: readonly CatalogModelProperty[]
 }
 
 const LOCKED_BADGE: NonNullable<CatalogSpecRow['badge']> = { text: 'Locked', color: 'grey' }
@@ -28,8 +25,8 @@ const EDITABLE_BADGE: NonNullable<CatalogSpecRow['badge']> = { text: 'Editable',
 const property = (
   label: string,
   value: string,
-  mode: ModelCatalogPropertyMode,
-): ModelCatalogProperty => ({ label, value, mode })
+  mode: CatalogModelProperty['mode'],
+): CatalogModelProperty => ({ label, value, mode })
 
 export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
   {
@@ -40,6 +37,10 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       'Low-latency runtime for small-footprint models (1B–7B). Fast, cost-effective text generation, basic summarization, and high-throughput classification.',
     templateRefId: 'maas-llm-lightweight-text-gen',
     templateName: 'llm-lightweight-text-gen',
+    modelChoice: {
+      mode: 'undecided',
+      summary: 'Model choice is not defined yet for this offer.',
+    },
     rateCard: {
       hourlyRate: 2.4,
       monthlyRate: 1600,
@@ -63,6 +64,11 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       'Standardized endpoint for instruction-tuned models in automated backend processes, data pipelines, and scheduled workflows.',
     templateRefId: 'maas-llm-instruct',
     templateName: 'llm-instruct',
+    modelChoice: {
+      mode: 'limited-catalog',
+      summary:
+        'At launch, choose from models selected by the administrator for instruction-tuned use, then provide the model source location and credentials. The OSAC Secret workflow still needs definition.',
+    },
     rateCard: {
       hourlyRate: 4.8,
       monthlyRate: 3200,
@@ -86,6 +92,11 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       'Agentic workflows, function calling, structured API parameter generation, and multi-step execution chains.',
     templateRefId: 'maas-llm-tool-calling',
     templateName: 'llm-tool-calling',
+    modelChoice: {
+      mode: 'fixed-model',
+      summary:
+        'The administrator selects one model, supplies its source location and credentials, and configures its tool-calling runtime; no model choice is needed at launch. The OSAC Secret workflow still needs definition.',
+    },
     rateCard: {
       hourlyRate: 8.5,
       monthlyRate: 5800,
@@ -109,6 +120,10 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       'Multi-GPU blueprint for large-scale models (70B+): complex reasoning, deep analysis, and extended context.',
     templateRefId: 'maas-llm-high-capacity-reasoning',
     templateName: 'llm-high-capacity-reasoning',
+    modelChoice: {
+      mode: 'undecided',
+      summary: 'Model choice is not defined yet for this offer.',
+    },
     rateCard: {
       hourlyRate: 24,
       monthlyRate: 16000,
@@ -132,6 +147,11 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       'Low-latency endpoint for classical tabular models (XGBoost, scikit-learn, LightGBM): real-time scoring, classification, and regression.',
     templateRefId: 'maas-predictive',
     templateName: 'predictive',
+    modelChoice: {
+      mode: 'byom',
+      summary:
+        'At launch, the user provides the model source location and credentials for a model they are developing. The OSAC Secret workflow still needs definition.',
+    },
     rateCard: {
       hourlyRate: 0.85,
       monthlyRate: 580,
@@ -195,6 +215,8 @@ export const toModelCatalogDraft = (item: ModelCatalogSeedItem): ProviderCatalog
   status: 'live',
   createdAt: '2026-08-01T12:00:00.000Z',
   fieldPolicies: toFieldPolicies(item),
+  modelChoice: item.modelChoice,
+  modelProperties: [...item.properties],
 })
 
 export const createModelCatalogDrafts = (): ProviderCatalogDraft[] =>

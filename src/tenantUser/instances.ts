@@ -1305,6 +1305,11 @@ export function getTenantInstanceCardSpecRows(instance: TenantInstance): Catalog
   const serviceId = getTenantInstanceServiceId(instance)
   const allSpecRows = getTenantInstanceSpecRows(instance)
 
+  if (serviceId === 'models') {
+    const cardLabels = new Set(['Model file', 'Cluster', 'Size', 'MaaS', 'Gateway'])
+    return allSpecRows.filter((row) => cardLabels.has(row.label))
+  }
+
   if (serviceId === 'baremetal') {
     return allSpecRows.filter((row) => row.label !== 'Size')
   }

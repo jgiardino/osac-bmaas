@@ -15,6 +15,26 @@ export type CatalogFieldPolicy = {
   mode: CatalogFieldPolicyMode
 }
 
+export type CatalogModelChoiceMode =
+  | 'byom'
+  | 'fixed-model'
+  | 'limited-catalog'
+  | 'configured-catalog'
+  | 'undecided'
+
+export type CatalogModelChoice = {
+  mode: CatalogModelChoiceMode
+  summary: string
+  /** Explicit model identities only when the offer has a known fixed selection. */
+  selectedModels?: string[]
+}
+
+export type CatalogModelProperty = {
+  label: string
+  value: string
+  mode: 'locked' | 'editable'
+}
+
 export type CatalogInstanceTypeOption = {
   id: string
   label: string

@@ -63,6 +63,7 @@ import {
   parseRateCardFromForm,
 } from './templateDemo'
 import { DEFAULT_PROVIDER_SERVICE_SELECTION, type ProviderServiceId } from './constants'
+import { createModelCatalogDrafts, MODEL_CATALOG_SEED } from '../vision/modelCatalogSeed'
 import {
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_SLUG,
@@ -102,13 +103,14 @@ export const LEGACY_BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID = 'cat_BM_AI_INFEREN
 export const LEGACY_BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID = 'bm_hpe_dl380_a100'
 
 /**
- * Demo storefront order for Provider Admin (Cluster published; Dense GPU unpublished for tenants).
- * Tenant Admin / Tenant User use the same order with unpublished items filtered out.
+ * Demo storefront order for Provider Admin. Tenant Admin / Tenant User use the same order,
+ * with unpublished items filtered out.
  */
 export const DEMO_CATALOG_ITEM_ORDER = [
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
+  ...MODEL_CATALOG_SEED.map((item) => item.catalogItemId),
 ] as const
 
 function demoCatalogItemOrderIndex(catalogItemId: string): number {
@@ -604,6 +606,29 @@ function syncDemoCatalogItemDescriptions(): void {
   }
 }
 
+function ensureModelCatalogItems(): ProviderCatalogDraft[] {
+  const currentItems = getProviderCatalogItems()
+  const modelDrafts = createModelCatalogDrafts()
+
+  for (const draft of modelDrafts) {
+    const existing = currentItems.find((item) => item.catalogItemId === draft.catalogItemId)
+    if (!existing) {
+      addProviderCatalogItem(draft)
+      continue
+    }
+
+    patchProviderCatalogItem(draft.catalogItemId, {
+      description: draft.description,
+      rateCard: draft.rateCard,
+      fieldPolicies: draft.fieldPolicies,
+      modelChoice: draft.modelChoice,
+      modelProperties: draft.modelProperties,
+    })
+  }
+
+  return getProviderCatalogItems()
+}
+
 /** Ensures demo catalog offerings exist for finished Provider Admin screens. */
 export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   ensureDemoBareMetalTemplates()
@@ -637,6 +662,8 @@ export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   syncClusterCatalogVersionLabels()
   items = getProviderCatalogItems()
 
+  items = ensureModelCatalogItems()
+
   purgeVirtualMachineCatalogItems()
   items = getProviderCatalogItems()
 
@@ -649,6 +676,7 @@ export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
       ...(selectedServices.length > 0 ? selectedServices : DEFAULT_PROVIDER_SERVICE_SELECTION),
       'baremetal',
       'cluster',
+      'models',
     ]),
   ]
   const servicesChanged =

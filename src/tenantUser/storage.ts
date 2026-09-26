@@ -27,6 +27,7 @@ import {
   type TenantInstance,
 } from './instances'
 import type { TenantProject } from '../tenantAdmin/projects'
+import { getDemoTenantModelInstances } from '../vision/modelInstanceSeed'
 import {
   DEMO_TENANT_PROJECT_ID,
   DEMO_TENANT_PROJECT_ID_02,
@@ -239,9 +240,9 @@ function getDemoOrganizationName(slug: string): string {
 }
 
 /**
- * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal
- * and Cluster instances. Virtual machines and Models stay empty (catalog-launch only).
- * Stable IDs avoid duplicates across reloads.
+ * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal,
+ * Cluster, and model instances. Virtual machines remain empty. Stable IDs avoid
+ * duplicates across reloads.
  */
 export function ensureTenantDemoInstances(
   slug: string,
@@ -251,7 +252,7 @@ export function ensureTenantDemoInstances(
   let next = [...existing]
   let changed = false
 
-  // Drop legacy seeded VMs so Virtual machines matches Models (empty until launch).
+  // Drop legacy seeded VMs; model service examples are ensured separately below.
   const retiredDemoVmIds = new Set([
     DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID,
     DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
@@ -363,6 +364,36 @@ export function ensureTenantDemoInstances(
             : (refreshed.provisionedAt ?? refreshed.createdAt),
         name: clusterState.name,
         status: clusterState.status,
+      }
+      changed = true
+    }
+  }
+
+  for (const demo of getDemoTenantModelInstances(slug)) {
+    const existingIndex = next.findIndex((instance) => instance.id === demo.id)
+    if (existingIndex === -1) {
+      next.push(demo)
+      changed = true
+      continue
+    }
+
+    const current = next[existingIndex]!
+    if (
+      current.serviceId !== 'models' ||
+      current.catalogItemDisplayName !== demo.catalogItemDisplayName ||
+      current.description !== demo.description ||
+      JSON.stringify(current.specRows) !== JSON.stringify(demo.specRows)
+    ) {
+      next[existingIndex] = {
+        ...current,
+        serviceId: 'models',
+        catalogItemDisplayName: demo.catalogItemDisplayName,
+        description: demo.description,
+        hardwareProfile: demo.hardwareProfile,
+        osImage: demo.osImage,
+        networkLabel: demo.networkLabel,
+        gpuLabel: demo.gpuLabel,
+        specRows: demo.specRows,
       }
       changed = true
     }

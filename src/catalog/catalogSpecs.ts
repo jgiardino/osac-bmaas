@@ -1,4 +1,5 @@
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
+import type { CatalogModelChoice, CatalogModelProperty } from './catalogPublishConfig'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 import {
   CATALOG_INSTANCE_TYPE_OPTIONS,
@@ -421,6 +422,8 @@ export function resolveCatalogSpecRows(
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
     | 'osImageMode'
+    | 'modelChoice'
+    | 'modelProperties'
   >,
   options?: { includeDetails?: boolean },
 ): CatalogSpecRow[] {
@@ -432,6 +435,10 @@ export function resolveCatalogSpecRows(
 
   if (serviceId === 'baremetal') {
     return buildBaremetalCatalogSpecRows(item)
+  }
+
+  if (serviceId === 'models') {
+    return buildModelCatalogSpecRows(item, options)
   }
 
   if (item.instanceTypeLabel || item.diskImageLabel) {
@@ -479,6 +486,65 @@ export function resolveCatalogSpecRows(
   ]
 }
 
+function getModelChoiceLabel(choice: CatalogModelChoice): string {
+  switch (choice.mode) {
+    case 'byom':
+      return 'Bring your own model (BYOM)'
+    case 'fixed-model':
+      return 'One administrator-selected model'
+    case 'limited-catalog':
+      return 'Predefined model choices'
+    case 'configured-catalog':
+      return 'Any model in the configured catalog'
+    case 'undecided':
+      return 'Not defined yet'
+  }
+}
+
+function getModelChoiceBadge(choice: CatalogModelChoice): CatalogSpecRow['badge'] {
+  switch (choice.mode) {
+    case 'byom':
+      return { text: 'BYOM', color: 'grey' }
+    case 'fixed-model':
+      return { text: 'Fixed', color: 'grey' }
+    case 'limited-catalog':
+      return { text: 'Limited set', color: 'purple' }
+    case 'configured-catalog':
+      return { text: 'Full catalog', color: 'blue' }
+    case 'undecided':
+      return { text: 'Decision needed', color: 'orange' }
+  }
+}
+
+function toModelPropertySpecRow(property: CatalogModelProperty): CatalogSpecRow {
+  return {
+    label: property.label,
+    value: property.value,
+    badge:
+      property.mode === 'locked'
+        ? { text: 'Locked', color: 'grey' }
+        : { text: 'Editable', color: 'purple' },
+  }
+}
+
+function buildModelCatalogSpecRows(
+  item: Pick<ProviderCatalogDraft, 'modelChoice' | 'modelProperties'>,
+  options?: { includeDetails?: boolean },
+): CatalogSpecRow[] {
+  const rows: CatalogSpecRow[] = []
+  if (item.modelChoice) {
+    rows.push({
+      label: 'Model choice',
+      value: options?.includeDetails
+        ? item.modelChoice.summary
+        : getModelChoiceLabel(item.modelChoice),
+      badge: getModelChoiceBadge(item.modelChoice),
+    })
+  }
+
+  return [...rows, ...(item.modelProperties ?? []).map(toModelPropertySpecRow)]
+}
+
 export function formatCatalogConfigurationSummary(
   item: Pick<
     ProviderCatalogDraft,
@@ -496,6 +562,8 @@ export function formatCatalogConfigurationSummary(
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
     | 'osImageMode'
+    | 'modelChoice'
+    | 'modelProperties'
   >,
 ): string {
   return resolveCatalogCardSpecRows(item)

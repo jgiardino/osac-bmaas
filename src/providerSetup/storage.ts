@@ -72,6 +72,8 @@ import type {
   CatalogClusterVersionMode,
   CatalogFieldPolicy,
   CatalogHardwareOsMode,
+  CatalogModelChoice,
+  CatalogModelProperty,
 } from '../catalog/catalogPublishConfig'
 import type {
   CatalogServiceId,
@@ -301,6 +303,10 @@ export type ProviderCatalogDraft = {
   clusterNodeTopologyMode?: CatalogClusterNodeTopologyMode
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
+  /** Models only: which model choices the offering exposes at launch. */
+  modelChoice?: CatalogModelChoice
+  /** Models only: serving and resource properties displayed on Catalog cards. */
+  modelProperties?: CatalogModelProperty[]
 }
 
 export function getCatalogItemNetworkPolicy(
@@ -943,6 +949,9 @@ export function patchProviderCatalogItem(
       | 'hardwareOsMode'
       | 'osImageMode'
       | 'rateCard'
+      | 'fieldPolicies'
+      | 'modelChoice'
+      | 'modelProperties'
     >
   >,
 ): ProviderCatalogDraft | null {
