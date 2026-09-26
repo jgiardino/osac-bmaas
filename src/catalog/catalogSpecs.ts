@@ -10,16 +10,17 @@ import {
   normalizeCatalogDiskImageDisplayLabel,
   formatCatalogDiskImageLabel,
   getCatalogHardwareOsModeLabel,
+  getCatalogOsImageModeLabel,
   resolveBaremetalInstanceTypeHardware,
   resolveCatalogClusterNodeTopologyMode,
   resolveCatalogClusterVersionMode,
   resolveCatalogHardwareOsMode,
+  resolveCatalogOsImageMode,
   type CatalogClusterNodeTopologyMode,
   type CatalogClusterVersionMode,
   type CatalogHardwareOsMode,
 } from './catalogPublishConfig'
 import { resolveHardwareSpecsForCatalogItem } from './hardwareSpecs'
-import { resolveModelCatalogSpecRows } from '../vision/modelCatalogSeed'
 
 export type CatalogSpecRow = {
   label: string
@@ -52,8 +53,9 @@ export const CLUSTER_NODE_SETS_TEMPLATE_DESCRIPTION =
   'Provisions OpenShift clusters using the Assisted Installer / Hive path, including control-plane bootstrap and worker join.'
 
 export const CLUSTER_NODE_SETS_RATE_CARD = {
-  hourlyRate: 22,
-  monthlyRate: 14800,
+  // Composed: control plane $6.75 + 3 × bare-metal small $3.20
+  hourlyRate: 16.35,
+  monthlyRate: 10986,
   currency: 'USD',
   billingUnit: 'per-instance' as const,
 }
@@ -151,7 +153,9 @@ export function resolveCatalogOsImage(
   >,
 ): string {
   const rows = resolveCatalogSpecRows(item)
-  const fromDiskImage = rows.find((row) => row.label === 'Disk image')?.value?.trim()
+  const fromDiskImage = rows.find(
+    (row) => row.label === 'OS image' || row.label === 'Disk image',
+  )?.value?.trim()
   if (fromDiskImage) {
     return fromDiskImage
   }
@@ -229,6 +233,17 @@ function getHardwareOsModeBadge(
   const resolved = resolveCatalogHardwareOsMode(mode)
   return {
     text: getCatalogHardwareOsModeLabel(resolved),
+    color: resolved === 'editable' ? 'purple' : 'grey',
+  }
+}
+
+function getOsImageModeBadge(
+  mode: CatalogHardwareOsMode | undefined | null,
+  hardwareFallback?: CatalogHardwareOsMode | undefined | null,
+): CatalogSpecRow['badge'] {
+  const resolved = resolveCatalogOsImageMode(mode, hardwareFallback)
+  return {
+    text: getCatalogOsImageModeLabel(resolved),
     color: resolved === 'editable' ? 'purple' : 'grey',
   }
 }
@@ -330,6 +345,7 @@ function buildBaremetalCatalogSpecRows(
     | 'diskImageId'
     | 'diskImageLabel'
     | 'hardwareOsMode'
+    | 'osImageMode'
   >,
 ): CatalogSpecRow[] {
   const hardware = resolveHardwareSpecsForCatalogItem(item)
@@ -339,14 +355,15 @@ function buildBaremetalCatalogSpecRows(
     item.instanceTypeLabel,
   )
   const hardwareOsBadge = getHardwareOsModeBadge(item.hardwareOsMode)
+  const osImageBadge = getOsImageModeBadge(item.osImageMode, item.hardwareOsMode)
 
   if (typeHardware) {
     return [
-      { label: 'Size', value: typeHardware.sizeLabel, badge: hardwareOsBadge },
+      { label: 'Instance type', value: typeHardware.sizeLabel, badge: hardwareOsBadge },
       { label: 'CPU', value: typeHardware.cpu },
       { label: 'RAM', value: typeHardware.ram },
       { label: 'GPU', value: typeHardware.gpu },
-      { label: 'Disk image', value: diskImage, badge: hardwareOsBadge },
+      { label: 'OS image', value: diskImage, badge: osImageBadge },
     ]
   }
 
@@ -354,24 +371,36 @@ function buildBaremetalCatalogSpecRows(
   const rows: CatalogSpecRow[] = []
 
   if (sizeLabel) {
-    rows.push({ label: 'Size', value: sizeLabel, badge: hardwareOsBadge })
+    rows.push({ label: 'Instance type', value: sizeLabel, badge: hardwareOsBadge })
   }
 
   rows.push(
     { label: 'CPU', value: hardware.cpu },
     { label: 'RAM', value: hardware.ram },
     { label: 'GPU', value: hardware.gpu },
-    { label: 'Disk image', value: diskImage, badge: hardwareOsBadge },
+    { label: 'OS image', value: diskImage, badge: osImageBadge },
   )
 
   return rows
 }
 
-/** Bare metal service cards show CPU/RAM/GPU/Disk image — not the Size preset label. */
+/**
+ * Bare metal card/list rows: Instance type (with Locked/Editable) + CPU/RAM/GPU + OS image.
+ * Instance type carries the hardware access mode; OS image carries its own.
+ */
 export function resolveBaremetalCatalogCardSpecRows(
   item: Parameters<typeof buildBaremetalCatalogSpecRows>[0],
 ): CatalogSpecRow[] {
-  return buildBaremetalCatalogSpecRows(item).filter((row) => row.label !== 'Size')
+  return buildBaremetalCatalogSpecRows(item)
+}
+
+/** Grid and list catalog views share the same card-level specification rows. */
+export function resolveCatalogCardSpecRows(
+  item: Parameters<typeof resolveCatalogSpecRows>[0],
+): CatalogSpecRow[] {
+  return getDraftServiceId(item) === 'baremetal'
+    ? resolveBaremetalCatalogCardSpecRows(item)
+    : resolveCatalogSpecRows(item)
 }
 
 export function resolveCatalogSpecRows(
@@ -391,17 +420,11 @@ export function resolveCatalogSpecRows(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
-  > & { catalogItemId?: string },
+    | 'osImageMode'
+  >,
   options?: { includeDetails?: boolean },
 ): CatalogSpecRow[] {
   const serviceId = getDraftServiceId(item)
-
-  if (serviceId === 'models') {
-    const modelRows = resolveModelCatalogSpecRows(item.catalogItemId)
-    if (modelRows) {
-      return modelRows
-    }
-  }
 
   if (serviceId === 'cluster') {
     return buildClusterCatalogSpecRows(item, options)
@@ -430,7 +453,7 @@ export function resolveCatalogSpecRows(
         rows.push({ label: 'Instance type', value: item.instanceTypeLabel })
       }
       if (item.diskImageLabel) {
-        rows.push({ label: 'Disk image', value: item.diskImageLabel })
+        rows.push({ label: 'OS image', value: item.diskImageLabel })
       }
     }
 
@@ -452,7 +475,7 @@ export function resolveCatalogSpecRows(
     { label: 'CPU', value: hardware.cpu },
     { label: 'RAM', value: hardware.ram },
     { label: 'GPU', value: hardware.gpu },
-    { label: 'Disk image', value: hardware.osImage },
+    { label: 'OS image', value: hardware.osImage },
   ]
 }
 
@@ -472,9 +495,10 @@ export function formatCatalogConfigurationSummary(
     | 'hostTypeLabel'
     | 'clusterNodeTopologyMode'
     | 'hardwareOsMode'
-  > & { catalogItemId?: string },
+    | 'osImageMode'
+  >,
 ): string {
-  return resolveCatalogSpecRows(item)
+  return resolveCatalogCardSpecRows(item)
     .map((row) => (row.badge ? `${row.value} (${row.badge.text})` : row.value))
     .join(' · ')
 }
@@ -489,7 +513,7 @@ export function getCatalogSpecsSectionLabel(serviceId: CatalogServiceId): string
   if (serviceId === 'virtual-machine') {
     return 'Instance configuration'
   }
-  return 'Hardware specifications'
+  return 'Hardware & OS'
 }
 
 export function getCatalogProfileFieldLabel(serviceId: CatalogServiceId): string {

@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import {
+  Alert,
+  AlertActionCloseButton,
+  AlertActionLink,
   Button,
   Content,
   DescriptionList,
@@ -9,6 +12,7 @@ import {
   Dropdown,
   DropdownItem,
   DropdownList,
+  Flex,
   Label,
   MenuToggle,
   Modal,
@@ -32,6 +36,7 @@ import {
   CREATE_PROJECT_WIZARD_DEMO,
 } from '../../tenantAdmin/createProjectWizard'
 import {
+  DEMO_TENANT_ROOT_PROJECT_DESCRIPTION,
   getChildTenantProjects,
   getEffectiveProjectMembers,
   getInstancesForTenantProject,
@@ -42,12 +47,13 @@ import {
   getTenantProjectMemberCountLabel,
   getTenantProjectPoolLabel,
   getTenantProjectServicesLabel,
+  isTenantRootProject,
   TENANT_PROJECTS_TEAMS_DEMO,
   type EffectiveTenantProjectMember,
   type TenantProject,
   type TenantProjectMember,
 } from '../../tenantAdmin/projects'
-import { normalizeMemberEmail } from '../../tenantUser/projects'
+import { normalizeMemberEmail, resolveTenantUserDisplayName } from '../../tenantUser/projects'
 import {
   formatTenantInstanceCreatedAt,
   getTenantInstanceServiceId,
@@ -69,6 +75,10 @@ type TenantProjectDetailsPageProps = {
   onNavigateToInstance: (instance: TenantInstance) => void
   readOnly?: boolean
   currentUserEmail?: string
+  promptAddMembers?: boolean
+  onDismissAddMembersPrompt?: () => void
+  /** Compact stacked layout for the topology sidebar. */
+  variant?: 'page' | 'sidebar'
 }
 
 function formatCreatedAt(iso: string): string {
@@ -137,12 +147,14 @@ function ProjectMemberRowActions({
 function ProjectMemberPersonRow({
   member,
   parentProject,
+  projects,
   onRequestRemove,
   currentUserEmail,
   readOnly = false,
 }: {
   member: EffectiveTenantProjectMember
   parentProject: TenantProject | null
+  projects: readonly TenantProject[]
   onRequestRemove: (member: TenantProjectMember) => void
   currentUserEmail?: string
   readOnly?: boolean
@@ -150,6 +162,10 @@ function ProjectMemberPersonRow({
   const isCurrentUser =
     currentUserEmail !== undefined &&
     normalizeMemberEmail(member.email) === normalizeMemberEmail(currentUserEmail)
+  const displayName =
+    normalizeMemberEmail(member.name) !== normalizeMemberEmail(member.email)
+      ? member.name
+      : resolveTenantUserDisplayName(projects, member.email)
 
   return (
     <li
@@ -158,17 +174,19 @@ function ProjectMemberPersonRow({
       }`}
     >
       <div className="provider-admin-organizations__account-person-main">
-        <Content component="p" className="provider-admin-organizations__primary-cell">
-          {member.name}
-        </Content>
-        <Content component="p" className="provider-admin-organizations__secondary-cell">
-          {member.email}
-        </Content>
-        {member.inherited ? (
-          <Content component="p" className="provider-admin-organizations__secondary-cell">
-            Inherited from {member.inheritedFromProjectName ?? parentProject?.name ?? 'parent'}
+        <div className="provider-admin-organizations__account-person-text">
+          <Content component="p" className="provider-admin-organizations__primary-cell">
+            {displayName}
           </Content>
-        ) : null}
+          <Content component="p" className="provider-admin-organizations__secondary-cell">
+            {member.email}
+          </Content>
+          {member.inherited ? (
+            <Content component="p" className="provider-admin-organizations__secondary-cell">
+              Inherited from {member.inheritedFromProjectName ?? parentProject?.name ?? 'parent'}
+            </Content>
+          ) : null}
+        </div>
         <Label
           isCompact
           color={getTenantProjectMemberRoleLabelColor(member.role)}
@@ -198,9 +216,14 @@ export function TenantProjectDetailsPage({
   onNavigateToInstance,
   readOnly = false,
   currentUserEmail,
+  promptAddMembers = false,
+  onDismissAddMembersPrompt,
+  variant = 'page',
 }: TenantProjectDetailsPageProps) {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [memberPendingRemove, setMemberPendingRemove] = useState<TenantProjectMember | null>(null)
+  const showAddMembersPrompt = promptAddMembers && !readOnly
+  const isRootProject = isTenantRootProject(project)
 
   const parentProject = useMemo(
     () =>
@@ -277,39 +300,117 @@ export function TenantProjectDetailsPage({
     setMemberPendingRemove(null)
   }
 
-  return (
+  const description = isRootProject
+    ? DEMO_TENANT_ROOT_PROJECT_DESCRIPTION
+    : TENANT_PROJECTS_TEAMS_DEMO.detailsLede
+  const editDisabled = isRootProject || (readOnly && currentUserMembership?.role !== 'manager')
+  const deleteDisabled = editDisabled
+  const editDisabledReason = isRootProject
+    ? TENANT_PROJECTS_TEAMS_DEMO.rootProjectEditDeniedTooltip
+    : TENANT_PROJECTS_TEAMS_DEMO.editProjectDeniedTooltip
+  const deleteDisabledReason = isRootProject
+    ? TENANT_PROJECTS_TEAMS_DEMO.rootProjectDeleteDeniedTooltip
+    : TENANT_PROJECTS_TEAMS_DEMO.deleteProjectDeniedTooltip
+  const showHeaderActions = !readOnly || Boolean(currentUserMembership)
+
+  const actionButtons = showHeaderActions ? (
+    <Flex
+      className="tenant-project-topology-side-panel__actions"
+      gap={{ default: 'gapSm' }}
+      alignItems={{ default: 'alignItemsCenter' }}
+      flexWrap={{ default: 'wrap' }}
+    >
+      {showCreateNestedAction ? (
+        canCreateNested ? (
+          <Button variant="secondary" onClick={() => onCreateNested(project)}>
+            {TENANT_PROJECTS_TEAMS_DEMO.createNestedProjectLabel}
+          </Button>
+        ) : (
+          <Tooltip content={TENANT_PROJECTS_TEAMS_DEMO.createNestedProjectDeniedTooltip}>
+            <Button variant="secondary" isDisabled>
+              {TENANT_PROJECTS_TEAMS_DEMO.createNestedProjectLabel}
+            </Button>
+          </Tooltip>
+        )
+      ) : null}
+      {editDisabled ? (
+        <Tooltip content={editDisabledReason}>
+          <Button variant="secondary" isDisabled>
+            Edit
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button variant="secondary" onClick={() => onEdit(project)}>
+          Edit
+        </Button>
+      )}
+      {deleteDisabled ? (
+        <Tooltip content={deleteDisabledReason}>
+          <Button variant="danger" isDisabled>
+            Delete
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button variant="danger" onClick={() => onDelete(project.id)}>
+          Delete
+        </Button>
+      )}
+    </Flex>
+  ) : null
+
+  const detailsBody = (
     <>
-      <EntityDetailsPageShell
-        className="tenant-admin-project-details"
-        parentLabel="Projects"
-        breadcrumbAncestors={breadcrumbAncestors}
-        onBack={onBack}
-        title={project.name}
-        titleId="tenant-project-details-title"
-        description={TENANT_PROJECTS_TEAMS_DEMO.detailsLede}
-        actions={
-          readOnly ? (
-            currentUserMembership ? (
-              <EntityDetailsActionsDropdown
-                onEdit={() => onEdit(project)}
-                editDisabled={currentUserMembership.role !== 'manager'}
-                editDisabledReason={TENANT_PROJECTS_TEAMS_DEMO.editProjectDeniedTooltip}
-                onRemove={() => onDelete(project.id)}
-                removeDisabled={currentUserMembership.role !== 'manager'}
-                removeDisabledReason={TENANT_PROJECTS_TEAMS_DEMO.deleteProjectDeniedTooltip}
-                removeLabel="Delete"
-              />
-            ) : undefined
-          ) : (
-            <EntityDetailsActionsDropdown
-              onEdit={() => onEdit(project)}
-              onRemove={() => onDelete(project.id)}
-              removeLabel="Delete"
-            />
-          )
-        }
-      >
-        <div className="entity-details-page__columns entity-details-page__columns--with-rail">
+      {variant === 'sidebar' ? (
+        <div className="tenant-project-topology-side-panel__header">
+          <Title id="tenant-project-details-title" headingLevel="h2" size="xl">
+            {project.name}
+          </Title>
+          <Content component="p" className="tenant-project-topology-side-panel__lede">
+            {description}
+          </Content>
+          {actionButtons}
+        </div>
+      ) : null}
+        {showAddMembersPrompt ? (
+          <Alert
+            variant="success"
+            isInline
+            title={TENANT_PROJECTS_TEAMS_DEMO.postCreateMembersPromptTitle}
+            className="tenant-admin-project-details__post-create-alert"
+            actionClose={
+              onDismissAddMembersPrompt ? (
+                <AlertActionCloseButton
+                  onClose={onDismissAddMembersPrompt}
+                  aria-label="Dismiss project created notice"
+                />
+              ) : undefined
+            }
+          >
+            {(
+              effectiveMembers.some((member) => member.inherited)
+                ? TENANT_PROJECTS_TEAMS_DEMO.postCreateInheritedMembersPromptBody
+                : TENANT_PROJECTS_TEAMS_DEMO.postCreateMembersPromptBody
+            )}{' '}
+            <AlertActionLink
+              component="button"
+              onClick={() => {
+                onDismissAddMembersPrompt?.()
+                setIsAddMemberOpen(true)
+              }}
+            >
+              {TENANT_PROJECTS_TEAMS_DEMO.postCreateMembersPromptAction}
+            </AlertActionLink>
+          </Alert>
+        ) : null}
+        <div
+          className={[
+            'entity-details-page__columns',
+            'entity-details-page__columns--with-rail',
+            variant === 'sidebar' ? 'tenant-project-details-body--sidebar' : null,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
           <div className="entity-details-page__main-stack">
             <div className="entity-details-page__columns entity-details-page__columns--2">
               <div className="entity-details-page__column">
@@ -530,6 +631,7 @@ export function TenantProjectDetailsPage({
                         key={member.id}
                         member={member}
                         parentProject={parentProject}
+                        projects={projects}
                         onRequestRemove={setMemberPendingRemove}
                         currentUserEmail={currentUserEmail}
                         readOnly={readOnly}
@@ -541,7 +643,52 @@ export function TenantProjectDetailsPage({
             </div>
           </div>
         </div>
-      </EntityDetailsPageShell>
+      </>
+  )
+
+  return (
+    <>
+      {variant === 'sidebar' ? (
+        <div className="tenant-project-topology-side-panel">{detailsBody}</div>
+      ) : (
+        <EntityDetailsPageShell
+          className="tenant-admin-project-details"
+          parentLabel="Projects"
+          breadcrumbAncestors={breadcrumbAncestors}
+          onBack={onBack}
+          title={project.name}
+          titleId="tenant-project-details-title"
+          description={description}
+          actions={
+            readOnly ? (
+              currentUserMembership ? (
+                <EntityDetailsActionsDropdown
+                  onEdit={() => onEdit(project)}
+                  editDisabled={editDisabled}
+                  editDisabledReason={editDisabledReason}
+                  onRemove={() => onDelete(project.id)}
+                  removeDisabled={deleteDisabled}
+                  removeDisabledReason={deleteDisabledReason}
+                  removeLabel="Delete"
+                />
+              ) : undefined
+            ) : (
+              <EntityDetailsActionsDropdown
+                onEdit={() => onEdit(project)}
+                editDisabled={editDisabled}
+                editDisabledReason={editDisabledReason}
+                onRemove={() => onDelete(project.id)}
+                removeDisabled={deleteDisabled}
+                removeDisabledReason={deleteDisabledReason}
+                removeLabel="Delete"
+              />
+            )
+          }
+        >
+          {detailsBody}
+        </EntityDetailsPageShell>
+      )}
+
 
       <AddProjectMemberModal
         project={isAddMemberOpen ? project : null}

@@ -9,7 +9,6 @@ import {
   getCatalogItemStatus,
   getProviderCatalogItems,
 } from '../providerSetup/storage'
-import { mergeVisionCatalogItems } from '../vision/modelFleet'
 import type { CatalogNetworkPolicy } from '../providerAdmin/catalogNetworkPolicy'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
 import {
@@ -23,7 +22,6 @@ import {
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
 } from '../catalog/catalogSpecs'
-import { MODEL_CATALOG_ITEM_IDS } from '../vision/modelCatalogSeed'
 import {
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
@@ -31,7 +29,10 @@ import {
   ensureProviderCatalogDemoItems,
   sortByDemoCatalogOrder,
 } from '../providerSetup/prototypeEntry'
-import type { TenantCatalogItem } from './catalogItems'
+import {
+  toProviderCatalogDraftFromTenantCatalogItem,
+  type TenantCatalogItem,
+} from './catalogItems'
 import {
   applyTenantNetworkOverrides,
   getTenantNetworkOverrides,
@@ -53,6 +54,7 @@ export type TenantCatalogGovernanceItem = {
   diskImageId?: string
   clusterVersionMode?: 'locked' | 'editable'
   hardwareOsMode?: 'locked' | 'editable'
+  osImageMode?: 'locked' | 'editable'
   nodeSetId?: string
   nodeSetLabel?: string
   hostTypeId?: string
@@ -105,9 +107,8 @@ export function getTenantCatalogProjectsLinkLabel(projectCount: number): string 
     : TENANT_CATALOG_MANAGER_DEMO.addProjectsLinkLabel
 }
 
-/** Inherited provider offerings shown on the tenant admin catalog demo. */
+/** Inherited provider offerings shown on the tenant admin catalog demo (2 cards). */
 const TENANT_ADMIN_DEMO_PROVIDER_CATALOG_ITEM_IDS = new Set([
-  ...MODEL_CATALOG_ITEM_IDS,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
   LEGACY_BARE_METAL_GPU_CATALOG_ITEM_ID,
@@ -182,6 +183,7 @@ function mapProviderCatalogToGovernanceItem(
     diskImageId: draft.diskImageId,
     clusterVersionMode: draft.clusterVersionMode,
     hardwareOsMode: draft.hardwareOsMode,
+    osImageMode: draft.osImageMode,
     nodeSetId: draft.nodeSetId,
     nodeSetLabel: draft.nodeSetLabel,
     hostTypeId: draft.hostTypeId,
@@ -217,10 +219,11 @@ export const TENANT_CATALOG_GOVERNANCE_ITEMS: TenantCatalogGovernanceItem[] = [
     instanceTypeId: 'large',
     instanceTypeLabel: formatBaremetalInstanceTypeLabel('large'),
     specRows: [
+      { label: 'Instance type', value: 'Large', badge: { text: 'Locked', color: 'grey' } },
       { label: 'CPU', value: '64 vCPU' },
       { label: 'RAM', value: '512 GB' },
       { label: 'GPU', value: 'NVIDIA A100 80 GB' },
-      { label: 'OS image', value: 'RHEL 9.4' },
+      { label: 'OS image', value: 'RHEL 9.4', badge: { text: 'Locked', color: 'grey' } },
     ],
     categoryLabel: 'Compute · Standard',
     cpu: '64 vCPU',
@@ -241,31 +244,8 @@ function mapCustomTenantCatalogItemToGovernance(
 ): TenantCatalogGovernanceItemWithNetworking {
   const status = item.status ?? 'Live'
 
-  if (item.catalogConfig) {
-    const draftLike: ProviderCatalogDraft = {
-      catalogItemId: item.id,
-      templateRefId: item.catalogConfig.templateRefId,
-      templateName: item.catalogConfig.templateName,
-      displayName: item.displayName,
-      description: item.description,
-      scope: 'vip-enterprise',
-      createdAt: item.createdAt,
-      rateCard: item.rateCard,
-      serviceId: item.catalogConfig.serviceId,
-      networkPolicy: item.catalogConfig.networkPolicy,
-      instanceTypeId: item.catalogConfig.instanceTypeId,
-      instanceTypeLabel: item.catalogConfig.instanceTypeLabel,
-      diskImageId: item.catalogConfig.diskImageId,
-      diskImageLabel: item.catalogConfig.diskImageLabel,
-      clusterVersionMode: item.catalogConfig.clusterVersionMode,
-      hardwareOsMode: item.catalogConfig.hardwareOsMode,
-      nodeSetId: item.catalogConfig.nodeSetId,
-      nodeSetLabel: item.catalogConfig.nodeSetLabel,
-      hostTypeId: item.catalogConfig.hostTypeId,
-      hostTypeLabel: item.catalogConfig.hostTypeLabel,
-      clusterNodeTopologyMode: item.catalogConfig.clusterNodeTopologyMode,
-      fieldPolicies: item.catalogConfig.fieldPolicies,
-    }
+  const draftLike = toProviderCatalogDraftFromTenantCatalogItem(item)
+  if (draftLike) {
     const base = mapProviderCatalogToGovernanceItem(draftLike, organization)
     return {
       ...base,
@@ -331,12 +311,11 @@ function mapCustomTenantCatalogItemToGovernance(
 
 export function getTenantCatalogGovernanceItems(
   organization: RegisteredOrganization,
-  catalogDraft?: ProviderCatalogDraft | null,
+  _catalogDraft: ProviderCatalogDraft | null,
 ): TenantCatalogGovernanceItemWithNetworking[] {
-  void catalogDraft
   ensureProviderCatalogDemoItems()
 
-  const visibleItems = mergeVisionCatalogItems(getProviderCatalogItems()).filter(
+  const visibleItems = getProviderCatalogItems().filter(
     (item) =>
       isCatalogVisibleToTenant(item, organization) &&
       isTenantAdminDemoProviderCatalogItem(item.catalogItemId),
@@ -377,7 +356,6 @@ export function getTenantCatalogItemDetailSpecRows(
 ): CatalogSpecRow[] {
   return resolveCatalogSpecRows(
     {
-      catalogItemId: item.id,
       serviceId: item.serviceId,
       templateRefId: item.templateRefId,
       templateName: item.templateName,
@@ -387,6 +365,7 @@ export function getTenantCatalogItemDetailSpecRows(
       diskImageId: item.diskImageId,
       clusterVersionMode: item.clusterVersionMode,
       hardwareOsMode: item.hardwareOsMode,
+      osImageMode: item.osImageMode,
       nodeSetId: item.nodeSetId,
       nodeSetLabel: item.nodeSetLabel,
       hostTypeId: item.hostTypeId,

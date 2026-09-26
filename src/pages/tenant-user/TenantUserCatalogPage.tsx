@@ -24,6 +24,7 @@ import {
 import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterEmptyState'
 import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
+import { CatalogRateCell } from '../../components/catalog/CatalogRateCell'
 import { CatalogViewToggle } from '../../components/catalog/CatalogViewToggle'
 import {
   createCatalogServiceFilterSet,
@@ -31,12 +32,16 @@ import {
 } from '../../catalog/catalogFilterSummary'
 import { TenantUserCatalogItemDetailsPage } from '../../components/tenant-user/TenantUserCatalogItemDetailsPage'
 import { TenantUserLaunchInstanceWizard } from '../../components/tenant-user/TenantUserLaunchInstanceWizard'
-import { formatCatalogConfigurationSummary } from '../../catalog/catalogSpecs'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import { getCatalogViewMode, setCatalogViewMode, type CatalogViewMode } from '../../catalog/viewMode'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
-import { CATALOG_SERVICE_FILTER_LABELS, type CatalogServiceId } from '../../providerSetup/templateDemo'
+import { getProviderCatalogItems } from '../../providerSetup/storage'
+import {
+  CATALOG_SERVICE_FILTER_LABELS,
+  formatRateCardSummary,
+  type CatalogServiceId,
+} from '../../providerSetup/templateDemo'
 import {
   getTenantUserCatalogCards,
   type TenantUserCatalogCard,
@@ -45,6 +50,11 @@ import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWiza
 import { TENANT_USER_CATALOG_PAGE } from '../../tenantUser/constants'
 import type { TenantInstance } from '../../tenantUser/instances'
 import type { TenantProject } from '../../tenantAdmin/projects'
+import {
+  isTenantScopedCatalogItemId,
+  toProviderCatalogDraftFromTenantCatalogItem,
+} from '../../tenantAdmin/catalogItems'
+import { getTenantCatalogItems } from '../../tenantAdmin/storage'
 import {
   findCatalogItemByWorkspaceParam,
   getWorkspaceCatalogItemParam,
@@ -87,6 +97,51 @@ function getCatalogItemActions(
       onClick: onLaunch,
     },
   ]
+}
+
+function resolveLaunchCatalogDraft(
+  card: TenantUserCatalogCard,
+  fallback: ProviderCatalogDraft | null,
+  tenantSlug: string,
+): ProviderCatalogDraft | null {
+  const fromProvider = getProviderCatalogItems().find(
+    (item) => item.catalogItemId === card.catalogItemId,
+  )
+  if (fromProvider) {
+    return fromProvider
+  }
+
+  if (isTenantScopedCatalogItemId(card.catalogItemId)) {
+    const stored = getTenantCatalogItems(tenantSlug).find((item) => item.id === card.catalogItemId)
+    if (stored) {
+      return toProviderCatalogDraftFromTenantCatalogItem(stored)
+    }
+  }
+
+  return fallback
+}
+
+/** Grid: blue label chip. List: subtle subtext under the item name. */
+function TenantUserCatalogServiceType({
+  service,
+  variant,
+}: {
+  service: string
+  variant: 'grid' | 'list'
+}) {
+  if (variant === 'grid') {
+    return (
+      <Label color="blue" className="tenant-user-catalog__card-label">
+        {service}
+      </Label>
+    )
+  }
+
+  return (
+    <Content component="p" className="tenant-user-catalog__service-type">
+      {service}
+    </Content>
+  )
 }
 
 export function TenantUserCatalogPage({
@@ -303,6 +358,9 @@ export function TenantUserCatalogPage({
 
   const activeCatalogItem = selectedCatalogItem ?? catalogItems[0] ?? null
   const detailsItem = isDetailsDrawerOpen ? selectedCatalogItem : null
+  const launchCatalogDraft = activeCatalogItem
+    ? resolveLaunchCatalogDraft(activeCatalogItem, catalogDraft, tenantSlug)
+    : catalogDraft
 
   return (
     <>
@@ -312,11 +370,12 @@ export function TenantUserCatalogPage({
           isOpen={isWizardOpen}
           catalogItem={activeCatalogItem}
           organization={organization}
-          catalogDraft={catalogDraft}
-          preferCatalogDraft={preferCatalogDraft}
+          catalogDraft={launchCatalogDraft}
+          preferCatalogDraft={preferCatalogDraft || isTenantScopedCatalogItemId(activeCatalogItem.catalogItemId)}
           tenantSlug={tenantSlug}
           projects={projects}
           allProjects={allProjects}
+          canManageNetworkObjects
           initialProjectId={initialProjectId}
           onProjectScopeChange={onProjectScopeChange}
           existingInstanceNames={existingInstanceNames}
@@ -426,9 +485,7 @@ export function TenantUserCatalogPage({
                         {getCatalogServiceIcon(item.serviceId)}
                       </span>
                       <div className="tenant-user-catalog__card-header-actions">
-                        <Label color="blue" className="tenant-user-catalog__card-label">
-                          {item.service}
-                        </Label>
+                        <TenantUserCatalogServiceType service={item.service} variant="grid" />
                         <Label color="green" className="tenant-user-catalog__card-label">
                           {item.status}
                         </Label>
@@ -454,6 +511,13 @@ export function TenantUserCatalogPage({
                       labelClassName="tenant-user-catalog__spec-label"
                       valueClassName="tenant-user-catalog__spec-value"
                     />
+
+                    <dl className="tenant-user-catalog__card-specs">
+                      <div className="tenant-user-catalog__card-spec">
+                        <dt>Rate</dt>
+                        <dd>{formatRateCardSummary(item.rateCard)}</dd>
+                      </div>
+                    </dl>
 
                     <div className="tenant-user-catalog__footer-note">
                       <LockIcon aria-hidden />
@@ -489,16 +553,17 @@ export function TenantUserCatalogPage({
             >
               <Thead>
                 <Tr>
-                  <Th>Name</Th>
-                  <Th>Status</Th>
-                  <Th>Configuration</Th>
-                  <Th>Action</Th>
+                  <Th className="tenant-user-catalog__col-name">Name</Th>
+                  <Th className="tenant-user-catalog__col-status">Status</Th>
+                  <Th className="tenant-user-catalog__col-configuration">Configuration</Th>
+                  <Th className="tenant-user-catalog__col-rate">Rate</Th>
+                  <Th className="tenant-user-catalog__col-action">Action</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {filteredItems.map((item) => (
                   <Tr key={item.catalogItemId}>
-                    <Td dataLabel="Name">
+                    <Td dataLabel="Name" className="tenant-user-catalog__col-name">
                       <Content component="p" className="tenant-user-catalog__display-name">
                         <Button
                           variant="link"
@@ -509,28 +574,26 @@ export function TenantUserCatalogPage({
                           {item.displayName}
                         </Button>
                       </Content>
-                      <Content component="p" className="tenant-user-catalog__category-label">
-                        {item.service}
-                      </Content>
+                      <TenantUserCatalogServiceType service={item.service} variant="list" />
                     </Td>
-                    <Td dataLabel="Status">
+                    <Td dataLabel="Status" className="tenant-user-catalog__col-status">
                       <Label color="green" isCompact>
                         {item.status}
                       </Label>
                     </Td>
-                    <Td dataLabel="Configuration">
-                      {formatCatalogConfigurationSummary({
-                        serviceId: item.serviceId,
-                        templateRefId: item.templateRefId,
-                        templateName: item.templateName,
-                        instanceTypeLabel: item.instanceTypeLabel,
-                        diskImageLabel: item.diskImageLabel,
-                        diskImageId: item.diskImageId,
-                        clusterVersionMode: item.clusterVersionMode,
-                        hardwareOsMode: item.hardwareOsMode,
-                      })}
+                    <Td dataLabel="Configuration" className="tenant-user-catalog__col-configuration">
+                      <CatalogSpecRowsList
+                        rows={item.specRows}
+                        className="catalog-table-specs-list"
+                        rowClassName="catalog-table-spec-row"
+                        labelClassName="catalog-table-spec-label"
+                        valueClassName="catalog-table-spec-value"
+                      />
                     </Td>
-                    <Td dataLabel="Action">
+                    <Td dataLabel="Rate" className="tenant-user-catalog__col-rate">
+                      <CatalogRateCell rateCard={item.rateCard} />
+                    </Td>
+                    <Td dataLabel="Action" className="tenant-user-catalog__col-action">
                       <Button
                         variant="primary"
                         icon={<RocketIcon />}

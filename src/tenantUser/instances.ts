@@ -148,6 +148,8 @@ export type TenantInstance = {
   status: TenantInstanceStatus
   createdAt: string
   provisionedAt: string | null
+  /** Provider Services view: workspace slug that owns this instance. */
+  ownerTenantSlug?: string
 }
 
 export function getTenantInstanceServiceId(instance: TenantInstance): CatalogServiceId {
@@ -221,7 +223,7 @@ function buildBareMetalFallbackSpecRows(instance: TenantInstance): CatalogSpecRo
   const diskImage = resolveBareMetalDiskImageValue(instance, [])
   return [
     { label: 'Hardware', value: instance.hardwareProfile },
-    ...(diskImage ? [{ label: 'Disk image', value: diskImage }] : []),
+    ...(diskImage ? [{ label: 'OS image', value: diskImage }] : []),
     { label: 'GPU', value: instance.gpuLabel },
   ]
 }
@@ -417,7 +419,7 @@ export function getTenantInstanceActions(
         },
       },
       {
-        title: 'Attach public IP',
+        title: 'Attach external IP',
         isAriaDisabled: isBusy || hasPublicIp,
         onClick: () => {
           vmActions?.onAttachPublicIp?.(instance)
@@ -990,6 +992,7 @@ export function withInstanceProjectIds(
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID = 'instance-demo-bm-01'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_02 = 'instance-demo-bm-02'
 export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_03 = 'instance-demo-bm-03'
+export const DEMO_TENANT_BARE_METAL_INSTANCE_ID_04 = 'instance-demo-bm-04'
 
 /** Services detail demo: dense GPU host used in walkthroughs. */
 export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_NAME = 'bm-server-06'
@@ -1000,8 +1003,6 @@ export const DEMO_MULTI_PROJECT_SHOWCASE_INSTANCE_IDS = [
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID = 'instance-demo-vm-01'
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02 = 'instance-demo-vm-02'
 export const DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03 = 'instance-demo-vm-03'
-export const DEMO_TENANT_MODEL_INSTANCE_ID = 'instance-demo-model-01'
-export const DEMO_TENANT_MODEL_INSTANCE_ID_02 = 'instance-demo-model-02'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID = 'instance-demo-cluster-01'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID_02 = 'instance-demo-cluster-02'
 export const DEMO_TENANT_CLUSTER_INSTANCE_ID_03 = 'instance-demo-cluster-03'
@@ -1034,17 +1035,16 @@ export const DEMO_TENANT_CLUSTER_STATES: ReadonlyArray<{
 export const DEMO_TENANT_PROJECT_INSTANCE_IDS = [
   DEMO_TENANT_BARE_METAL_INSTANCE_ID,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_04,
   DEMO_TENANT_CLUSTER_INSTANCE_ID,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_03,
-  DEMO_TENANT_MODEL_INSTANCE_ID,
 ] as const
 
 /** Demo instances seeded under `ml-dev-team` (exclusive owner). */
 export const DEMO_TENANT_SECONDARY_PROJECT_INSTANCE_IDS = [
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
-  DEMO_TENANT_MODEL_INSTANCE_ID_02,
 ] as const
 
 export function getDemoInstanceProjectIds(instanceId: string): string[] {
@@ -1257,10 +1257,10 @@ export function getBareMetalInstanceDiskImageFilterLabel(
   return resolved ? normalizeBareMetalDiskImageFilterLabel(resolved) : null
 }
 
-/** Bare metal cards use Disk image; normalize legacy OS image rows from storage. */
+/** Bare metal cards use OS image; normalize legacy Disk image rows from storage. */
 function normalizeBareMetalCardSpecRows(rows: CatalogSpecRow[]): CatalogSpecRow[] {
   return rows.map((row) =>
-    row.label === 'OS image' ? { ...row, label: 'Disk image' } : row,
+    row.label === 'Disk image' ? { ...row, label: 'OS image' } : row,
   )
 }
 
@@ -1287,7 +1287,7 @@ function ensureBaremetalInstanceSpecRows(
     const baseRows = normalized.filter(
       (row) => row.label !== 'Disk image' && row.label !== 'OS image',
     )
-    return diskImage ? [...baseRows, { label: 'Disk image', value: diskImage }] : baseRows
+    return diskImage ? [...baseRows, { label: 'OS image', value: diskImage }] : baseRows
   }
 
   return [
@@ -1296,7 +1296,7 @@ function ensureBaremetalInstanceSpecRows(
     { label: 'RAM', value: typeHardware.ram },
     { label: 'GPU', value: typeHardware.gpu },
     ...otherTrailingRows,
-    ...(diskImage ? [{ label: 'Disk image', value: diskImage }] : []),
+    ...(diskImage ? [{ label: 'OS image', value: diskImage }] : []),
   ]
 }
 
@@ -1481,13 +1481,13 @@ function createDemoTenantBareMetalInstanceVariant(
         { label: 'CPU', value: typeHardware.cpu },
         { label: 'RAM', value: typeHardware.ram },
         { label: 'GPU', value: typeHardware.gpu },
-        { label: 'Disk image', value: options.osImage },
+        { label: 'OS image', value: options.osImage },
       ]
     : [
         { label: 'CPU', value: options.cpu },
         { label: 'RAM', value: options.ram },
         { label: 'GPU', value: options.gpuLabel },
-        { label: 'Disk image', value: options.osImage },
+        { label: 'OS image', value: options.osImage },
       ]
 
   return {
@@ -1564,6 +1564,20 @@ export function createDemoTenantBareMetalInstance03(organizationName: string): T
     ram: '2 TB DDR5',
     hoursAgo: 12,
     catalogItemDisplayName: 'bare-metal-dense-gpu-node',
+  })
+}
+
+export function createDemoTenantBareMetalInstance04(organizationName: string): TenantInstance {
+  return createDemoTenantBareMetalInstanceVariant(organizationName, {
+    id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_04,
+    name: 'bm-server-04',
+    status: 'running',
+    osImage: 'RHEL 9.4',
+    gpuLabel: 'CPU-only',
+    hardwareProfile: 'Dell PowerEdge R760',
+    cpu: 'Intel Xeon Silver 4416+ × 2',
+    ram: '256 GB DDR5',
+    hoursAgo: 8,
   })
 }
 
@@ -1874,83 +1888,6 @@ export function createDemoTenantVirtualMachineInstance03(organizationName: strin
     sizeLabel: '4 vCPU · 8 GB RAM',
     internalIp: '10.99.1.13',
     hoursAgo: 3,
-  })
-}
-
-function createDemoTenantModelInstanceVariant(
-  organizationName: string,
-  options: {
-    id: string
-    name: string
-    status: TenantInstanceStatus
-    profileLabel: string
-    sizeLabel: string
-    modelId: string
-    hoursAgo: number
-    projectName?: string
-    scopeKind?: TenantInstanceScopeKind
-  },
-): TenantInstance {
-  const createdAt = new Date(Date.now() - 1000 * 60 * 60 * options.hoursAgo).toISOString()
-  const replicaMatch = options.sizeLabel.match(/(\d+)\s+replica/)
-  const replicas = replicaMatch?.[1] ?? '1'
-
-  return {
-    id: options.id,
-    name: options.name,
-    catalogItemDisplayName: 'model-serving-endpoint',
-    serviceId: 'models',
-    hardwareProfile: options.profileLabel,
-    osImage: options.modelId,
-    networkLabel: 'tenant-workload / bm-compute-a · allow-https',
-    networking: {
-      enabled: true,
-      virtualNetwork: 'tenant-workload',
-      subnet: 'bm-compute-a',
-      securityGroup: 'allow-https',
-    },
-    gpuLabel: options.sizeLabel,
-    specRows: [
-      { label: 'Model', value: options.modelId },
-      { label: 'Model profile', value: options.profileLabel },
-      { label: 'Size', value: options.sizeLabel },
-      { label: 'Replicas', value: replicas },
-    ],
-    ...resolveDemoInstanceProjectFields({
-      id: options.id,
-      projectName: options.projectName,
-      scopeKind: options.scopeKind,
-      organizationName,
-    }),
-    status: options.status,
-    createdAt,
-    provisionedAt: options.status === 'provisioning' ? null : createdAt,
-  }
-}
-
-/** Running MaaS inference endpoint seeded for Services → Models demos. */
-export function createDemoTenantModelInstance(organizationName: string): TenantInstance {
-  return createDemoTenantModelInstanceVariant(organizationName, {
-    id: DEMO_TENANT_MODEL_INSTANCE_ID,
-    name: 'model-endpoint-01',
-    status: 'running',
-    profileLabel: 'Inference small',
-    sizeLabel: '2 vCPU · 8 GiB · 1 replica',
-    modelId: 'facebook-opt-125m-simulated',
-    hoursAgo: 6,
-  })
-}
-
-/** Second MaaS endpoint (stopped) for status variety on Services → Models. */
-export function createDemoTenantModelInstance02(organizationName: string): TenantInstance {
-  return createDemoTenantModelInstanceVariant(organizationName, {
-    id: DEMO_TENANT_MODEL_INSTANCE_ID_02,
-    name: 'model-endpoint-02',
-    status: 'stopped',
-    profileLabel: 'Inference medium',
-    sizeLabel: '4 vCPU · 16 GiB · 2 replicas',
-    modelId: 'granite-3b-code-instruct',
-    hoursAgo: 20,
   })
 }
 

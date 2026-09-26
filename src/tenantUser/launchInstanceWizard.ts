@@ -1,3 +1,10 @@
+import {
+  getDefaultLaunchSecretSelections,
+} from '../tenant/secrets'
+import {
+  CLUSTER_LAUNCH_DEMO_PULL_SECRET,
+  CLUSTER_LAUNCH_DEMO_SSH_PUBLIC_KEY,
+} from './clusterLaunchDemoSecrets'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
 import {
   getCatalogClusterVersionOption,
@@ -6,6 +13,7 @@ import {
   getLatestCatalogClusterVersionId,
   getReleaseImageForClusterVersion,
 } from '../catalog/catalogPublishConfig'
+import { getDefaultClusterWorkerCount } from '../billing/m360RateLines'
 import {
   KUBERNETES_RESOURCE_NAME_HELPER,
   isValidKubernetesResourceName,
@@ -14,6 +22,10 @@ import {
 export type LaunchInstanceWizardStepId =
   | 'general'
   | 'configure'
+  | 'hardware'
+  | 'os'
+  | 'cluster-version'
+  | 'node-topology'
   | 'networking'
   | 'review'
   | 'provisioning'
@@ -65,27 +77,29 @@ export const BAREMETAL_LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
   { id: 'provisioning', label: 'Provisioning', description: '' },
 ]
 
-/** Bare metal with editable Hardware & OS: General → Hardware & OS → Networking → Review → Provisioning. */
+/** Bare metal with editable Hardware & OS: General → Hardware → OS → Networking → Review → Provisioning. */
 export const BAREMETAL_HARDWARE_OS_LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
   id: LaunchInstanceWizardStepId
   label: string
   description: string
 }> = [
   { id: 'general', label: 'General', description: '' },
-  { id: 'configure', label: 'Hardware & OS', description: '' },
+  { id: 'hardware', label: 'Hardware', description: '' },
+  { id: 'os', label: 'OS', description: '' },
   { id: 'networking', label: 'Networking', description: '' },
   { id: 'review', label: 'Review', description: '' },
   { id: 'provisioning', label: 'Provisioning', description: '' },
 ]
 
-/** Cluster launch flow: General → Configure → Networking → Review → Provisioning. */
+/** Cluster launch flow: General → Cluster version → Node topology → Networking → Review → Provisioning. */
 export const CLUSTER_LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
   id: LaunchInstanceWizardStepId
   label: string
   description: string
 }> = [
   { id: 'general', label: 'General', description: '' },
-  { id: 'configure', label: 'Configure', description: '' },
+  { id: 'cluster-version', label: 'Cluster version', description: '' },
+  { id: 'node-topology', label: 'Node topology', description: '' },
   { id: 'networking', label: 'Networking', description: '' },
   { id: 'review', label: 'Review', description: '' },
   { id: 'provisioning', label: 'Provisioning', description: '' },
@@ -107,6 +121,9 @@ export const VM_LAUNCH_INSTANCE_WIZARD_STEPS: ReadonlyArray<{
 export function getLaunchInstanceWizardSteps(options: {
   includeNetworking: boolean
   serviceId?: CatalogServiceId
+  bareMetalHardwareEditable?: boolean
+  bareMetalOsEditable?: boolean
+  /** @deprecated Prefer bareMetalHardwareEditable / bareMetalOsEditable. */
   bareMetalHardwareOsEditable?: boolean
 }) {
   if (options.serviceId === 'cluster') {
@@ -118,9 +135,8 @@ export function getLaunchInstanceWizardSteps(options: {
   }
 
   if (options.serviceId === 'baremetal') {
-    return options.bareMetalHardwareOsEditable
-      ? BAREMETAL_HARDWARE_OS_LAUNCH_INSTANCE_WIZARD_STEPS
-      : BAREMETAL_LAUNCH_INSTANCE_WIZARD_STEPS
+    // Always include Hardware and OS steps (locked values use read-only fields like cluster version).
+    return [...BAREMETAL_HARDWARE_OS_LAUNCH_INSTANCE_WIZARD_STEPS]
   }
 
   // Models / legacy: always include Networking at service launch.
@@ -140,10 +156,15 @@ export const LAUNCH_INSTANCE_WIZARD_DEMO = {
   hardwareProfile: 'Dell PowerEdge R750',
   osImage: 'RHEL 9.4',
   networkingTitle: 'Networking',
-  networkingLede:
-    'Choose the virtual network, subnet, security group, and external IP pool for this instance.',
-  networkingAdminLede:
-    'Choose a virtual network, subnet, security group, and IP pool. Add objects in Networking.',
+  networkingLede: 'Choose tenant network objects—Create to add inline.',
+  networkingAdminLede: 'Choose tenant network objects—Create to add inline.',
+  createVirtualNetworkLabel: 'Create virtual network',
+  createSubnetLabel: 'Create subnet',
+  createSecurityGroupLabel: 'Create security group',
+  createExternalIpPoolLabel: 'Create external IP pool',
+  createSubnetRequiresVirtualNetworkHelper:
+    'Create a virtual network first, then add a subnet.',
+  externalIpPoolTenantHelper: 'Pools are assigned by your provider.',
   networkingAssignedHelper: 'Set by your tenant',
   reviewTitle: 'Review',
   reviewHardware: 'Dell PowerEdge R750',
@@ -184,43 +205,17 @@ export function getLaunchInstanceDefaultDescription(serviceId: CatalogServiceId)
 export const CLUSTER_LAUNCH_INSTANCE_DEMO = {
   defaultName: 'ocp-cluster-01',
   nameHelper: KUBERNETES_RESOURCE_NAME_HELPER,
-  sshPublicKey:
-    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJACfzqANDyWlygNn0FWP7YBZ6XLt+XPGpSw5PyknOW brotman@redhat.com',
+  sshPublicKey: CLUSTER_LAUNCH_DEMO_SSH_PUBLIC_KEY,
   sshHelper:
     'Paste a public SSH key for remote access. Supported types: ssh-rsa, ssh-ed25519, and ecdsa-sha2-nistp256/384/521.',
-  pullSecret: JSON.stringify(
-    {
-      auths: {
-        'cloud.openshift.com': {
-          auth: 'ZGVtbzpwdWxsLXNlY3JldA==',
-          email: 'brotman@redhat.com',
-        },
-        'quay.io': {
-          auth: 'ZGVtbzpwdWxsLXNlY3JldA==',
-          email: 'brotman@redhat.com',
-        },
-        'registry.connect.redhat.com': {
-          auth: 'ZGVtbzpwdWxsLXNlY3JldA==',
-          email: 'brotman@redhat.com',
-        },
-        'registry.redhat.io': {
-          auth: 'ZGVtbzpwdWxsLXNlY3JldA==',
-          email: 'brotman@redhat.com',
-        },
-      },
-    },
-    null,
-    2,
-  ),
+  pullSecret: CLUSTER_LAUNCH_DEMO_PULL_SECRET,
   releaseImage: 'quay.io/openshift-release-dev/ocp-release:4.21.0-multi',
   hostTypeOptions: ['standard-host', 'gpu-host', 'storage-host'] as const,
   defaultHostType: 'standard-host',
   defaultNodeCount: 1,
   infrastructureNetworkingTitle: 'Infrastructure networking',
-  infrastructureNetworkingLede:
-    'Attach this cluster to your tenant network objects.',
-  infrastructureNetworkingAdminLede:
-    'Attach this cluster to tenant network objects. Add objects in Networking.',
+  infrastructureNetworkingLede: 'Choose tenant network objects—Create to add inline.',
+  infrastructureNetworkingAdminLede: 'Choose tenant network objects—Create to add inline.',
   clusterNetworkTitle: 'Cluster network',
   clusterNetworkLede: 'Address ranges used inside the cluster for pods and services.',
   podCidr: '10.128.0.0/24',
@@ -315,7 +310,9 @@ export type LaunchInstanceWizardForm = {
   instanceName: string
   /** Optional free-text description (same pattern as catalog item creation). */
   description: string
+  sshPublicKeySecretId: string
   sshPublicKey: string
+  pullSecretId: string
   pullSecret: string
   /** Selected OpenShift version id when provisioning a cluster. */
   clusterVersionId: string
@@ -393,14 +390,16 @@ export function createDefaultClusterNodeSet(
     id: `node-set-${index}`,
     nodeSetId,
     hostType,
-    nodeCount: CLUSTER_LAUNCH_INSTANCE_DEMO.defaultNodeCount,
+    nodeCount: getDefaultClusterWorkerCount(nodeSetId),
   }
 }
 
 export const DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM: LaunchInstanceWizardForm = {
   instanceName: LAUNCH_INSTANCE_WIZARD_DEMO.defaultInstanceName,
   description: '',
+  sshPublicKeySecretId: '',
   sshPublicKey: LAUNCH_INSTANCE_WIZARD_DEMO.defaultSshPublicKey,
+  pullSecretId: '',
   pullSecret: '',
   clusterVersionId: '',
   releaseImage: '',
@@ -437,11 +436,17 @@ export function createLaunchInstanceWizardForm(options: {
   instanceTypeId?: string
   /** Bare metal default disk image id. */
   diskImageId?: string
+  tenantSlug?: string
 }): LaunchInstanceWizardForm {
   const serviceId = options.serviceId ?? 'baremetal'
   const isCluster = serviceId === 'cluster'
   const isVm = serviceId === 'virtual-machine'
   const isBaremetal = serviceId === 'baremetal'
+  const launchSecrets =
+    options.tenantSlug &&
+    (isCluster || isVm || isBaremetal)
+      ? getDefaultLaunchSecretSelections(options.tenantSlug)
+      : null
   const matchedClusterVersion = isCluster
     ? getCatalogClusterVersionOption(options.clusterVersion)
     : undefined
@@ -460,11 +465,16 @@ export function createLaunchInstanceWizardForm(options: {
       (isCluster || isVm || isBaremetal
         ? getNextLaunchInstanceName([], serviceId)
         : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.instanceName),
+    sshPublicKeySecretId: launchSecrets?.sshPublicKeySecretId ?? '',
     sshPublicKey:
-      isCluster || isVm || isBaremetal
+      launchSecrets?.sshPublicKey ??
+      (isCluster || isVm || isBaremetal
         ? CLUSTER_LAUNCH_INSTANCE_DEMO.sshPublicKey
-        : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.sshPublicKey,
-    pullSecret: isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.pullSecret : '',
+        : DEFAULT_LAUNCH_INSTANCE_WIZARD_FORM.sshPublicKey),
+    pullSecretId: launchSecrets?.pullSecretId ?? '',
+    pullSecret:
+      launchSecrets?.pullSecret ??
+      (isCluster ? CLUSTER_LAUNCH_INSTANCE_DEMO.pullSecret : ''),
     clusterVersionId,
     releaseImage: isCluster
       ? getReleaseImageForClusterVersion(
@@ -570,4 +580,28 @@ export function isBareMetalGeneralStepValid(form: LaunchInstanceWizardForm): boo
 
 export function isBareMetalHardwareOsStepValid(form: LaunchInstanceWizardForm): boolean {
   return form.instanceType.trim().length > 0 && form.diskImageId.trim().length > 0
+}
+
+export function isBareMetalHardwareStepValid(form: LaunchInstanceWizardForm): boolean {
+  return form.instanceType.trim().length > 0
+}
+
+export function isBareMetalOsStepValid(form: LaunchInstanceWizardForm): boolean {
+  return form.diskImageId.trim().length > 0
+}
+
+export function isClusterVersionStepValid(form: LaunchInstanceWizardForm): boolean {
+  return form.clusterVersionId.trim().length > 0 || form.releaseImage.trim().length > 0
+}
+
+export function isClusterNodeTopologyStepValid(form: LaunchInstanceWizardForm): boolean {
+  return (
+    form.nodeSets.length > 0 &&
+    form.nodeSets.every(
+      (nodeSet) =>
+        nodeSet.nodeSetId.trim().length > 0 &&
+        nodeSet.hostType.trim().length > 0 &&
+        nodeSet.nodeCount >= 1,
+    )
+  )
 }

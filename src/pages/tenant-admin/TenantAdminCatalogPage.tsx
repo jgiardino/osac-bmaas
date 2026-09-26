@@ -5,12 +5,11 @@ import {
   Card,
   CardBody,
   Content,
+  Alert,
   EmptyState,
   EmptyStateBody,
   Flex,
   FlexItem,
-  Form,
-  FormGroup,
   FormSelect,
   FormSelectOption,
   Label,
@@ -25,6 +24,7 @@ import {
   Tooltip,
 } from '@patternfly/react-core'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
+import { RocketIcon } from '@patternfly/react-icons/dist/esm/icons/rocket-icon'
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
 import {
   CatalogServiceFilterToggle,
@@ -37,10 +37,10 @@ import { CatalogViewToggle } from '../../components/catalog/CatalogViewToggle'
 import { TenantCatalogItemDetailsPage } from '../../components/tenant-admin/TenantCatalogItemDetailsPage'
 import { ProviderSetupPublishCatalogWizard } from '../provider-setup/ProviderSetupPublishCatalogWizard'
 import { TenantUserLaunchInstanceWizard } from '../../components/tenant-user/TenantUserLaunchInstanceWizard'
+import { CatalogRateCell } from '../../components/catalog/CatalogRateCell'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
-import { KubernetesResourceNameField } from '../../components/shared/KubernetesResourceNameHelper'
+import { LaunchBillingBlockedModal } from '../../components/billing/LaunchBillingBlockedModal'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
-import { formatCatalogConfigurationSummary } from '../../catalog/catalogSpecs'
 import {
   createCatalogServiceFilterSet,
   describeCatalogServiceFilter,
@@ -52,12 +52,15 @@ import {
   syncWorkspaceCatalogItemParam,
 } from '../../shared/workspaceNavUrl'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
+import { isOrganizationM360AccountInactive } from '../../billing/m360'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import { getProviderCatalogItems, getProviderSavedTemplate } from '../../providerSetup/storage'
 import { sortByDemoCatalogOrder } from '../../providerSetup/prototypeEntry'
 import {
   CATALOG_SERVICE_FILTER_LABELS,
   DEMO_EXISTING_MASTER_TEMPLATES,
+  PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
+  formatRateCardSummary,
   type CatalogServiceId,
 } from '../../providerSetup/templateDemo'
 import {
@@ -65,34 +68,39 @@ import {
   TENANT_CATALOG_MANAGER_DEMO,
   type TenantCatalogGovernanceItemWithNetworking,
 } from '../../tenantAdmin/catalogManager'
-import { ensureTenantDemoProjects } from '../../tenantAdmin/storage'
 import {
   addTenantCatalogItem,
+  ensureTenantDemoCatalogItems,
+  ensureTenantDemoProjects,
   getTenantCatalogItems,
   removeTenantCatalogItem,
   updateTenantCatalogItem,
 } from '../../tenantAdmin/storage'
 import type { TenantProject } from '../../tenantAdmin/projects'
-import { getTenantUserCatalogCardFromDraft, TENANT_USER_CATALOG_FALLBACK } from '../../tenantUser/catalog'
+import { getTenantUserCatalogCardFromDraft } from '../../tenantUser/catalog'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
 import type { TenantInstance } from '../../tenantUser/instances'
 import {
+  applyPublishedPayloadToTenantCatalogItem,
   createTenantCatalogItem,
   createTenantCatalogItemFromPayload,
   isTenantScopedCatalogItemId,
+  toProviderCatalogDraftFromTenantCatalogItem,
 } from '../../tenantAdmin/catalogItems'
 import type { PublishedTemplatePayload } from '../../providerSetup/templateDemo'
 import {
+  getTenantAdminCatalogAddedDate,
+  getTenantAdminCatalogOriginDisplay,
   getTenantAdminCatalogSourceLabel,
   getTenantAdminCatalogSourceTooltip,
-  shouldShowTenantAdminCatalogOrigin,
-  TenantAdminCatalogSourceIcon,
 } from '../../tenantAdmin/catalogSource'
-import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
 
 function isTenantScopedCatalogItem(item: TenantCatalogGovernanceItemWithNetworking): boolean {
   return isTenantScopedCatalogItemId(item.id)
 }
+
+const PROVIDER_ORIGIN_EDIT_DISABLED_REASON = 'Created by provider admin'
+const PROVIDER_ORIGIN_DELETE_DISABLED_REASON = 'Created by provider admin'
 
 function toCatalogDisplayOrderInput(item: TenantCatalogGovernanceItemWithNetworking) {
   return {
@@ -110,7 +118,9 @@ type TenantAdminCatalogPageProps = {
   projects: readonly TenantProject[]
   initialProjectId?: string | null
   onProjectScopeChange?: (projectId: string) => void
+  onCreateProject?: (project: TenantProject) => void
   onNavigateToProjectsTeams: () => void
+  onNavigateToBilling?: () => void
   existingInstanceNames?: readonly string[]
   /** When set, open this catalog item's detail page (id or display name). */
   openCatalogItemKey?: string | null
@@ -120,75 +130,118 @@ type TenantAdminCatalogPageProps = {
   onWizardFinished?: (instanceId: string, serviceId: CatalogServiceId) => void
 }
 
-function toLaunchCatalogCard(
+function toLaunchCatalogDraft(
   item: TenantCatalogGovernanceItemWithNetworking,
-): ReturnType<typeof getTenantUserCatalogCardFromDraft> {
-  const draft = getProviderCatalogItems().find(
-    (catalogItem) => catalogItem.catalogItemId === item.catalogItemId,
-  )
-  if (draft) {
-    return getTenantUserCatalogCardFromDraft(draft)
-  }
-
+): ProviderCatalogDraft {
   return {
-    ...TENANT_USER_CATALOG_FALLBACK,
-    serviceId: item.serviceId,
-    service: item.service,
-    status: item.status,
-    displayName: item.displayName,
-    description: item.description,
-    categoryLabel: item.categoryLabel,
-    specRows: item.specRows,
-    cpu: item.cpu,
-    ram: item.ram,
-    gpu: item.gpu,
-    osImage: item.osImage,
     catalogItemId: item.catalogItemId ?? item.id,
     templateRefId: item.templateRefId,
     templateName: item.templateName,
+    displayName: item.displayName,
+    description: item.description,
+    scope: item.scope,
+    createdAt: item.createdAt,
+    rateCard: item.rateCard,
+    serviceId: item.serviceId,
+    networkPolicy: item.networkPolicy,
+    instanceTypeId: item.instanceTypeId,
+    instanceTypeLabel: item.instanceTypeLabel,
+    diskImageId: item.diskImageId,
+    diskImageLabel: item.diskImageLabel,
+    clusterVersionMode: item.clusterVersionMode,
+    hardwareOsMode: item.hardwareOsMode,
+    osImageMode: item.osImageMode,
+    nodeSetId: item.nodeSetId,
+    nodeSetLabel: item.nodeSetLabel,
+    hostTypeId: item.hostTypeId,
+    hostTypeLabel: item.hostTypeLabel,
+    clusterNodeTopologyMode: item.clusterNodeTopologyMode,
+    fieldPolicies: item.fieldPolicies,
+    status: item.status === 'Unpublished' ? 'unpublished' : 'live',
   }
 }
 
-function AccessSummary({
-  compact = false,
-  onViewDetails,
-}: {
-  compact?: boolean
-  onViewDetails?: () => void
-}) {
-  const statusContent = (
-    <span className="tenant-admin-catalog-manager__access-status">
-      <Label
-        color="grey"
-        isCompact
-        className="tenant-admin-catalog-manager__access-status-label"
-      >
-        {TENANT_CATALOG_MANAGER_DEMO.accessDefaultLabel}
-      </Label>
-      {onViewDetails ? (
-        <Button
-          variant="link"
-          isInline
-          className="tenant-admin-catalog-manager__inline-link"
-          onClick={onViewDetails}
-        >
-          {TENANT_CATALOG_MANAGER_DEMO.accessViewDetailsLabel}
-        </Button>
-      ) : null}
-    </span>
-  )
+function toLaunchCatalogCard(
+  item: TenantCatalogGovernanceItemWithNetworking,
+  tenantSlug: string,
+): ReturnType<typeof getTenantUserCatalogCardFromDraft> {
+  // Prefer the live tenant-scoped session record so launch keeps Editable hardware/OS.
+  if (isTenantScopedCatalogItemId(item.id)) {
+    ensureTenantDemoCatalogItems(tenantSlug)
+    const stored = getTenantCatalogItems(tenantSlug).find((entry) => entry.id === item.id)
+    const fromStored = stored ? toProviderCatalogDraftFromTenantCatalogItem(stored) : null
+    if (fromStored) {
+      return getTenantUserCatalogCardFromDraft(fromStored)
+    }
+    return getTenantUserCatalogCardFromDraft(toLaunchCatalogDraft(item))
+  }
 
-  if (compact) {
-    return statusContent
+  const draft = getProviderCatalogItems().find(
+    (catalogItem) => catalogItem.catalogItemId === item.catalogItemId,
+  )
+  return getTenantUserCatalogCardFromDraft(draft ?? toLaunchCatalogDraft(item))
+}
+
+function toLaunchCatalogDraftForItem(
+  item: TenantCatalogGovernanceItemWithNetworking,
+  tenantSlug: string,
+): ProviderCatalogDraft {
+  if (isTenantScopedCatalogItemId(item.id)) {
+    ensureTenantDemoCatalogItems(tenantSlug)
+    const stored = getTenantCatalogItems(tenantSlug).find((entry) => entry.id === item.id)
+    const fromStored = stored ? toProviderCatalogDraftFromTenantCatalogItem(stored) : null
+    if (fromStored) {
+      return fromStored
+    }
   }
 
   return (
-    <div className="tenant-admin-catalog-manager__spec-row">
-      <dt className="tenant-admin-catalog-manager__spec-label">
-        {TENANT_CATALOG_MANAGER_DEMO.accessLabel}
-      </dt>
-      <dd className="tenant-admin-catalog-manager__spec-value">{statusContent}</dd>
-    </div>
+    getProviderCatalogItems().find(
+      (catalogItem) => catalogItem.catalogItemId === item.catalogItemId,
+    ) ?? toLaunchCatalogDraft(item)
+  )
+}
+
+/** Grid: blue label chip. List: subtle subtext under the item name. */
+function TenantAdminCatalogServiceType({
+  service,
+  variant,
+}: {
+  service: string
+  variant: 'grid' | 'list'
+}) {
+  if (variant === 'grid') {
+    return (
+      <Label color="blue" className="tenant-admin-catalog-manager__card-label">
+        {service}
+      </Label>
+    )
+  }
+
+  return (
+    <Content component="p" className="tenant-admin-catalog-manager__service-type">
+      {service}
+    </Content>
+  )
+}
+
+function TenantAdminCatalogOriginLine({
+  item,
+  className,
+  includeDate = true,
+}: {
+  item: TenantCatalogGovernanceItemWithNetworking
+  className?: string
+  includeDate?: boolean
+}) {
+  const text = includeDate
+    ? getTenantAdminCatalogOriginDisplay(item)
+    : getTenantAdminCatalogSourceLabel(item)
+
+  return (
+    <Tooltip content={getTenantAdminCatalogSourceTooltip(item)} position="top" enableFlip={false}>
+      <span className={className}>{text}</span>
+    </Tooltip>
   )
 }
 
@@ -202,6 +255,7 @@ function getCatalogItemActions(
   onDelete: () => void,
 ): IAction[] {
   const isUnpublished = item.status === 'Unpublished'
+  const canMutateOrigin = isTenantScopedCatalogItem(item)
 
   const actions: IAction[] = [
     {
@@ -221,6 +275,12 @@ function getCatalogItemActions(
     {
       title: 'Edit',
       onClick: onEdit,
+      isDisabled: !canMutateOrigin,
+      description: !canMutateOrigin ? PROVIDER_ORIGIN_EDIT_DISABLED_REASON : undefined,
+      tooltipProps:
+        !canMutateOrigin
+          ? { content: PROVIDER_ORIGIN_EDIT_DISABLED_REASON }
+          : undefined,
     },
     {
       title: 'Duplicate',
@@ -235,8 +295,14 @@ function getCatalogItemActions(
     },
     {
       title: 'Delete',
-      isDanger: true,
+      isDanger: canMutateOrigin,
       onClick: onDelete,
+      isDisabled: !canMutateOrigin,
+      description: !canMutateOrigin ? PROVIDER_ORIGIN_DELETE_DISABLED_REASON : undefined,
+      tooltipProps:
+        !canMutateOrigin
+          ? { content: PROVIDER_ORIGIN_DELETE_DISABLED_REASON }
+          : undefined,
     },
   )
 
@@ -249,7 +315,9 @@ export function TenantAdminCatalogPage({
   projects,
   initialProjectId = null,
   onProjectScopeChange,
+  onCreateProject,
   onNavigateToProjectsTeams,
+  onNavigateToBilling,
   existingInstanceNames = [],
   openCatalogItemKey = null,
   onOpenCatalogItemConsumed,
@@ -273,20 +341,27 @@ export function TenantAdminCatalogPage({
     useState<TenantCatalogGovernanceItemWithNetworking | null>(null)
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false)
   const [isWizardOpen, setIsWizardOpen] = useState(false)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [editDisplayName, setEditDisplayName] = useState('')
+  const [isEditWizardOpen, setIsEditWizardOpen] = useState(false)
+  const [editReturnToDetails, setEditReturnToDetails] = useState(false)
   const [isUnpublishModalOpen, setIsUnpublishModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isCreateWizardOpen, setIsCreateWizardOpen] = useState(false)
   const [creatingCatalogItemId, setCreatingCatalogItemId] = useState<string | null>(null)
   const [creatingCardHeightPx, setCreatingCardHeightPx] = useState<number | null>(null)
+  const [isLaunchBillingBlockedOpen, setIsLaunchBillingBlockedOpen] = useState(false)
+  const [launchBlockedItemName, setLaunchBlockedItemName] = useState(
+    PUBLISH_CATALOG_SUGGESTED_DISPLAY_NAME,
+  )
   const createRevealTimeoutRef = useRef<number | null>(null)
   const catalogCardGridRef = useRef<HTMLDivElement | null>(null)
   const catalogDisplayOrderRef = useRef<string[] | null>(null)
   const itemParam = getWorkspaceCatalogItemParam(searchParams)
+  const billingAccountInactive = isOrganizationM360AccountInactive(organization)
+  const organizationDisplayName =
+    organization.displayName?.trim() || organization.name
   const catalogTemplates = useMemo(
     () => [getProviderSavedTemplate() ?? DEMO_EXISTING_MASTER_TEMPLATES[0]!],
-    [isCreateWizardOpen],
+    [isCreateWizardOpen, isEditWizardOpen],
   )
 
   const refreshCatalogItems = () => {
@@ -544,20 +619,30 @@ export function TenantAdminCatalogPage({
     if (item.status === 'Unpublished') {
       return
     }
-    setSelectedCatalogItem(item)
+
+    if (billingAccountInactive) {
+      setLaunchBlockedItemName(item.displayName)
+      setIsLaunchBillingBlockedOpen(true)
+      return
+    }
+
+    // Re-read governance so Editable hardware/OS from session storage is current.
+    const freshItems = getTenantCatalogGovernanceItems(organization, catalogDraft)
+    setCatalogItems(freshItems)
+    const freshItem = freshItems.find((entry) => entry.id === item.id) ?? item
+
+    setSelectedCatalogItem(freshItem)
     setIsDetailsDrawerOpen(false)
     setIsWizardOpen(true)
     syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
   }
 
-  const launchCatalogCard = selectedCatalogItem ? toLaunchCatalogCard(selectedCatalogItem) : null
-  const launchCatalogDraft =
-    selectedCatalogItem
-      ? (getProviderCatalogItems().find(
-          (item) => item.catalogItemId === selectedCatalogItem.catalogItemId,
-        ) ??
-        catalogDraft)
-      : catalogDraft
+  const launchCatalogCard = selectedCatalogItem
+    ? toLaunchCatalogCard(selectedCatalogItem, organization.slug)
+    : null
+  const launchCatalogDraft = selectedCatalogItem
+    ? toLaunchCatalogDraftForItem(selectedCatalogItem, organization.slug)
+    : catalogDraft
 
   const closeDetails = () => {
     setIsDetailsDrawerOpen(false)
@@ -609,22 +694,54 @@ export function TenantAdminCatalogPage({
     })
   }
 
-  const openEdit = (item: TenantCatalogGovernanceItemWithNetworking) => {
-    setSelectedCatalogItem(item)
-    setEditDisplayName(item.displayName)
-    setIsEditModalOpen(true)
-  }
-
-  const handleSaveEdit = () => {
-    if (!selectedCatalogItem || !editDisplayName.trim()) {
+  const openEdit = (
+    item: TenantCatalogGovernanceItemWithNetworking,
+    options?: { returnToDetails?: boolean },
+  ) => {
+    if (!isTenantScopedCatalogItem(item)) {
       return
     }
 
-    updateCatalogItem(selectedCatalogItem.id, (item) => ({
-      ...item,
-      displayName: editDisplayName.trim(),
-    }))
-    setIsEditModalOpen(false)
+    setSelectedCatalogItem(item)
+    setEditReturnToDetails(options?.returnToDetails ?? isDetailsDrawerOpen)
+    setIsDetailsDrawerOpen(false)
+    setIsCreateWizardOpen(false)
+    setIsWizardOpen(false)
+    setIsEditWizardOpen(true)
+  }
+
+  const closeEditWizard = () => {
+    const returnToDetails = editReturnToDetails
+    setIsEditWizardOpen(false)
+    setEditReturnToDetails(false)
+    if (returnToDetails && selectedCatalogItem) {
+      setIsDetailsDrawerOpen(true)
+      syncWorkspaceCatalogItemParam(setSearchParams, selectedCatalogItem.id)
+    }
+  }
+
+  const handleSaveCatalogItemFromWizard = (
+    catalogItemId: string,
+    payload: PublishedTemplatePayload,
+  ) => {
+    updateTenantCatalogItem(organization.slug, catalogItemId, (stored) =>
+      applyPublishedPayloadToTenantCatalogItem(stored, payload),
+    )
+    refreshCatalogItems()
+    const nextItems = getTenantCatalogGovernanceItems(organization, catalogDraft)
+    const updated = nextItems.find((item) => item.id === catalogItemId)
+    if (updated) {
+      setSelectedCatalogItem(updated)
+    }
+
+    const returnToDetails = editReturnToDetails
+    setIsEditWizardOpen(false)
+    setEditReturnToDetails(false)
+
+    if (returnToDetails && updated) {
+      setIsDetailsDrawerOpen(true)
+      syncWorkspaceCatalogItemParam(setSearchParams, updated.id)
+    }
   }
 
   const handleDuplicate = (item: TenantCatalogGovernanceItemWithNetworking) => {
@@ -692,25 +809,25 @@ export function TenantAdminCatalogPage({
   }
 
   const openDelete = (item: TenantCatalogGovernanceItemWithNetworking) => {
+    if (!isTenantScopedCatalogItem(item)) {
+      return
+    }
+
     setSelectedCatalogItem(item)
     setIsDeleteModalOpen(true)
   }
 
   const handleConfirmDelete = () => {
-    if (!selectedCatalogItem) {
+    if (!selectedCatalogItem || !isTenantScopedCatalogItem(selectedCatalogItem)) {
       return
     }
 
     const deletedId = selectedCatalogItem.id
-    if (isTenantScopedCatalogItem(selectedCatalogItem)) {
-      removeTenantCatalogItem(organization.slug, deletedId)
-      setCatalogItems(getTenantCatalogGovernanceItems(organization, catalogDraft))
-    } else {
-      setCatalogItems((current) => current.filter((item) => item.id !== deletedId))
-    }
+    removeTenantCatalogItem(organization.slug, deletedId)
+    setCatalogItems(getTenantCatalogGovernanceItems(organization, catalogDraft))
     setIsDetailsDrawerOpen(false)
     syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
-    setIsEditModalOpen(false)
+    setIsEditWizardOpen(false)
     setSelectedCatalogItem(null)
     setIsDeleteModalOpen(false)
   }
@@ -730,6 +847,19 @@ export function TenantAdminCatalogPage({
     ? (catalogItems.find((entry) => entry.id === selectedCatalogItem.id) ?? selectedCatalogItem)
     : null
   const projectCount = ensureTenantDemoProjects(organization.slug).length
+  const editingCatalogDraft =
+    isEditWizardOpen && detailsItem && isTenantScopedCatalogItem(detailsItem)
+      ? (() => {
+          ensureTenantDemoCatalogItems(organization.slug)
+          const stored = getTenantCatalogItems(organization.slug).find(
+            (entry) => entry.id === detailsItem.id,
+          )
+          return (
+            (stored ? toProviderCatalogDraftFromTenantCatalogItem(stored) : null) ??
+            toLaunchCatalogDraft(detailsItem)
+          )
+        })()
+      : null
 
   return (
     <>
@@ -744,6 +874,22 @@ export function TenantAdminCatalogPage({
           onClose={() => setIsCreateWizardOpen(false)}
           onCreateCatalogItem={handleCreateCatalogItem}
         />
+      ) : isEditWizardOpen && editingCatalogDraft ? (
+        <ProviderSetupPublishCatalogWizard
+          mode="edit"
+          presentation="page"
+          isOpen={isEditWizardOpen}
+          hidePublishScope
+          editingCatalog={editingCatalogDraft}
+          templates={catalogTemplates}
+          organizations={[organization]}
+          leaveConfirmActionLabel={
+            editReturnToDetails ? 'Back to catalog item' : 'Go to Catalog'
+          }
+          onClose={closeEditWizard}
+          onCreateCatalogItem={() => undefined}
+          onSaveCatalogItem={handleSaveCatalogItemFromWizard}
+        />
       ) : isWizardOpen && launchCatalogCard ? (
         <TenantUserLaunchInstanceWizard
           presentation="page"
@@ -757,10 +903,7 @@ export function TenantAdminCatalogPage({
           projects={projects}
           initialProjectId={initialProjectId}
           onProjectScopeChange={onProjectScopeChange}
-          onNavigateToCreateProject={() => {
-            closeLaunchWizard()
-            onNavigateToProjectsTeams()
-          }}
+          onCreateProject={onCreateProject}
           existingInstanceNames={existingInstanceNames}
           onClose={closeLaunchWizard}
           onBackToCatalogItem={() => {
@@ -787,6 +930,10 @@ export function TenantAdminCatalogPage({
           onBack={closeDetails}
           onNavigateToProjectsTeams={onNavigateToProjectsTeams}
           onLaunch={() => openLaunchWizard(detailsItem)}
+          onEdit={() => openEdit(detailsItem, { returnToDetails: true })}
+          onDuplicate={() => handleDuplicate(detailsItem)}
+          onTogglePublish={() => openTogglePublish(detailsItem)}
+          onDelete={() => openDelete(detailsItem)}
         />
       ) : (
       <div className="tenant-admin-workspace-page tenant-admin-catalog-manager">
@@ -815,6 +962,20 @@ export function TenantAdminCatalogPage({
             </Button>
           </FlexItem>
         </Flex>
+
+        {billingAccountInactive ? (
+          <Alert
+            variant="danger"
+            isInline
+            title="Billing account inactive"
+            className="tenant-admin-catalog-manager__billing-alert"
+          >
+            <Content component="p">
+              {organizationDisplayName} cannot launch instances until its M360 billing account is
+              active.
+            </Content>
+          </Alert>
+        ) : null}
 
         <div className="catalog-view-toolbar tenant-admin-catalog-manager__toolbar">
           <div className="catalog-view-toolbar__start">
@@ -916,9 +1077,7 @@ export function TenantAdminCatalogPage({
                         {getCatalogServiceIcon(item.serviceId)}
                       </span>
                       <div className="tenant-admin-catalog-manager__card-header-actions">
-                        <Label color="blue" className="tenant-admin-catalog-manager__card-label">
-                          {item.service}
-                        </Label>
+                        <TenantAdminCatalogServiceType service={item.service} variant="grid" />
                         <Label
                           color={item.status === 'Unpublished' ? 'grey' : 'green'}
                           className="tenant-admin-catalog-manager__card-label"
@@ -948,27 +1107,34 @@ export function TenantAdminCatalogPage({
                       valueClassName="tenant-admin-catalog-manager__spec-value"
                     />
 
-                    {shouldShowTenantAdminCatalogOrigin(item) ? (
-                      <div className="tenant-admin-catalog-manager__card-footer">
-                        <div
-                          className="tenant-admin-catalog-manager__card-footer-visibility"
-                          aria-label="Catalog origin"
-                        >
-                          <Tooltip
-                            content={getTenantAdminCatalogSourceTooltip(item)}
-                            position="top"
-                            enableFlip={false}
-                          >
-                            <span className="tenant-admin-catalog-manager__scope">
-                              <TenantAdminCatalogSourceIcon
-                                item={item}
-                                className="tenant-admin-catalog-manager__scope-icon"
-                              />
-                              <span>{getTenantAdminCatalogSourceLabel(item)}</span>
-                            </span>
-                          </Tooltip>
-                        </div>
+                    <dl className="tenant-admin-catalog-manager__card-specs">
+                      <div className="tenant-admin-catalog-manager__card-spec">
+                        <dt>Rate</dt>
+                        <dd>{formatRateCardSummary(item.rateCard)}</dd>
                       </div>
+                    </dl>
+
+                    <div className="tenant-admin-catalog-manager__card-footer">
+                      <div
+                        className="tenant-admin-catalog-manager__card-footer-visibility"
+                        aria-label="Catalog source"
+                      >
+                        <TenantAdminCatalogOriginLine
+                          item={item}
+                          className="tenant-admin-catalog-manager__scope"
+                        />
+                      </div>
+                    </div>
+                    {item.status !== 'Unpublished' ? (
+                      <Button
+                        variant="secondary"
+                        icon={<RocketIcon aria-hidden />}
+                        isBlock
+                        onClick={() => openLaunchWizard(item)}
+                        className="tenant-admin-catalog-manager__launch-button"
+                      >
+                        {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+                      </Button>
                     ) : null}
                   </CardBody>
                   )}
@@ -992,11 +1158,13 @@ export function TenantAdminCatalogPage({
             >
               <Thead>
                 <Tr>
-                  <Th>Name</Th>
-                  <Th>Status</Th>
-                  <Th>Configuration</Th>
-                  <Th>Access</Th>
-                  <Th screenReaderText="Actions" />
+                  <Th className="tenant-admin-catalog-manager__col-name">Name</Th>
+                  <Th className="tenant-admin-catalog-manager__col-status">Status</Th>
+                  <Th className="tenant-admin-catalog-manager__col-configuration">Configuration</Th>
+                  <Th className="tenant-admin-catalog-manager__col-rate">Rate</Th>
+                  <Th className="tenant-admin-catalog-manager__col-source">Source</Th>
+                  <Th className="tenant-admin-catalog-manager__col-added">Added</Th>
+                  <Th screenReaderText="Actions" className="tenant-admin-catalog-manager__col-action" />
                 </Tr>
               </Thead>
               <Tbody>
@@ -1005,7 +1173,7 @@ export function TenantAdminCatalogPage({
 
                   return (
                     <Tr key={item.id}>
-                      <Td dataLabel="Name">
+                      <Td dataLabel="Name" className="tenant-admin-catalog-manager__col-name">
                         <Content component="p" className="tenant-admin-catalog-manager__primary-cell">
                           <Button
                             variant="link"
@@ -1016,30 +1184,36 @@ export function TenantAdminCatalogPage({
                             {item.displayName}
                           </Button>
                         </Content>
+                        <TenantAdminCatalogServiceType service={item.service} variant="list" />
                       </Td>
-                      <Td dataLabel="Status">
+                      <Td dataLabel="Status" className="tenant-admin-catalog-manager__col-status">
                         <Label color={item.status === 'Unpublished' ? 'grey' : 'green'} isCompact>
                           {item.status}
                         </Label>
                       </Td>
-                      <Td dataLabel="Configuration">
-                        <Content component="p" className="tenant-admin-catalog-manager__primary-cell">
-                          {formatCatalogConfigurationSummary({
-                            serviceId: item.serviceId,
-                            templateRefId: item.templateRefId,
-                            templateName: item.templateName,
-                            instanceTypeLabel: item.instanceTypeLabel,
-                            diskImageLabel: item.diskImageLabel,
-                            diskImageId: item.diskImageId,
-                            clusterVersionMode: item.clusterVersionMode,
-                            hardwareOsMode: item.hardwareOsMode,
-                          })}
-                        </Content>
+                      <Td dataLabel="Configuration" className="tenant-admin-catalog-manager__col-configuration">
+                        <CatalogSpecRowsList
+                          rows={item.specRows}
+                          className="catalog-table-specs-list"
+                          rowClassName="catalog-table-spec-row"
+                          labelClassName="catalog-table-spec-label"
+                          valueClassName="catalog-table-spec-value"
+                        />
                       </Td>
-                      <Td dataLabel="Access">
-                        <AccessSummary compact onViewDetails={() => openDetails(item)} />
+                      <Td dataLabel="Rate" className="tenant-admin-catalog-manager__col-rate">
+                        <CatalogRateCell rateCard={item.rateCard} />
                       </Td>
-                      <Td isActionCell>
+                      <Td dataLabel="Source" className="tenant-admin-catalog-manager__col-source">
+                        <TenantAdminCatalogOriginLine
+                          item={item}
+                          includeDate={false}
+                          className="tenant-admin-catalog-manager__list-origin"
+                        />
+                      </Td>
+                      <Td dataLabel="Added" className="tenant-admin-catalog-manager__col-added">
+                        {getTenantAdminCatalogAddedDate(item) ?? '—'}
+                      </Td>
+                      <Td isActionCell className="tenant-admin-catalog-manager__col-action">
                         <ActionsColumn items={catalogItemActions} />
                       </Td>
                     </Tr>
@@ -1051,40 +1225,6 @@ export function TenantAdminCatalogPage({
         )}
       </div>
       )}
-
-      <Modal
-        variant={ModalVariant.small}
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        aria-labelledby="tenant-edit-catalog-item-title"
-      >
-        <ModalHeader title="Edit catalog item" labelId="tenant-edit-catalog-item-title" />
-        <ModalBody>
-          <Form>
-            <FormGroup label="Name" fieldId="tenant-edit-catalog-display-name" isRequired>
-              <KubernetesResourceNameField
-                id="tenant-edit-catalog-display-name"
-                value={editDisplayName}
-                onChange={setEditDisplayName}
-                aria-label="Name"
-                isRequired
-              />
-            </FormGroup>
-          </Form>
-        </ModalBody>
-        <ModalFooter>
-          <Button
-            variant="primary"
-            onClick={handleSaveEdit}
-            isDisabled={!isValidKubernetesResourceName(editDisplayName)}
-          >
-            Save
-          </Button>
-          <Button variant="link" onClick={() => setIsEditModalOpen(false)}>
-            Cancel
-          </Button>
-        </ModalFooter>
-      </Modal>
 
       <Modal
         variant={ModalVariant.small}
@@ -1151,6 +1291,21 @@ export function TenantAdminCatalogPage({
           </Button>
         </ModalFooter>
       </Modal>
+
+      <LaunchBillingBlockedModal
+        isOpen={isLaunchBillingBlockedOpen}
+        catalogItemName={launchBlockedItemName}
+        organizationName={organizationDisplayName}
+        onClose={() => setIsLaunchBillingBlockedOpen(false)}
+        onOpenBilling={
+          onNavigateToBilling
+            ? () => {
+                setIsLaunchBillingBlockedOpen(false)
+                onNavigateToBilling()
+              }
+            : undefined
+        }
+      />
     </>
   )
 }

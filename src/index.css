@@ -13,6 +13,45 @@ body {
   background-color: var(--pf-t--global--background--color--primary--default);
 }
 
+/* PatternFly 6 masthead logos — brand wraps logo, not the other way around. */
+.pf-v6-c-masthead__brand > .pf-v6-c-masthead__logo[class*='-masthead-logo'] {
+  display: inline-flex !important;
+  align-items: center;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible;
+  width: auto !important;
+  min-width: 7rem;
+  height: auto;
+  min-height: 2rem;
+  max-height: 2.75rem !important;
+}
+
+.pf-v6-c-masthead__brand > .pf-v6-c-masthead__logo[class*='-masthead-logo'] > * {
+  max-height: 2.75rem !important;
+}
+
+.pf-v6-c-masthead .northsummit-masthead-brand,
+.pf-v6-c-masthead .vertexa-masthead-brand,
+.pf-v6-c-masthead .bluesolace-masthead-brand {
+  color: var(--pf-t--global--text--color--regular);
+}
+
+/* Form-style dropdowns: rounded rectangle with caret (not pill). */
+:root {
+  --bmaas-dropdown-border-radius: var(--pf-t--global--border--radius--small);
+}
+
+.bmaas-dropdown-toggle.pf-v6-c-menu-toggle {
+  --pf-v6-c-menu-toggle--BorderRadius: var(--bmaas-dropdown-border-radius);
+  border-radius: var(--bmaas-dropdown-border-radius) !important;
+  justify-content: space-between;
+}
+
+select.pf-v6-c-form-control {
+  border-radius: var(--bmaas-dropdown-border-radius);
+}
+
 .bmaas-role-landing {
   min-height: 100dvh;
   width: 100%;
@@ -35,6 +74,15 @@ body {
 
 .bmaas-role-landing__description.pf-v6-c-content--p {
   margin: 0;
+}
+
+.bmaas-role-landing__prototype-link-prefix {
+  display: inline;
+  white-space: nowrap;
+}
+
+.bmaas-role-landing__prototype-link-prefix .pf-v6-c-button.pf-m-link {
+  margin-inline-end: 0;
 }
 
 .bmaas-role-landing__credits {
@@ -142,4 +190,73 @@ body {
 
 .k8s-resource-name__rule--unmet .k8s-resource-name__rule-icon {
   color: var(--pf-t--global--icon--color--status--danger--default);
+}
+
+.tenant-onboarding__step {
+  max-width: none;
+  width: 100%;
+}
+
+.tenant-onboarding__alert {
+  margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.tenant-onboarding__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  padding-block: var(--pf-t--global--spacer--xl);
+}
+
+.tenant-onboarding__account-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  margin-block-start: var(--pf-t--global--spacer--md);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: var(--pf-t--global--border--width--regular) solid
+    var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--medium);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.tenant-onboarding__account-hint-copy {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  min-width: 0;
+}
+
+.tenant-onboarding__account-hint-icon {
+  flex-shrink: 0;
+  color: var(--pf-t--global--icon--color--status--info--default);
+}
+
+.tenant-onboarding__account-hint-text.pf-v6-c-content--p {
+  margin: 0;
+  color: var(--pf-t--global--text--color--regular);
+  font-weight: var(--pf-t--global--font--weight--body--default);
+}
+
+.tenant-onboarding__account-hint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.tenant-onboarding__account-cards {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+.tenant-onboarding__account-select-card--linked {
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
+.tenant-onboarding__account-select-card--linked:hover {
+  border-color: var(--pf-t--global--border--color--default);
 }

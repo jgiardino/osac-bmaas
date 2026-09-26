@@ -27,6 +27,11 @@ import redHatHatLogoUrl from '../assets/Logo-RedHat-Hat-Color-RGB.svg?url'
 type PrototypeLink = {
   label: string
   to: string
+  companionSeparator?: string
+  companionLink?: {
+    label: string
+    to: string
+  }
 }
 
 type RoleBlockProps = {
@@ -72,9 +77,23 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
                   justifyContent={{ default: 'justifyContentCenter' }}
                   flexWrap={{ default: 'wrap' }}
                 >
-                  <RouterButton variant="link" isInline to={link.to}>
-                    {link.label}
-                  </RouterButton>
+                  {link.companionLink ? (
+                    <>
+                      <span className="bmaas-role-landing__prototype-link-prefix">
+                        <RouterButton variant="link" isInline to={link.to}>
+                          {link.label}
+                        </RouterButton>
+                        {link.companionSeparator?.includes(',') ? ',' : link.companionSeparator}
+                      </span>
+                      <RouterButton variant="link" isInline to={link.companionLink.to}>
+                        {link.companionLink.label}
+                      </RouterButton>
+                    </>
+                  ) : (
+                    <RouterButton variant="link" isInline to={link.to}>
+                      {link.label}
+                    </RouterButton>
+                  )}
                 </Flex>
               </StackItem>
             ))}
@@ -84,21 +103,6 @@ function RoleBlock({ id, title, description, icon, actions, prototypeLinks = [] 
         )}
       </FlexItem>
     </Flex>
-  )
-}
-
-function CreditLink({ href, children }: { href: string; children: string }) {
-  return (
-    <Button
-      variant="link"
-      component="a"
-      isInline
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </Button>
   )
 }
 
@@ -133,16 +137,17 @@ export function BmaasLandingPage() {
       to: '/provider/workspace?nav=catalog',
     },
     {
-      label: 'Projects',
-      to: '/provider/workspace?nav=projects-teams',
+      label: 'Tenants',
+      to: '/provider/workspace?nav=administration-organizations',
+      companionSeparator: ', ',
+      companionLink: {
+        label: 'IdP Manager',
+        to: '/idp-manager/bluesolace',
+      },
     },
     {
-      label: 'Tenant onboarding (IdP Manager)',
-      to: '/idp-manager/bluesolace',
-    },
-    {
-      label: 'AI Grid (future vision)',
-      to: '/provider/workspace?vision=model-fleet&nav=vision-model-fleet',
+      label: 'External IP Pools',
+      to: '/provider/workspace?nav=networking',
     },
   ]
 
@@ -182,8 +187,17 @@ export function BmaasLandingPage() {
           to: '/tenant-admin/northsummit/workspace?nav=projects-teams',
         },
         {
-          label: 'AI Grid (future vision)',
-          to: '/tenant-admin/northsummit/workspace?vision=model-fleet&nav=vision-model-fleet',
+          label: 'Virtual networks',
+          to: '/tenant-admin/northsummit/workspace?nav=networking-virtual-networks',
+          companionSeparator: ', ',
+          companionLink: {
+            label: 'External IPs',
+            to: '/tenant-admin/northsummit/workspace?nav=networking-external-ip-pools',
+          },
+        },
+        {
+          label: 'Billing account inactive',
+          to: '/tenant-admin/northsummit/workspace?nav=catalog&scenario=billing-inactive',
         },
       ],
     },
@@ -203,6 +217,15 @@ export function BmaasLandingPage() {
         {
           label: 'Projects',
           to: '/tenant-user/northsummit/workspace?nav=projects-teams',
+        },
+        {
+          label: 'Virtual networks',
+          to: '/tenant-user/northsummit/workspace?nav=networking-virtual-networks',
+          companionSeparator: ', ',
+          companionLink: {
+            label: 'External IPs',
+            to: '/tenant-user/northsummit/workspace?nav=networking-external-ip-pools',
+          },
         },
       ],
     },
@@ -227,7 +250,7 @@ export function BmaasLandingPage() {
           >
             <Brand src={redHatHatLogoUrl} alt="Red Hat" heights={{ default: '52px' }} />
             <Title headingLevel="h1" size="4xl">
-              Red Hat OSAC Prototypes 0.2
+              Red Hat OSAC Prototypes 0.3
             </Title>
             <Content component="p">Select a role to access the customized interface.</Content>
           </Flex>
@@ -279,16 +302,38 @@ export function BmaasLandingPage() {
             >
               OSAC Delivery Overview
             </Button>
+            <Button
+              variant="link"
+              component="a"
+              isInline
+              href={`${import.meta.env.BASE_URL}legacy-prototype/`}
+            >
+              Previous prototype (TO BE REMOVED)
+            </Button>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
-                AI Grid (future vision) by{' '}
-                <CreditLink href="https://github.com/jgiardino">Jenn Giardino</CreditLink>.
-              </Content>
-              <Content component="p">
-                Underlying prototype created by{' '}
-                <CreditLink href="https://github.com/heyethankim">Ethan Kim</CreditLink>
+                Created by{' '}
+                <Button
+                  variant="link"
+                  component="a"
+                  isInline
+                  href="https://redhat.enterprise.slack.com/archives/D021Q4YKTBR"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Ethan Kim
+                </Button>
                 {' & '}
-                <CreditLink href="https://github.com/kybaker">Kyle Baker</CreditLink>
+                <Button
+                  variant="link"
+                  component="a"
+                  isInline
+                  href="https://redhat.enterprise.slack.com/archives/D08ABCFSWGW"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Kyle Baker
+                </Button>
                 {' - OpenShift UXD'}
               </Content>
               <Content component="p">Last updated: {BMAAS_LANDING_LAST_UPDATED}</Content>

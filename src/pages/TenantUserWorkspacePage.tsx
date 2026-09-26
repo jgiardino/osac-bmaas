@@ -12,10 +12,17 @@ import {
   getDemoTenantUserOrganization,
   getProviderViewingAsTenantUser,
 } from '../providerAdmin/openAsTenantUser'
-import { getProviderRegisteredOrganizations, activateProviderRegisteredOrganizationBySlug } from '../providerSetup/storage'
+import {
+  getProviderRegisteredOrganizations,
+  activateProviderRegisteredOrganizationBySlug,
+  ensureProviderDemoOrganizations,
+} from '../providerSetup/storage'
 import { getProviderCatalogDraft, getProviderCatalogItems } from '../providerSetup/storage'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
-import { getRegisteredOrganizationBySlug } from '../tenantAdmin/organizations'
+import {
+  getRegisteredOrganizationBySlug,
+  getWorkspaceOrganization,
+} from '../tenantAdmin/organizations'
 import { resolveOrganizationCompanyLogo } from '../providerAdmin/organizations'
 import {
   getTenantInstanceServiceId,
@@ -34,17 +41,12 @@ import {
   type TenantUserNavId,
 } from '../tenantUser/storage'
 import { TENANT_USER_NAV_ITEMS } from '../tenantShell/constants'
-import { ProviderAdminExternalIpPoolsPage } from './infrastructure/ProviderAdminExternalIpPoolsPage'
-import { ProviderAdminSecurityGroupsPage } from './infrastructure/ProviderAdminSecurityGroupsPage'
-import { ProviderAdminSubnetsPage } from './infrastructure/ProviderAdminSubnetsPage'
+import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
 import { TenantUserActivityLogPage } from './tenant-user/TenantUserActivityLogPage'
+import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserCatalogPage } from './tenant-user/TenantUserCatalogPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
-import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
-import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
-import { clearGenaiApiKeysDetailParams } from './tenant-user/genai/genaiNavParams'
-import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
 import { ensureTenantDemoProjects } from '../tenantAdmin/storage'
 import type { TenantProject } from '../tenantAdmin/projects'
@@ -54,7 +56,10 @@ import {
   setProjectScopeId,
   type ProjectScopeId,
 } from '../tenantUser/projectScope'
-import { getTenantUserAccessibleProjects } from '../tenantUser/projects'
+import {
+  getTenantUserAccessibleProjects,
+  getTenantUserProjectsPageProjects,
+} from '../tenantUser/projects'
 import { TENANT_USER_PROJECTS_PAGE } from '../tenantUser/constants'
 
 function isTenantUserNavId(value: string | null): value is TenantUserNavId {
@@ -64,14 +69,10 @@ function isTenantUserNavId(value: string | null): value is TenantUserNavId {
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
-    value === 'genai-asset-endpoints' ||
-    value === 'genai-playground' ||
-    value === 'genai-api-keys' ||
     value === 'projects-teams' ||
     value === 'networking-virtual-networks' ||
-    value === 'networking-subnets' ||
-    value === 'networking-security-groups' ||
     value === 'networking-external-ip-pools' ||
+    value === 'secrets' ||
     value === 'activity-log'
   )
 }
@@ -113,6 +114,7 @@ function getLockedServiceIdFromNav(navId: TenantUserNavId): CatalogServiceId | n
 function ensureTenantUserPostOnboardingPrototype(tenantSlug: string, navId: TenantUserNavId) {
   setTenantUserOnboardingComplete(tenantSlug)
   setTenantUserActiveNav(tenantSlug, navId)
+  ensureProviderDemoOrganizations()
   activateProviderRegisteredOrganizationBySlug(tenantSlug)
 }
 
@@ -123,8 +125,8 @@ function normalizeTenantUserNavParam(value: string | null): TenantUserNavId | nu
   if (value === 'my-instances' || value === 'services') {
     return 'services-baremetal'
   }
-  if (value === 'vision-model-fleet') {
-    return 'catalog'
+  if (value === 'networking-subnets' || value === 'networking-security-groups') {
+    return 'networking-virtual-networks'
   }
   return null
 }
@@ -170,7 +172,6 @@ export function TenantUserWorkspacePage() {
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
   const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
-  const navItems = TENANT_USER_NAV_ITEMS
 
   const clearProvisioningTimer = useCallback((instanceId: string) => {
     const timeoutId = provisioningTimersRef.current.get(instanceId)
@@ -246,6 +247,7 @@ export function TenantUserWorkspacePage() {
     }
 
     setTenantUserOnboardingComplete(tenantSlug)
+    ensureProviderDemoOrganizations()
     activateProviderRegisteredOrganizationBySlug(tenantSlug)
     setInstances(ensureTenantDemoInstances(tenantSlug))
     setProjects(ensureTenantDemoProjects(tenantSlug))
@@ -277,24 +279,6 @@ export function TenantUserWorkspacePage() {
       setTenantUserActiveNav(tenantSlug, nextNavId)
       setNavContentKey((current) => current + 1)
       syncWorkspaceNavParam(setSearchParams, nextNavId, { showLanding: true })
-
-      // GenAI API keys drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current)
-        if (nextNavId === 'genai-api-keys') {
-          next.set('nav', 'genai-api-keys')
-          clearGenaiApiKeysDetailParams(next)
-          return next
-        }
-        let changed = false
-        for (const key of ['keyId', 'subscriptionId', 'subTab', 'tab', 'modal'] as const) {
-          if (next.has(key)) {
-            next.delete(key)
-            changed = true
-          }
-        }
-        return changed ? next : current
-      })
 
       if (isServicesNavId(nextNavId)) {
         setInstances(ensureTenantDemoInstances(tenantSlug))
@@ -380,12 +364,6 @@ export function TenantUserWorkspacePage() {
     ],
   )
 
-  const userEmail = DEMO_TENANT_LOGIN_EMAIL_USER[tenantSlug as DemoTenantId]
-  const accessibleProjects = useMemo(
-    () => getTenantUserAccessibleProjects(projects, userEmail),
-    [projects, userEmail],
-  )
-
   if (!isValidTenant) {
     return <Navigate to="/" replace />
   }
@@ -399,7 +377,7 @@ export function TenantUserWorkspacePage() {
         (item) => item.id === previewSession.organizationId,
       )) ||
     organizationFromSlug ||
-    (isPreviewSession ? getDemoTenantUserOrganization() : null)
+    (isPreviewSession ? getDemoTenantUserOrganization() : getWorkspaceOrganization(tenantSlug))
   const defaultCatalogDraft = getProviderCatalogDraft()
   const focusedCatalogDraft =
     isPreviewSession && previewSession?.catalogItemId
@@ -409,6 +387,15 @@ export function TenantUserWorkspacePage() {
       : defaultCatalogDraft
   const catalogDraft = focusedCatalogDraft
   const displayName = DEMO_TENANT_DISPLAY_USER[tenantSlug]
+  const userEmail = DEMO_TENANT_LOGIN_EMAIL_USER[tenantSlug as DemoTenantId]
+  const accessibleProjects = useMemo(
+    () => getTenantUserAccessibleProjects(projects, userEmail),
+    [projects, userEmail],
+  )
+  const projectsPageProjects = useMemo(
+    () => getTenantUserProjectsPageProjects(projects, userEmail),
+    [projects, userEmail],
+  )
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
   const renderWorkspaceContent = () => {
@@ -428,7 +415,6 @@ export function TenantUserWorkspacePage() {
             onProjectScopeChange={handleProjectScopeChange}
             organization={organization}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
-            activeNavId={activeNavId}
             onNavigateToCatalogItem={handleNavigateToCatalogItem}
             openInstanceId={openInstanceId}
             onOpenInstanceConsumed={() => setOpenInstanceId(null)}
@@ -438,22 +424,12 @@ export function TenantUserWorkspacePage() {
             }}
           />
         )
-      case 'genai-asset-endpoints':
-        return (
-          <AiAssetEndpointsPage
-            onNavigateToPlayground={() => handleNavChange('genai-playground')}
-          />
-        )
-      case 'genai-playground':
-        return <PlaygroundPage />
-      case 'genai-api-keys':
-        return <GenaiApiKeysPage surface="tenant-user" />
       case 'projects-teams':
         return organization ? (
           <TenantAdminProjectsTeamsPage
             tenantSlug={tenantSlug}
             organization={organization}
-            projects={accessibleProjects}
+            projects={projectsPageProjects}
             allProjects={projects}
             instances={instances}
             onProjectsChange={setProjects}
@@ -476,53 +452,32 @@ export function TenantUserWorkspacePage() {
         return (
           <ProviderAdminVirtualNetworksPage
             tenantSlug={tenantSlug}
-            readOnly
             openVirtualNetworkId={openVirtualNetworkId}
-            onOpenVirtualNetworkConsumed={() => setOpenVirtualNetworkId(null)}
-            onNavigateToSubnet={(subnetId) => {
-              setOpenSubnetId(subnetId)
-              handleNavChange('networking-subnets')
-            }}
-            onNavigateToSecurityGroup={(securityGroupId) => {
-              setOpenSecurityGroupId(securityGroupId)
-              handleNavChange('networking-security-groups')
-            }}
-          />
-        )
-      case 'networking-subnets':
-        return (
-          <ProviderAdminSubnetsPage
-            tenantSlug={tenantSlug}
-            readOnly
             openSubnetId={openSubnetId}
-            onOpenSubnetConsumed={() => setOpenSubnetId(null)}
-            onNavigateToVirtualNetwork={(virtualNetworkId) => {
-              setOpenVirtualNetworkId(virtualNetworkId)
-              handleNavChange('networking-virtual-networks')
-            }}
-          />
-        )
-      case 'networking-security-groups':
-        return (
-          <ProviderAdminSecurityGroupsPage
-            tenantSlug={tenantSlug}
-            readOnly
             openSecurityGroupId={openSecurityGroupId}
+            onOpenVirtualNetworkConsumed={() => setOpenVirtualNetworkId(null)}
+            onOpenSubnetConsumed={() => setOpenSubnetId(null)}
             onOpenSecurityGroupConsumed={() => setOpenSecurityGroupId(null)}
-            onNavigateToVirtualNetwork={(virtualNetworkId) => {
-              setOpenVirtualNetworkId(virtualNetworkId)
-              handleNavChange('networking-virtual-networks')
-            }}
           />
         )
       case 'networking-external-ip-pools':
         return (
-          <ProviderAdminExternalIpPoolsPage
+          <ProviderAdminExternalNetworksPage
             tenantSlug={tenantSlug}
-            readOnly
             scopeOrganization={organization}
+            serviceInstances={instances}
+            onNavigateToServiceInstance={(instance) => {
+              const project = accessibleProjects.find((entry) => entry.name === instance.projectName)
+              if (project) {
+                handleProjectScopeChange(project.id)
+              }
+              setOpenInstanceId(instance.id)
+              handleNavChange(getServicesNavId(getTenantInstanceServiceId(instance)))
+            }}
           />
         )
+      case 'secrets':
+        return <TenantSecretsPage tenantSlug={tenantSlug} />
       case 'activity-log':
         return <TenantUserActivityLogPage />
       case 'catalog':
@@ -554,12 +509,13 @@ export function TenantUserWorkspacePage() {
     <TenantShell
       role="tenant-user"
       displayName={displayName}
-      navItems={navItems}
+      navItems={TENANT_USER_NAV_ITEMS}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       companyLogoSrc={organization ? resolveOrganizationCompanyLogo(organization) : null}
       companyLogoAlt={organization?.name}
+      organizationSlug={organization?.slug}
     >
       <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>

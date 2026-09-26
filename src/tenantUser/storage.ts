@@ -3,22 +3,20 @@ import {
   createDemoTenantBareMetalInstance,
   createDemoTenantBareMetalInstance02,
   createDemoTenantBareMetalInstance03,
+  createDemoTenantBareMetalInstance04,
   createDemoTenantClusterInstance,
   createDemoTenantClusterInstance02,
   createDemoTenantClusterInstance03,
   createDemoTenantClusterInstance04,
-  createDemoTenantModelInstance,
-  createDemoTenantModelInstance02,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_02,
   DEMO_TENANT_BARE_METAL_INSTANCE_ID_03,
+  DEMO_TENANT_BARE_METAL_INSTANCE_ID_04,
   DEMO_TENANT_CLUSTER_INSTANCE_ID,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_02,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_03,
   DEMO_TENANT_CLUSTER_INSTANCE_ID_04,
   DEMO_TENANT_CLUSTER_STATES,
-  DEMO_TENANT_MODEL_INSTANCE_ID,
-  DEMO_TENANT_MODEL_INSTANCE_ID_02,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
   DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_03,
@@ -46,14 +44,12 @@ export type TenantUserNavId =
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
-  | 'genai-asset-endpoints'
-  | 'genai-playground'
-  | 'genai-api-keys'
   | 'projects-teams'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
   | 'networking-external-ip-pools'
+  | 'secrets'
   | 'activity-log'
 
 const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
@@ -62,21 +58,18 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'services-clusters',
   'services-models',
   'services-virtual-machines',
-  'genai-asset-endpoints',
-  'genai-playground',
-  'genai-api-keys',
   'projects-teams',
   'networking-virtual-networks',
-  'networking-subnets',
-  'networking-security-groups',
   'networking-external-ip-pools',
+  'secrets',
   'activity-log',
 ]
 
 const LEGACY_TENANT_USER_NAV_IDS: Record<string, TenantUserNavId> = {
   'my-instances': 'services-baremetal',
   services: 'services-baremetal',
-  'vision-model-fleet': 'catalog',
+  'networking-subnets': 'networking-virtual-networks',
+  'networking-security-groups': 'networking-virtual-networks',
 }
 
 function getSlugKey(prefix: string, slug: string): string {
@@ -246,8 +239,8 @@ function getDemoOrganizationName(slug: string): string {
 }
 
 /**
- * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal,
- * Cluster, and Models (MaaS) instances. Virtual machines stay empty (catalog-launch only).
+ * Ensures Tenant Admin / Tenant User Services lists include demo Bare metal
+ * and Cluster instances. Virtual machines and Models stay empty (catalog-launch only).
  * Stable IDs avoid duplicates across reloads.
  */
 export function ensureTenantDemoInstances(
@@ -258,7 +251,7 @@ export function ensureTenantDemoInstances(
   let next = [...existing]
   let changed = false
 
-  // Drop legacy seeded VMs so Virtual machines stays empty until launch.
+  // Drop legacy seeded VMs so Virtual machines matches Models (empty until launch).
   const retiredDemoVmIds = new Set([
     DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID,
     DEMO_TENANT_VIRTUAL_MACHINE_INSTANCE_ID_02,
@@ -274,12 +267,11 @@ export function ensureTenantDemoInstances(
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID, create: createDemoTenantBareMetalInstance },
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_02, create: createDemoTenantBareMetalInstance02 },
     { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_03, create: createDemoTenantBareMetalInstance03 },
+    { id: DEMO_TENANT_BARE_METAL_INSTANCE_ID_04, create: createDemoTenantBareMetalInstance04 },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID, create: createDemoTenantClusterInstance },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_02, create: createDemoTenantClusterInstance02 },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_03, create: createDemoTenantClusterInstance03 },
     { id: DEMO_TENANT_CLUSTER_INSTANCE_ID_04, create: createDemoTenantClusterInstance04 },
-    { id: DEMO_TENANT_MODEL_INSTANCE_ID, create: createDemoTenantModelInstance },
-    { id: DEMO_TENANT_MODEL_INSTANCE_ID_02, create: createDemoTenantModelInstance02 },
   ]
 
   for (const demo of demos) {

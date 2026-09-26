@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon'
-import { NetworkIcon } from '@patternfly/react-icons/dist/esm/icons/network-icon'
+import { RhUiZoneIcon } from '@patternfly/react-icons/dist/esm/icons/rh-ui-zone-icon'
 import {
   Content,
   DescriptionList,
@@ -9,6 +9,7 @@ import {
   DescriptionListTerm,
   Form,
   FormGroup,
+  TextArea,
   TextInput,
 } from '@patternfly/react-core'
 import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
@@ -17,6 +18,14 @@ import {
   type ProviderVirtualNetwork,
 } from '../../providerAdmin/networkInventory'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
+import {
+  buildVirtualNetworkEditSnapshot,
+  buildVirtualNetworkEditSnapshotFromNetwork,
+  getNetworkInventoryEditModifiedStepIds,
+  getVirtualNetworkEditChanges,
+  type NetworkInventoryEditStepId,
+} from '../../networking/networkInventoryEditDiff'
+import { NetworkInventoryEditReviewPanel } from '../../networking/NetworkInventoryEditReviewPanel'
 import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
 import { resolveNetworkInventoryScope } from '../../shared/networkInventoryScope'
 import { NetworkInventoryCreateWizardShell } from './NetworkInventoryCreateWizardShell'
@@ -42,6 +51,7 @@ const VIRTUAL_NETWORK_WIZARD_STEPS = [
 
 type CreateVirtualNetworkWizardProps = {
   isOpen: boolean
+  presentation?: 'modal' | 'page'
   parentLabel?: string
   tenantSlug?: string
   resource?: ProviderVirtualNetwork | null
@@ -60,6 +70,7 @@ function buildFormFromNetwork(network: ProviderVirtualNetwork): CreateVirtualNet
 
 export function CreateVirtualNetworkWizard({
   isOpen,
+  presentation = 'page',
   parentLabel = 'Virtual networks',
   tenantSlug,
   resource = null,
@@ -80,6 +91,37 @@ export function CreateVirtualNetworkWizard({
 
   const isNameValid = isValidKubernetesResourceName(form.name)
   const isDetailsStepValid = isNameValid && Boolean(form.cidr.trim())
+
+  const editBaseline = useMemo(() => {
+    if (!isEditMode || !resource) {
+      return null
+    }
+
+    return buildVirtualNetworkEditSnapshotFromNetwork(resource)
+  }, [isEditMode, resource])
+
+  const currentEditSnapshot = useMemo(() => {
+    if (!isEditMode) {
+      return null
+    }
+
+    return buildVirtualNetworkEditSnapshot(form)
+  }, [form, isEditMode])
+
+  const editChanges = useMemo(() => {
+    if (!editBaseline || !currentEditSnapshot) {
+      return []
+    }
+
+    return getVirtualNetworkEditChanges(editBaseline, currentEditSnapshot)
+  }, [currentEditSnapshot, editBaseline])
+
+  const modifiedStepIds = useMemo(
+    () => getNetworkInventoryEditModifiedStepIds(editChanges),
+    [editChanges],
+  )
+
+  const canSaveEdit = !isEditMode || editChanges.length > 0
 
   const handleClose = () => {
     setForm(DEFAULT_FORM)
@@ -141,10 +183,12 @@ export function CreateVirtualNetworkWizard({
               />
             </FormGroup>
             <FormGroup label="Description" fieldId="create-vnet-detail">
-              <TextInput
+              <TextArea
                 id="create-vnet-detail"
                 value={form.detail}
                 onChange={(_event, value) => setForm((current) => ({ ...current, detail: value }))}
+                placeholder="Describe how this virtual network will be used"
+                resizeOrientation="vertical"
               />
             </FormGroup>
             <FormGroup label="IPv4 CIDR" fieldId="create-vnet-ipv4-cidr" isRequired>
@@ -169,28 +213,34 @@ export function CreateVirtualNetworkWizard({
     }
 
     return (
-      <DescriptionList isCompact className="provider-admin-network-inventory__wizard-review">
-        <DescriptionListGroup>
-          <DescriptionListTerm>Name</DescriptionListTerm>
-          <DescriptionListDescription>{form.name.trim() || '—'}</DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Description</DescriptionListTerm>
-          <DescriptionListDescription>{form.detail.trim() || '—'}</DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>IPv4 CIDR</DescriptionListTerm>
-          <DescriptionListDescription>
-            <code>{form.cidr.trim() || '—'}</code>
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>IPv6 CIDR</DescriptionListTerm>
-          <DescriptionListDescription>
-            <code>{form.ipv6Cidr.trim() || '—'}</code>
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-      </DescriptionList>
+      <NetworkInventoryEditReviewPanel
+        isEditMode={isEditMode}
+        editChanges={editChanges}
+        createReview={
+          <DescriptionList isCompact className="provider-admin-network-inventory__wizard-review">
+            <DescriptionListGroup>
+              <DescriptionListTerm>Name</DescriptionListTerm>
+              <DescriptionListDescription>{form.name.trim() || '—'}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Description</DescriptionListTerm>
+              <DescriptionListDescription>{form.detail.trim() || '—'}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>IPv4 CIDR</DescriptionListTerm>
+              <DescriptionListDescription>
+                <code>{form.cidr.trim() || '—'}</code>
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>IPv6 CIDR</DescriptionListTerm>
+              <DescriptionListDescription>
+                <code>{form.ipv6Cidr.trim() || '—'}</code>
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          </DescriptionList>
+        }
+      />
     )
   }
 
@@ -203,13 +253,13 @@ export function CreateVirtualNetworkWizard({
       return {
         nextButtonText: (
           <span className="provider-admin-network-inventory__wizard-footer-label">
-            <NetworkIcon aria-hidden />
+            <RhUiZoneIcon aria-hidden />
             <span>{isEditMode ? 'Save changes' : 'Create virtual network'}</span>
             <ArrowRightIcon aria-hidden />
           </span>
         ),
         onNext: handleSubmit,
-        isNextDisabled: !isDetailsStepValid,
+        isNextDisabled: !isDetailsStepValid || !canSaveEdit,
       }
     }
 
@@ -219,6 +269,7 @@ export function CreateVirtualNetworkWizard({
   return (
     <NetworkInventoryCreateWizardShell
       isOpen={isOpen}
+      presentation={presentation}
       parentLabel={parentLabel}
       title={isEditMode ? 'Edit virtual network' : 'Create virtual network'}
       titleId="create-virtual-network-wizard-title"
@@ -227,6 +278,11 @@ export function CreateVirtualNetworkWizard({
       getStepFooter={getStepFooter}
       onClose={handleClose}
       leaveConfirmPrimaryActionLabel={isEditMode ? 'Discard changes' : 'Leave'}
+      getStepName={(step) =>
+        isEditMode && modifiedStepIds.has(step.id as NetworkInventoryEditStepId)
+          ? `${step.label} (modified)`
+          : step.label
+      }
     />
   )
 }

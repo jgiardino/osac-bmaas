@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
@@ -36,6 +36,7 @@ import {
 } from '@patternfly/react-core'
 import type { TenantNavGroup, TenantNavItem } from '../../tenantShell/constants'
 import { flattenTenantNavItems } from '../../tenantShell/constants'
+import { isNorthSummitBankOrganization } from '../../providerAdmin/organizations'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { BlueSolaceMastheadLogo } from './BlueSolaceMastheadLogo'
 import { NorthsummitBankMastheadLogo } from './NorthsummitBankMastheadLogo'
@@ -54,7 +55,7 @@ type TenantShellProps = {
   onNavChange?: (navId: string) => void
   disabledNavIds?: string[]
   isOnboardingLayout?: boolean
-  isContentFilled?: boolean
+  organizationSlug?: string
   companyLogoSrc?: string | null
   companyLogoAlt?: string
 }
@@ -77,7 +78,7 @@ export function TenantShell({
   onNavChange,
   disabledNavIds = [],
   isOnboardingLayout = false,
-  isContentFilled = false,
+  organizationSlug,
   companyLogoSrc = null,
   companyLogoAlt,
 }: TenantShellProps) {
@@ -154,6 +155,10 @@ export function TenantShell({
   }
 
   const roleLabel = accountRoleLabel ?? roleLabels[role]
+  const showNorthSummitBrand =
+    organizationSlug != null
+      ? isNorthSummitBankOrganization({ slug: organizationSlug })
+      : !companyLogoSrc && role !== 'idp-manager'
 
   const masthead = (
     <Masthead>
@@ -163,15 +168,21 @@ export function TenantShell({
             <BarsIcon />
           </PageToggleButton>
         </MastheadToggle>
-        <MastheadLogo
-          className={
-            companyLogoSrc || role === 'idp-manager'
-              ? 'bluesolace-masthead-logo'
-              : 'northsummit-masthead-logo'
-          }
-        >
-          <MastheadBrand>
-            {companyLogoSrc ? (
+        <MastheadBrand>
+          <MastheadLogo
+            className={
+              showNorthSummitBrand
+                ? 'northsummit-masthead-logo'
+                : role === 'idp-manager' || companyLogoSrc
+                  ? 'bluesolace-masthead-logo'
+                  : 'northsummit-masthead-logo'
+            }
+          >
+            {showNorthSummitBrand ? (
+              <NorthsummitBankMastheadLogo />
+            ) : role === 'idp-manager' ? (
+              <BlueSolaceMastheadLogo />
+            ) : companyLogoSrc ? (
               <div
                 className="bluesolace-masthead-brand"
                 role="img"
@@ -184,13 +195,11 @@ export function TenantShell({
                   draggable={false}
                 />
               </div>
-            ) : role === 'idp-manager' ? (
-              <BlueSolaceMastheadLogo />
             ) : (
               <NorthsummitBankMastheadLogo />
             )}
-          </MastheadBrand>
-        </MastheadLogo>
+          </MastheadLogo>
+        </MastheadBrand>
       </MastheadMain>
 
       <MastheadContent className="northsummit-masthead-content">
@@ -299,36 +308,20 @@ export function TenantShell({
         masthead={masthead}
         sidebar={showNavigation ? sidebar : undefined}
         isManagedSidebar={showNavigation}
-        isContentFilled={isContentFilled}
-        style={
-          isContentFilled
-            ? ({
-                '--pf-v6-c-page__main-container--MaxHeight':
-                  'calc(100% - var(--pf-t--global--spacer--md))',
-                '--pf-v6-c-page__main-container--MarginBlockEnd':
-                  'var(--pf-t--global--spacer--md)',
-              } as CSSProperties)
-            : undefined
-        }
         className={[
           'tenant-shell-page',
           isOnboardingLayout ? 'tenant-shell-page--onboarding' : undefined,
-          isContentFilled ? 'tenant-shell-page--filled' : undefined,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {isContentFilled ? (
-          children
-        ) : (
-          <PageSection
-            isWidthLimited={isOnboardingLayout}
-            isCenterAligned={isOnboardingLayout}
-            className="tenant-shell-page__main osac-page-main-section"
-          >
-            {children}
-          </PageSection>
-        )}
+        <PageSection
+          isWidthLimited={isOnboardingLayout}
+          isCenterAligned={isOnboardingLayout}
+          className="tenant-shell-page__main osac-page-main-section"
+        >
+          {children}
+        </PageSection>
       </Page>
       <UserPreferencesModal
         isOpen={isPreferencesModalOpen}

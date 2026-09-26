@@ -7,6 +7,7 @@ import {
 } from '../providerSetup/templateDemo'
 import { formatBaremetalInstanceTypeLabel } from '../catalog/catalogPublishConfig'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
+import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import { TENANT_CATALOG_GOVERNANCE_ITEMS } from './catalogManager'
 import type { TenantProjectCatalogItem } from './projects'
 
@@ -77,6 +78,7 @@ export function createDemoTenantCatalogGeneralPurposeItem(): TenantCatalogItem {
       diskImageId: 'rhel-10',
       diskImageLabel: 'RHEL 10',
       hardwareOsMode: 'editable',
+      osImageMode: 'editable',
       fieldPolicies: [],
       networkPolicy: {
         ...DEFAULT_CATALOG_NETWORK_POLICY,
@@ -89,9 +91,50 @@ export function createDemoTenantCatalogGeneralPurposeItem(): TenantCatalogItem {
   }
 }
 
-export function createTenantCatalogItemFromPayload(
-  payload: PublishedTemplatePayload,
-): TenantCatalogItem {
+/** Map a tenant-scoped catalog item into the launch/card draft shape. */
+export function toProviderCatalogDraftFromTenantCatalogItem(
+  item: TenantCatalogItem,
+): ProviderCatalogDraft | null {
+  if (!item.catalogConfig) {
+    return null
+  }
+
+  const config = item.catalogConfig
+  return {
+    catalogItemId: item.id,
+    templateRefId: config.templateRefId,
+    templateName: config.templateName,
+    displayName: item.displayName,
+    description: item.description,
+    scope: 'vip-enterprise',
+    createdAt: item.createdAt,
+    rateCard: item.rateCard,
+    serviceId: config.serviceId,
+    networkPolicy: config.networkPolicy,
+    instanceTypeId: config.instanceTypeId,
+    instanceTypeLabel: config.instanceTypeLabel,
+    diskImageId: config.diskImageId,
+    diskImageLabel: config.diskImageLabel,
+    clusterVersionMode: config.clusterVersionMode,
+    hardwareOsMode: config.hardwareOsMode,
+    osImageMode: config.osImageMode,
+    nodeSetId: config.nodeSetId,
+    nodeSetLabel: config.nodeSetLabel,
+    hostTypeId: config.hostTypeId,
+    hostTypeLabel: config.hostTypeLabel,
+    clusterNodeTopologyMode: config.clusterNodeTopologyMode,
+    fieldPolicies: config.fieldPolicies,
+    status: item.status === 'Unpublished' ? 'unpublished' : 'live',
+  }
+}
+
+function catalogFieldsFromPublishedPayload(payload: PublishedTemplatePayload): {
+  displayName: string
+  description: string | undefined
+  rateCard: TenantCatalogItem['rateCard']
+  status: TenantCatalogItemStatus
+  catalogConfig: TenantCatalogItemConfig
+} {
   const {
     displayName,
     description,
@@ -106,15 +149,36 @@ export function createTenantCatalogItemFromPayload(
   } = payload
 
   return {
-    id: generateTenantCatalogItemId(),
     displayName: displayName.trim(),
     description: description.trim() || undefined,
-    source: 'custom',
-    sourceCatalogItemId: null,
     rateCard,
     status: status === 'unpublished' ? 'Unpublished' : 'Live',
-    createdAt: new Date().toISOString(),
     catalogConfig,
+  }
+}
+
+export function createTenantCatalogItemFromPayload(
+  payload: PublishedTemplatePayload,
+): TenantCatalogItem {
+  const fields = catalogFieldsFromPublishedPayload(payload)
+
+  return {
+    id: generateTenantCatalogItemId(),
+    ...fields,
+    source: 'custom',
+    sourceCatalogItemId: null,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+/** Apply publish-wizard save payload onto an existing tenant-scoped catalog item. */
+export function applyPublishedPayloadToTenantCatalogItem(
+  item: TenantCatalogItem,
+  payload: PublishedTemplatePayload,
+): TenantCatalogItem {
+  return {
+    ...item,
+    ...catalogFieldsFromPublishedPayload(payload),
   }
 }
 

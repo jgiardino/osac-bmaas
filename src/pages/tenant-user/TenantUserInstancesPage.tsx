@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
   AlertActionCloseButton,
@@ -13,8 +13,6 @@ import {
   FlexItem,
   Form,
   FormGroup,
-  FormSelect,
-  FormSelectOption,
   Label,
   Modal,
   ModalBody,
@@ -36,14 +34,12 @@ import { CatalogFilterEmptyState } from '../../components/catalog/CatalogFilterE
 import { CatalogFilterResultsSummary } from '../../components/catalog/CatalogFilterResultsSummary'
 import { ViewModeToggle } from '../../components/catalog/CatalogViewToggle'
 import { CatalogSpecRowsList } from '../../components/catalog/CatalogSpecRowsList'
-import { ExternalModelCard } from '../../components/catalog/ExternalModelCard'
-import { ModelsInstanceCard } from '../../components/catalog/ModelsInstanceCard'
-import { ServicesModelsTable } from '../../components/catalog/ServicesModelsTable'
 import { TenantUserInstanceDetailsPage, BareMetalConnectSshModal } from '../../components/tenant-user/TenantUserInstanceDetailsPage'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import {
   createCatalogServiceFilterSet,
   describeCatalogServiceFilter,
+  isCatalogServiceFilterActive,
 } from '../../catalog/catalogFilterSummary'
 import {
   getInstancesViewMode,
@@ -52,12 +48,10 @@ import {
 } from '../../catalog/viewMode'
 import { CATALOG_SERVICE_FILTER_LABELS, type CatalogServiceId } from '../../providerSetup/templateDemo'
 import {
-  BARE_METAL_DISK_IMAGE_FILTER_OPTIONS,
   createDemoPublicIp,
   downloadClusterKubeconfig,
   formatTenantInstanceCreatedAt,
   formatTenantInstanceName,
-  getBareMetalInstanceDiskImageFilterLabel,
   getBareMetalSerialConsoleUrl,
   getClusterDemoPassword,
   getClusterNodeSetTypeLabel,
@@ -70,29 +64,47 @@ import {
   getTenantInstanceServiceId,
   getTenantInstanceSpecRows,
   getTenantInstanceStatusLabel,
+  instanceBelongsToProject,
   resolveVmConfig,
   TENANT_INSTANCE_RESTART_DURATION_MS,
   type TenantInstance,
   type TenantInstanceNetworking,
   type TenantInstanceStatus,
 } from '../../tenantUser/instances'
+import {
+  buildInstanceSpecFilterGroups,
+  describeInstanceSpecFilterSelections,
+  getInstanceSpecFilterToggleLabel,
+  instanceMatchesSpecFilter,
+} from '../../tenantUser/instanceSpecFilters'
+import {
+  patchProviderServiceInstance,
+  removeProviderServiceInstance,
+} from '../../tenantUser/providerServicesInstances'
+import { InstanceSpecMultiFilter } from '../../components/shared/InstanceSpecMultiFilter'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
 import {
   ensureTenantDemoInstances,
   removeTenantUserInstance,
   updateTenantUserInstance,
 } from '../../tenantUser/storage'
+import { shouldHideDemoServicesInstances } from '../../demo/billingInactiveScenario'
+import { ensureTenantDemoProjects } from '../../tenantAdmin/storage'
 import type { TenantProject } from '../../tenantAdmin/projects'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import {
+  ALL_PROJECTS_SCOPE_ID,
   filterInstancesByProjectScope,
   isAllProjectsScope,
   type ProjectScopeId,
 } from '../../tenantUser/projectScope'
 import { ProjectScopeSwitcher } from '../../components/shared/ProjectScopeSwitcher'
-import { externalModelsForOrg } from '../../vision/externalModelSeed'
-import { visionOrgIdForTenantSlug } from '../../vision/fleetWorld'
-import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../vision/modelInstanceSeed'
+import { PillFilterSelect } from '../../components/shared/PillFilterSelect'
+import {
+  findInstanceByWorkspaceParam,
+  getWorkspaceInstanceParam,
+  syncWorkspaceInstanceParam,
+} from '../../shared/workspaceNavUrl'
 
 type TenantUserInstancesPageProps = {
   tenantSlug: string
@@ -105,8 +117,6 @@ type TenantUserInstancesPageProps = {
   organization: RegisteredOrganization | null
   /** When set, page is scoped to one service (nav-driven) and hides service filters. */
   lockedServiceId?: CatalogServiceId
-  /** Closes the instance detail drawer when left-nav selection changes. */
-  activeNavId?: string
   /** Opens the matching catalog item detail page in Catalog. */
   onNavigateToCatalogItem?: (catalogItemDisplayName: string) => void
   /** Opens the matching project detail page in Projects. */
@@ -118,6 +128,9 @@ type TenantUserInstancesPageProps = {
   onOpenInstanceConsumed?: () => void
   /** Provider admin Services detail shows assigned networking objects without lock controls. */
   instanceNetworkingVariant?: 'interactive' | 'summary'
+  /** Provider admin: filter instances across registered tenants. */
+  showTenantFilter?: boolean
+  organizations?: readonly RegisteredOrganization[]
 }
 
 function getStatusColor(status: TenantInstance['status']): 'green' | 'blue' | 'orange' | 'red' | 'grey' {
@@ -178,9 +191,6 @@ const CLUSTER_STATUS_FILTER_OPTIONS: Array<{
   { value: 'failed', label: 'Failed' },
 ]
 
-const DISK_IMAGE_FILTER_ALL_OPTION = { value: 'all', label: 'All disk images' } as const
-const OS_IMAGE_FILTER_ALL_OPTION = { value: 'all', label: 'All OS images' } as const
-
 export function TenantUserInstancesPage({
   tenantSlug,
   instances,
@@ -191,18 +201,28 @@ export function TenantUserInstancesPage({
   onProjectScopeChange,
   organization,
   lockedServiceId,
-  activeNavId,
   onNavigateToCatalogItem,
   onNavigateToProject,
   onNavigateToCreateProject,
   openInstanceId = null,
   onOpenInstanceConsumed,
   instanceNetworkingVariant = 'summary',
+  showTenantFilter = false,
+  organizations = [],
 }: TenantUserInstancesPageProps) {
-  const { pathname } = useLocation()
-  const [searchParams] = useSearchParams()
-  const isPlatformAdmin = pathname.startsWith('/provider')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const instanceParam = getWorkspaceInstanceParam(searchParams)
+
   useEffect(() => {
+    if (showTenantFilter) {
+      return
+    }
+
+    if (shouldHideDemoServicesInstances(tenantSlug)) {
+      onInstancesChange((current) => (current.length === 0 ? current : []))
+      return
+    }
+
     const normalized = ensureTenantDemoInstances(tenantSlug, organization?.name ?? tenantSlug)
     onInstancesChange((current) => {
       if (
@@ -217,24 +237,11 @@ export function TenantUserInstancesPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount sync per tenant
   }, [tenantSlug])
 
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const viewParam = searchParams.get('view')
-    const expandParam = searchParams.get('expand')
-    if (viewParam === 'list' || expandParam) {
-      return 'list'
-    }
-    return getInstancesViewMode('grid')
-  })
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getInstancesViewMode('grid'))
+  const [organizationFilter, setOrganizationFilter] = useState('')
   const [searchValue, setSearchValue] = useState('')
-  const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(() => {
-    const expandParam = searchParams.get('expand')
-    return expandParam ? new Set([expandParam]) : new Set()
-  })
   const [powerStateFilter, setPowerStateFilter] = useState<'all' | TenantInstanceStatus>('all')
-  const [osFilter, setOsFilter] = useState('all')
-  const [gpuFilter, setGpuFilter] = useState('all')
-  const [platformFilter, setPlatformFilter] = useState('all')
-  const [nodeSetTypeFilter, setNodeSetTypeFilter] = useState('all')
+  const [specFilterSelections, setSpecFilterSelections] = useState<Set<string>>(() => new Set())
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null)
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false)
   const [instancePendingTerminate, setInstancePendingTerminate] = useState<TenantInstance | null>(
@@ -251,10 +258,97 @@ export function TenantUserInstancesPage({
   const [isProvisioningNoticeDismissed, setIsProvisioningNoticeDismissed] = useState(false)
   const restartTimersRef = useRef<Map<string, number>>(new Map())
 
-  const scopedInstances = useMemo(
-    () => filterInstancesByProjectScope(instances, tenantSlug, projectScopeId),
-    [instances, tenantSlug, projectScopeId],
+  const organizationOptions = useMemo(
+    () =>
+      [...organizations].sort((left, right) =>
+        left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }),
+      ),
+    [organizations],
   )
+
+  const selectedOrganization = useMemo(() => {
+    if (!organizationFilter) {
+      return null
+    }
+
+    return (
+      organizations.find(
+        (organization) =>
+          organization.tenantId === organizationFilter || organization.id === organizationFilter,
+      ) ?? null
+    )
+  }, [organizationFilter, organizations])
+
+  const scopeTenantSlug = selectedOrganization?.slug ?? tenantSlug
+
+  const switcherProjects = useMemo(() => {
+    if (showTenantFilter && selectedOrganization) {
+      return ensureTenantDemoProjects(selectedOrganization.slug)
+    }
+
+    return allProjects ?? projects
+  }, [allProjects, projects, selectedOrganization, showTenantFilter])
+
+  const switcherAllProjects = useMemo(() => {
+    if (showTenantFilter && selectedOrganization) {
+      return ensureTenantDemoProjects(selectedOrganization.slug)
+    }
+
+    return allProjects ?? projects
+  }, [allProjects, projects, selectedOrganization, showTenantFilter])
+
+  const tenantFilteredInstances = useMemo(() => {
+    if (!showTenantFilter || !selectedOrganization) {
+      return instances
+    }
+
+    return instances.filter((instance) => instance.ownerTenantSlug === selectedOrganization.slug)
+  }, [instances, selectedOrganization, showTenantFilter])
+
+  const scopedInstances = useMemo(() => {
+    if (showTenantFilter && !selectedOrganization) {
+      if (isAllProjectsScope(projectScopeId)) {
+        return tenantFilteredInstances
+      }
+
+      const project = (allProjects ?? projects).find((entry) => entry.id === projectScopeId)
+      if (!project) {
+        return []
+      }
+
+      return tenantFilteredInstances.filter((instance) => instanceBelongsToProject(instance, project))
+    }
+
+    return filterInstancesByProjectScope(tenantFilteredInstances, scopeTenantSlug, projectScopeId)
+  }, [
+    allProjects,
+    projectScopeId,
+    projects,
+    scopeTenantSlug,
+    selectedOrganization,
+    showTenantFilter,
+    tenantFilteredInstances,
+  ])
+
+  const patchStoredInstance = (instanceId: string, patch: Partial<TenantInstance>) => {
+    onInstancesChange((current) => {
+      if (!showTenantFilter) {
+        return updateTenantUserInstance(tenantSlug, instanceId, patch, current)
+      }
+
+      return patchProviderServiceInstance(current, instanceId, patch, tenantSlug)
+    })
+  }
+
+  const removeStoredInstance = (instanceId: string) => {
+    onInstancesChange((current) => {
+      if (!showTenantFilter) {
+        return removeTenantUserInstance(tenantSlug, instanceId, current)
+      }
+
+      return removeProviderServiceInstance(current, instanceId, tenantSlug)
+    })
+  }
 
   const hasProvisioningInstances = scopedInstances.some((instance) => {
     if (instance.status !== 'provisioning') {
@@ -278,11 +372,6 @@ export function TenantUserInstancesPage({
   }, [lockedServiceId])
 
   useEffect(() => {
-    setIsDetailsDrawerOpen(false)
-    setSelectedInstanceId(null)
-  }, [activeNavId, lockedServiceId])
-
-  useEffect(() => {
     if (!openInstanceId) {
       return
     }
@@ -291,63 +380,41 @@ export function TenantUserInstancesPage({
     if (match) {
       setSelectedInstanceId(match.id)
       setIsDetailsDrawerOpen(true)
+      syncWorkspaceInstanceParam(setSearchParams, match.name, { replace: true })
     }
     onOpenInstanceConsumed?.()
-  }, [openInstanceId, instances, onOpenInstanceConsumed])
+  }, [openInstanceId, instances, onOpenInstanceConsumed, setSearchParams])
+
+  useEffect(() => {
+    const match = findInstanceByWorkspaceParam(instances, instanceParam)
+    if (match) {
+      if (lockedServiceId && getTenantInstanceServiceId(match) !== lockedServiceId) {
+        return
+      }
+
+      setSelectedInstanceId(match.id)
+      setIsDetailsDrawerOpen(true)
+      return
+    }
+
+    if (!instanceParam) {
+      setIsDetailsDrawerOpen(false)
+      setSelectedInstanceId(null)
+    }
+  }, [instanceParam, instances, lockedServiceId])
 
   useEffect(() => {
     setPowerStateFilter('all')
-    setOsFilter('all')
-    setGpuFilter('all')
-    setPlatformFilter('all')
-    setNodeSetTypeFilter('all')
+    setSpecFilterSelections(new Set())
+    setOrganizationFilter('')
   }, [lockedServiceId])
 
-  const isBareMetalPage = lockedServiceId === 'baremetal'
   const isClustersPage = lockedServiceId === 'cluster'
-  const isVirtualMachinesPage = lockedServiceId === 'virtual-machine'
-  const isModelsPage = lockedServiceId === 'models'
-  const seedOrgId = isPlatformAdmin ? 'all' : visionOrgIdForTenantSlug(tenantSlug)
-  const seedModelInstances = useMemo(() => {
-    const query = searchValue.trim().toLowerCase()
-    return servicesModelsForOrg(seedOrgId).filter((item) => {
-      if (!query) {
-        return true
-      }
-      return (
-        item.displayName.toLowerCase().includes(query) ||
-        item.modelId.toLowerCase().includes(query) ||
-        (item.catalogSkuName ?? '').toLowerCase().includes(query) ||
-        item.tenantLabel.toLowerCase().includes(query)
-      )
-    })
-  }, [seedOrgId, searchValue])
-  const filteredExternalModels = useMemo(() => {
-    const query = searchValue.trim().toLowerCase()
-    return externalModelsForOrg(seedOrgId).filter((model) => {
-      if (!query) {
-        return true
-      }
-      return (
-        model.displayName.toLowerCase().includes(query) ||
-        model.name.toLowerCase().includes(query) ||
-        model.description.toLowerCase().includes(query) ||
-        model.providerRefs.some((ref) => ref.displayName.toLowerCase().includes(query))
-      )
-    })
-  }, [seedOrgId, searchValue])
-  const groupedSeedModels = useMemo(
-    () => groupModelInstancesByModelId(seedModelInstances),
-    [seedModelInstances],
-  )
+  const hasServiceSpecFilters = Boolean(lockedServiceId)
   const hasActiveServiceFilters =
-    (isBareMetalPage &&
-      (powerStateFilter !== 'all' || osFilter !== 'all' || gpuFilter !== 'all')) ||
-    (isClustersPage &&
-      (powerStateFilter !== 'all' ||
-        platformFilter !== 'all' ||
-        nodeSetTypeFilter !== 'all')) ||
-    (isVirtualMachinesPage && (powerStateFilter !== 'all' || osFilter !== 'all'))
+    organizationFilter !== '' ||
+    specFilterSelections.size > 0 ||
+    (hasServiceSpecFilters && powerStateFilter !== 'all')
 
   const showBackgroundProvisioningNotice =
     hasProvisioningInstances && !isProvisioningNoticeDismissed
@@ -381,66 +448,47 @@ export function TenantUserInstancesPage({
     [scopedInstances],
   )
 
+  const selectedScopeProject = useMemo(() => {
+    if (isAllProjectsScope(projectScopeId)) {
+      return null
+    }
+
+    return (allProjects ?? projects).find((project) => project.id === projectScopeId) ?? null
+  }, [allProjects, projectScopeId, projects])
+
   const serviceCounts = useMemo(
     () => countCatalogServices(instanceServiceIds),
     [instanceServiceIds],
   )
 
-  const bareMetalGpuOptions = useMemo(() => {
-    const gpuValues = new Set<string>()
-    for (const instance of sortedInstances) {
-      if (getTenantInstanceServiceId(instance) !== 'baremetal') {
-        continue
-      }
-      const gpuLabel = getTenantInstanceGpuLabel(instance)
-      if (gpuLabel && gpuLabel !== '—') {
-        gpuValues.add(gpuLabel)
-      }
+  const specFilterGroups = useMemo(() => {
+    if (!lockedServiceId) {
+      return []
     }
-    return [...gpuValues].sort((left, right) => left.localeCompare(right))
-  }, [sortedInstances])
 
-  const clusterPlatformOptions = useMemo(() => {
-    const platformValues = new Set<string>()
-    for (const instance of sortedInstances) {
-      if (getTenantInstanceServiceId(instance) !== 'cluster') {
-        continue
-      }
-      const platform = getClusterPlatformLabel(instance)
-      if (platform && platform !== '—') {
-        platformValues.add(platform)
-      }
-    }
-    return [...platformValues].sort((left, right) => left.localeCompare(right))
-  }, [sortedInstances])
+    return buildInstanceSpecFilterGroups(sortedInstances, lockedServiceId)
+  }, [lockedServiceId, sortedInstances])
 
-  const clusterNodeSetTypeOptions = useMemo(() => {
-    const typeValues = new Set<string>()
-    for (const instance of sortedInstances) {
-      if (getTenantInstanceServiceId(instance) !== 'cluster') {
-        continue
-      }
-      const nodeSetType = getClusterNodeSetTypeLabel(instance)
-      if (nodeSetType && nodeSetType !== '—') {
-        typeValues.add(nodeSetType)
-      }
-    }
-    return [...typeValues].sort((left, right) => left.localeCompare(right))
-  }, [sortedInstances])
+  const specFilterToggleLabel = useMemo(
+    () => getInstanceSpecFilterToggleLabel(specFilterSelections),
+    [specFilterSelections],
+  )
 
-  const vmOsOptions = useMemo(() => {
-    const osValues = new Set<string>()
-    for (const instance of sortedInstances) {
-      if (getTenantInstanceServiceId(instance) !== 'virtual-machine') {
-        continue
-      }
-      const osImage = instance.osImage.trim()
-      if (osImage) {
-        osValues.add(osImage)
-      }
-    }
-    return [...osValues].sort((left, right) => left.localeCompare(right))
-  }, [sortedInstances])
+  const tenantFilterOptions = useMemo(
+    () => [
+      { value: '', label: 'All tenants' },
+      ...organizationOptions.map((organization) => ({
+        value: organization.tenantId,
+        label: organization.name,
+      })),
+    ],
+    [organizationOptions],
+  )
+
+  const powerStateFilterOptions = useMemo(
+    () => (isClustersPage ? CLUSTER_STATUS_FILTER_OPTIONS : POWER_STATE_FILTER_OPTIONS),
+    [isClustersPage],
+  )
 
   const serviceFilteredInstances = useMemo(
     () =>
@@ -456,41 +504,12 @@ export function TenantUserInstancesPage({
     return serviceFilteredInstances.filter((instance) => {
       const serviceId = getTenantInstanceServiceId(instance)
 
-      if (isBareMetalPage) {
+      if (lockedServiceId) {
         if (powerStateFilter !== 'all' && instance.status !== powerStateFilter) {
           return false
         }
-        if (
-          osFilter !== 'all' &&
-          getBareMetalInstanceDiskImageFilterLabel(instance) !== osFilter
-        ) {
-          return false
-        }
-        if (gpuFilter !== 'all' && getTenantInstanceGpuLabel(instance) !== gpuFilter) {
-          return false
-        }
-      }
 
-      if (isClustersPage) {
-        if (powerStateFilter !== 'all' && instance.status !== powerStateFilter) {
-          return false
-        }
-        if (platformFilter !== 'all' && getClusterPlatformLabel(instance) !== platformFilter) {
-          return false
-        }
-        if (
-          nodeSetTypeFilter !== 'all' &&
-          getClusterNodeSetTypeLabel(instance) !== nodeSetTypeFilter
-        ) {
-          return false
-        }
-      }
-
-      if (isVirtualMachinesPage) {
-        if (powerStateFilter !== 'all' && instance.status !== powerStateFilter) {
-          return false
-        }
-        if (osFilter !== 'all' && instance.osImage !== osFilter) {
+        if (!instanceMatchesSpecFilter(instance, specFilterSelections, lockedServiceId)) {
           return false
         }
       }
@@ -525,18 +544,27 @@ export function TenantUserInstancesPage({
   }, [
     serviceFilteredInstances,
     searchValue,
-    isBareMetalPage,
-    isClustersPage,
-    isVirtualMachinesPage,
+    lockedServiceId,
     powerStateFilter,
-    osFilter,
-    gpuFilter,
-    platformFilter,
-    nodeSetTypeFilter,
+    specFilterSelections,
   ])
 
   const filterDescriptionParts = useMemo(() => {
     const parts: string[] = []
+
+    const hasNonProjectFilters =
+      organizationFilter !== '' ||
+      specFilterSelections.size > 0 ||
+      (hasServiceSpecFilters && powerStateFilter !== 'all') ||
+      searchValue.trim() !== '' ||
+      (!lockedServiceId && isCatalogServiceFilterActive(selectedFilters, instanceServiceIds))
+
+    if (
+      !isAllProjectsScope(projectScopeId) &&
+      (filteredInstances.length === 0 || hasNonProjectFilters)
+    ) {
+      parts.push(`project: ${selectedScopeProject?.name ?? projectScopeId}`)
+    }
 
     if (!lockedServiceId) {
       const serviceDescription = describeCatalogServiceFilter(selectedFilters, instanceServiceIds)
@@ -545,7 +573,7 @@ export function TenantUserInstancesPage({
       }
     }
 
-    if (isBareMetalPage || isVirtualMachinesPage || isClustersPage) {
+    if (hasServiceSpecFilters) {
       const powerOptions = isClustersPage ? CLUSTER_STATUS_FILTER_OPTIONS : POWER_STATE_FILTER_OPTIONS
       if (powerStateFilter !== 'all') {
         const label =
@@ -555,48 +583,54 @@ export function TenantUserInstancesPage({
       }
     }
 
-    if (isBareMetalPage && osFilter !== 'all') {
-      parts.push(`Disk image: ${osFilter}`)
+    for (const description of describeInstanceSpecFilterSelections(specFilterSelections)) {
+      parts.push(description)
     }
-    if (isBareMetalPage && gpuFilter !== 'all') {
-      parts.push(`GPU: ${gpuFilter}`)
+
+    if (organizationFilter) {
+      const tenantLabel =
+        selectedOrganization?.name ??
+        organizations.find(
+          (organization) =>
+            organization.tenantId === organizationFilter || organization.id === organizationFilter,
+        )?.name ??
+        organizationFilter
+      parts.push(`tenant: ${tenantLabel}`)
     }
-    if (isClustersPage && platformFilter !== 'all') {
-      parts.push(`platform: ${platformFilter}`)
-    }
-    if (isClustersPage && nodeSetTypeFilter !== 'all') {
-      parts.push(`node set: ${nodeSetTypeFilter}`)
-    }
-    if (isVirtualMachinesPage && osFilter !== 'all') {
-      parts.push(`OS image: ${osFilter}`)
-    }
+
     if (searchValue.trim()) {
       parts.push(`search: "${searchValue.trim()}"`)
     }
 
     return parts
   }, [
-    gpuFilter,
+    filteredInstances.length,
+    hasServiceSpecFilters,
     instanceServiceIds,
-    isBareMetalPage,
     isClustersPage,
-    isVirtualMachinesPage,
     lockedServiceId,
-    nodeSetTypeFilter,
-    osFilter,
-    platformFilter,
+    organizationFilter,
+    organizations,
     powerStateFilter,
+    projectScopeId,
     searchValue,
     selectedFilters,
+    selectedOrganization?.name,
+    selectedScopeProject?.name,
+    specFilterSelections,
   ])
 
+  const showFilterResultsSummary =
+    filterDescriptionParts.length > 0 && filteredInstances.length > 0
+
   const clearAllFilters = () => {
+    if (!isAllProjectsScope(projectScopeId)) {
+      onProjectScopeChange(ALL_PROJECTS_SCOPE_ID)
+    }
     setSearchValue('')
+    setOrganizationFilter('')
     setPowerStateFilter('all')
-    setOsFilter('all')
-    setGpuFilter('all')
-    setPlatformFilter('all')
-    setNodeSetTypeFilter('all')
+    setSpecFilterSelections(new Set())
     if (!lockedServiceId) {
       setSelectedFilters(createCatalogServiceFilterSet(instanceServiceIds))
     }
@@ -636,6 +670,7 @@ export function TenantUserInstancesPage({
 
   const closeDetails = () => {
     setIsDetailsDrawerOpen(false)
+    syncWorkspaceInstanceParam(setSearchParams, null)
   }
 
   const handleTerminateInstance = (instanceId: string) => {
@@ -644,10 +679,11 @@ export function TenantUserInstancesPage({
       window.clearTimeout(timeoutId)
       restartTimersRef.current.delete(instanceId)
     }
-    onInstancesChange((current) => removeTenantUserInstance(tenantSlug, instanceId, current))
+    removeStoredInstance(instanceId)
     if (selectedInstanceId === instanceId) {
       setSelectedInstanceId(null)
       setIsDetailsDrawerOpen(false)
+      syncWorkspaceInstanceParam(setSearchParams, null, { replace: true })
     }
   }
 
@@ -679,29 +715,15 @@ export function TenantUserInstancesPage({
       window.clearTimeout(existingTimeout)
     }
 
-    onInstancesChange((current) =>
-      updateTenantUserInstance(
-        tenantSlug,
-        instanceId,
-        {
-          status: 'restarting',
-        },
-        current,
-      ),
-    )
+    patchStoredInstance(instanceId, {
+      status: 'restarting',
+    })
 
     const timeoutId = window.setTimeout(() => {
       restartTimersRef.current.delete(instanceId)
-      onInstancesChange((current) =>
-        updateTenantUserInstance(
-          tenantSlug,
-          instanceId,
-          {
-            status: 'running',
-          },
-          current,
-        ),
-      )
+      patchStoredInstance(instanceId, {
+        status: 'running',
+      })
     }, TENANT_INSTANCE_RESTART_DURATION_MS)
     restartTimersRef.current.set(instanceId, timeoutId)
   }
@@ -711,16 +733,9 @@ export function TenantUserInstancesPage({
     if (!instance || instance.status !== 'stopped') {
       return
     }
-    onInstancesChange((current) =>
-      updateTenantUserInstance(
-        tenantSlug,
-        instanceId,
-        {
-          status: 'running',
-        },
-        current,
-      ),
-    )
+    patchStoredInstance(instanceId, {
+      status: 'running',
+    })
   }
 
   const handleStopInstance = (instanceId: string) => {
@@ -733,21 +748,15 @@ export function TenantUserInstancesPage({
       window.clearTimeout(existingTimeout)
       restartTimersRef.current.delete(instanceId)
     }
-    onInstancesChange((current) =>
-      updateTenantUserInstance(
-        tenantSlug,
-        instanceId,
-        {
-          status: 'stopped',
-        },
-        current,
-      ),
-    )
+    patchStoredInstance(instanceId, {
+      status: 'stopped',
+    })
   }
 
   const handleViewDetails = (instance: TenantInstance) => {
     setSelectedInstanceId(instance.id)
     setIsDetailsDrawerOpen(true)
+    syncWorkspaceInstanceParam(setSearchParams, instance.name)
   }
 
   const clusterKebabActions = {
@@ -789,17 +798,10 @@ export function TenantUserInstancesPage({
     networking: TenantInstanceNetworking,
     networkLabel: string,
   ) => {
-    onInstancesChange((current) =>
-      updateTenantUserInstance(
-        tenantSlug,
-        instanceId,
-        {
-          networking,
-          networkLabel,
-        },
-        current,
-      ),
-    )
+    patchStoredInstance(instanceId, {
+      networking,
+      networkLabel,
+    })
   }
 
   const closeAttachPublicIp = () => {
@@ -815,38 +817,19 @@ export function TenantUserInstancesPage({
     const currentConfig = resolveVmConfig(instancePendingPublicIp)
     const publicIp = createDemoPublicIp(publicIpFamily, instancePendingPublicIp.id)
     const instanceId = instancePendingPublicIp.id
-    onInstancesChange((current) =>
-      updateTenantUserInstance(
-        tenantSlug,
-        instanceId,
-        {
-          vmConfig: {
-            ...currentConfig,
-            publicIp,
-            publicIpFamily,
-          },
-        },
-        current,
-      ),
-    )
+    patchStoredInstance(instanceId, {
+      vmConfig: {
+        ...currentConfig,
+        publicIp,
+        publicIpFamily,
+      },
+    })
     closeAttachPublicIp()
   }
 
   const handleViewModeChange = (nextViewMode: ViewMode) => {
     setViewMode(nextViewMode)
     setInstancesViewMode(nextViewMode)
-  }
-
-  const toggleExpandedModel = (id: string) => {
-    setExpandedModelIds((current) => {
-      const next = new Set(current)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
   }
 
   const handleFilterToggle = (serviceId: CatalogServiceId, isSelected: boolean) => {
@@ -856,36 +839,22 @@ export function TenantUserInstancesPage({
   const pageTitle = lockedServiceId
     ? CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]
     : 'Services'
-  const pageLede = (() => {
-    if (isModelsPage) {
-      return isAllProjectsScope(projectScopeId)
-        ? 'On-cluster serving instances and external models in one list. Expand a row in the table view to see instance details or provider weights.'
-        : 'On-cluster serving instances and external models in this project. Expand a row in the table view to see instance details or provider weights.'
-    }
-    if (lockedServiceId) {
-      return isAllProjectsScope(projectScopeId)
-        ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
-        : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
-    }
-    return isAllProjectsScope(projectScopeId)
+  const pageLede = lockedServiceId
+    ? isAllProjectsScope(projectScopeId)
+      ? `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances across all projects.`
+      : `Monitor and manage ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId].toLowerCase()} instances in this project.`
+    : isAllProjectsScope(projectScopeId)
       ? 'Monitor and manage instances across all projects.'
       : 'Monitor and manage instances in this project.'
-  })()
 
   const emptyStateTitle = (() => {
     if (!isAllProjectsScope(projectScopeId) && scopedInstances.length === 0) {
-      if (isModelsPage) {
-        return 'No MaaS endpoints in this project'
-      }
       return lockedServiceId
         ? `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances in this project`
         : 'No instances in this project'
     }
     if (searchValue.trim()) {
       return 'No instances match your search'
-    }
-    if (isModelsPage) {
-      return 'No MaaS endpoints yet'
     }
     if (lockedServiceId) {
       return `No ${CATALOG_SERVICE_FILTER_LABELS[lockedServiceId]} instances yet`
@@ -976,7 +945,7 @@ export function TenantUserInstancesPage({
           onClose={closeAttachPublicIp}
           aria-labelledby="attach-public-ip-title"
         >
-          <ModalHeader title="Attach public IP" labelId="attach-public-ip-title" />
+          <ModalHeader title="Attach external IP" labelId="attach-public-ip-title" />
           <ModalBody>
             <Form>
               <FormGroup label="IP family" fieldId="attach-public-ip-family" isRequired>
@@ -1044,6 +1013,11 @@ export function TenantUserInstancesPage({
           gap={{ default: 'gapMd' }}
         >
           <FlexItem>
+            {lockedServiceId ? (
+              <Label color="grey" className="tenant-admin-workspace-page__kicker">
+                Services
+              </Label>
+            ) : null}
             <Title headingLevel="h1" size="3xl" className="tenant-user-instances__title">
               {pageTitle}
             </Title>
@@ -1056,14 +1030,24 @@ export function TenantUserInstancesPage({
         <div className="catalog-view-toolbar tenant-user-instances__toolbar">
           <div className="catalog-view-toolbar__start">
             <ProjectScopeSwitcher
-              tenantSlug={tenantSlug}
-              projects={projects}
-              allProjects={allProjects}
+              tenantSlug={scopeTenantSlug}
+              projects={switcherProjects}
+              allProjects={switcherAllProjects}
               selectedScopeId={projectScopeId}
               onChange={onProjectScopeChange}
               onNavigateToCreateProject={onNavigateToCreateProject}
               id="tenant-user-instances-project-scope"
             />
+            {showTenantFilter ? (
+              <PillFilterSelect
+                id="instances-organization-filter"
+                className="pill-filter-select--organization"
+                value={organizationFilter}
+                options={tenantFilterOptions}
+                onChange={setOrganizationFilter}
+                ariaLabel="Filter instances by tenant"
+              />
+            ) : null}
             {lockedServiceId ? null : (
               <CatalogServiceFilterToggle
                 selectedFilters={selectedFilters}
@@ -1073,145 +1057,40 @@ export function TenantUserInstancesPage({
                 ariaLabel="Instance service filters"
               />
             )}
-            {isBareMetalPage ? (
+            {hasServiceSpecFilters ? (
               <>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-bm-power-state-filter"
+                <PillFilterSelect
+                  id="instances-power-state-filter"
+                  className="pill-filter-select--status"
                   value={powerStateFilter}
-                  onChange={(_event, value) =>
-                    setPowerStateFilter(value as 'all' | TenantInstanceStatus)
+                  options={powerStateFilterOptions}
+                  onChange={(value) => setPowerStateFilter(value as 'all' | TenantInstanceStatus)}
+                  ariaLabel={
+                    isClustersPage
+                      ? 'Filter clusters by status'
+                      : 'Filter instances by power state'
                   }
-                  aria-label="Filter bare metal by power state"
-                >
-                  {POWER_STATE_FILTER_OPTIONS.map((option) => (
-                    <FormSelectOption
-                      key={option.value}
-                      value={option.value}
-                      label={option.label}
-                    />
-                  ))}
-                </FormSelect>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-bm-os-filter"
-                  value={osFilter}
-                  onChange={(_event, value) => setOsFilter(value)}
-                  aria-label="Filter bare metal by disk image"
-                >
-                  <FormSelectOption
-                    value={DISK_IMAGE_FILTER_ALL_OPTION.value}
-                    label={DISK_IMAGE_FILTER_ALL_OPTION.label}
-                  />
-                  {BARE_METAL_DISK_IMAGE_FILTER_OPTIONS.map((osImage) => (
-                    <FormSelectOption key={osImage} value={osImage} label={osImage} />
-                  ))}
-                </FormSelect>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-bm-gpu-filter"
-                  value={gpuFilter}
-                  onChange={(_event, value) => setGpuFilter(value)}
-                  aria-label="Filter bare metal by GPU type"
-                >
-                  <FormSelectOption value="all" label="All GPU types" />
-                  {bareMetalGpuOptions.map((gpuLabel) => (
-                    <FormSelectOption key={gpuLabel} value={gpuLabel} label={gpuLabel} />
-                  ))}
-                </FormSelect>
-              </>
-            ) : null}
-            {isClustersPage ? (
-              <>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-cluster-status-filter"
-                  value={powerStateFilter}
-                  onChange={(_event, value) =>
-                    setPowerStateFilter(value as 'all' | TenantInstanceStatus)
-                  }
-                  aria-label="Filter clusters by status"
-                >
-                  {CLUSTER_STATUS_FILTER_OPTIONS.map((option) => (
-                    <FormSelectOption
-                      key={option.value}
-                      value={option.value}
-                      label={option.label}
-                    />
-                  ))}
-                </FormSelect>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-cluster-platform-filter"
-                  value={platformFilter}
-                  onChange={(_event, value) => setPlatformFilter(value)}
-                  aria-label="Filter clusters by platform"
-                >
-                  <FormSelectOption value="all" label="All platforms" />
-                  {clusterPlatformOptions.map((platform) => (
-                    <FormSelectOption key={platform} value={platform} label={platform} />
-                  ))}
-                </FormSelect>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-cluster-node-set-filter"
-                  value={nodeSetTypeFilter}
-                  onChange={(_event, value) => setNodeSetTypeFilter(value)}
-                  aria-label="Filter clusters by node set type"
-                >
-                  <FormSelectOption value="all" label="All node set types" />
-                  {clusterNodeSetTypeOptions.map((nodeSetType) => (
-                    <FormSelectOption key={nodeSetType} value={nodeSetType} label={nodeSetType} />
-                  ))}
-                </FormSelect>
-              </>
-            ) : null}
-            {isVirtualMachinesPage ? (
-              <>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-vm-power-state-filter"
-                  value={powerStateFilter}
-                  onChange={(_event, value) =>
-                    setPowerStateFilter(value as 'all' | TenantInstanceStatus)
-                  }
-                  aria-label="Filter virtual machines by power state"
-                >
-                  {POWER_STATE_FILTER_OPTIONS.map((option) => (
-                    <FormSelectOption
-                      key={option.value}
-                      value={option.value}
-                      label={option.label}
-                    />
-                  ))}
-                </FormSelect>
-                <FormSelect
-                  className="catalog-status-filter"
-                  id="instances-vm-os-filter"
-                  value={osFilter}
-                  onChange={(_event, value) => setOsFilter(value)}
-                  aria-label="Filter virtual machines by OS image"
-                >
-                  <FormSelectOption
-                    value={OS_IMAGE_FILTER_ALL_OPTION.value}
-                    label={OS_IMAGE_FILTER_ALL_OPTION.label}
-                  />
-                  {vmOsOptions.map((osImage) => (
-                    <FormSelectOption key={osImage} value={osImage} label={osImage} />
-                  ))}
-                </FormSelect>
+                />
+                <InstanceSpecMultiFilter
+                  id="instances-spec-filter"
+                  groups={specFilterGroups}
+                  selectedOptionIds={specFilterSelections}
+                  onChange={setSpecFilterSelections}
+                  toggleLabel={specFilterToggleLabel}
+                  ariaLabel="Filter instances by specifications"
+                />
               </>
             ) : null}
             <SearchInput
               className="catalog-search"
-              placeholder={isModelsPage ? 'Search models' : 'Search instances'}
+              placeholder="Search instances"
               value={searchValue}
               onChange={(_event, value) => setSearchValue(value)}
               onClear={() => setSearchValue('')}
-              aria-label={isModelsPage ? 'Search models' : 'Search instances'}
+              aria-label="Search instances"
             />
           </div>
-          {isModelsPage || instances.length > 0 ? (
+          {instances.length > 0 ? (
             <ViewModeToggle
               viewMode={viewMode}
               onChange={handleViewModeChange}
@@ -1240,72 +1119,18 @@ export function TenantUserInstancesPage({
           </Alert>
         ) : null}
 
-        {isModelsPage ? (
-          seedModelInstances.length === 0 && filteredExternalModels.length === 0 ? (
-            searchValue.trim() ? (
-              <CatalogFilterEmptyState
-                title="No models match your filters"
-                description="Try a different filter option or search term."
-                onClearFilters={clearAllFilters}
-              />
-            ) : (
-              <EmptyState className="tenant-user-instances__empty">
-                <span className="tenant-user-instances__empty-icon" aria-hidden>
-                  {getCatalogServiceIcon('models')}
-                </span>
-                <Title headingLevel="h2" size="lg">
-                  {emptyStateTitle}
-                </Title>
-                <EmptyStateBody>
-                  Launch a model instance from the catalog or register an external model.
-                </EmptyStateBody>
-              </EmptyState>
-            )
-          ) : (
-            <>
-              <CatalogFilterResultsSummary
-                filteredCount={groupedSeedModels.length + filteredExternalModels.length}
-                totalCount={
-                  groupModelInstancesByModelId(servicesModelsForOrg(seedOrgId)).length +
-                  externalModelsForOrg(seedOrgId).length
-                }
-                singular="model"
-                filterParts={filterDescriptionParts}
-                onClearFilters={clearAllFilters}
-              />
-              {viewMode === 'list' ? (
-                <ServicesModelsTable
-                  instances={seedModelInstances}
-                  externalModels={filteredExternalModels}
-                  expandedIds={expandedModelIds}
-                  onToggleExpand={toggleExpandedModel}
-                  idPrefix="services-models-table"
-                />
-              ) : (
-                <div className="catalog-card-grid tenant-user-instances__grid">
-                  {groupedSeedModels.map((group) => (
-                    <ModelsInstanceCard
-                      key={group.modelId}
-                      item={group.representative}
-                      clusterLabel={group.clusterLabel}
-                      clusterIds={group.clusterIds}
-                      showTenant={isPlatformAdmin}
-                      idPrefix="services-models"
-                    />
-                  ))}
-                  {filteredExternalModels.map((model) => (
-                    <ExternalModelCard
-                      key={model.name}
-                      model={model}
-                      showTenant={isPlatformAdmin}
-                      idPrefix="services-external-models"
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )
-        ) : filteredInstances.length === 0 ? (
+        {showFilterResultsSummary ? (
+          <CatalogFilterResultsSummary
+            filteredCount={filteredInstances.length}
+            totalCount={serviceFilteredInstances.length}
+            singular="instance"
+            filterParts={filterDescriptionParts}
+            onClearFilters={clearAllFilters}
+            forceOfFormat
+          />
+        ) : null}
+
+        {filteredInstances.length === 0 ? (
           filterDescriptionParts.length > 0 ? (
             <CatalogFilterEmptyState
               title="No instances match your filters"
@@ -1322,13 +1147,9 @@ export function TenantUserInstancesPage({
             </Title>
             <EmptyStateBody>
               {scopedInstances.length === 0
-                ? isModelsPage
-                  ? isAllProjectsScope(projectScopeId)
-                    ? 'Launch a MaaS endpoint from the catalog to start serving inference.'
-                    : 'Launch a MaaS endpoint from the catalog while this project is selected, or switch to All projects.'
-                  : isAllProjectsScope(projectScopeId)
-                    ? 'Launch an instance from the catalog to start provisioning capacity.'
-                    : 'Launch an instance from the catalog while this project is selected, or switch to All projects.'
+                ? isAllProjectsScope(projectScopeId)
+                  ? 'Launch an instance from the catalog to start provisioning capacity.'
+                  : 'Launch an instance from the catalog while this project is selected, or switch to All projects.'
                 : selectedFilters.size === 0
                   ? 'Choose one or more services above to filter your instances.'
                   : searchValue.trim() || hasActiveServiceFilters
@@ -1338,14 +1159,6 @@ export function TenantUserInstancesPage({
           </EmptyState>
           )
         ) : viewMode === 'grid' ? (
-            <>
-            <CatalogFilterResultsSummary
-              filteredCount={filteredInstances.length}
-              totalCount={serviceFilteredInstances.length}
-              singular="instance"
-              filterParts={filterDescriptionParts}
-              onClearFilters={clearAllFilters}
-            />
             <div className="catalog-card-grid tenant-user-instances__grid">
               {filteredInstances.map((instance) => {
                 const serviceId = getTenantInstanceServiceId(instance)
@@ -1430,16 +1243,8 @@ export function TenantUserInstancesPage({
                 )
               })}
             </div>
-            </>
           ) : (
             <div className="catalog-table-panel">
-              <CatalogFilterResultsSummary
-                filteredCount={filteredInstances.length}
-                totalCount={serviceFilteredInstances.length}
-                singular="instance"
-                filterParts={filterDescriptionParts}
-                onClearFilters={clearAllFilters}
-              />
               <Table
                 aria-label="My instances"
                 className="catalog-data-table tenant-user-instances__table"
@@ -1449,8 +1254,7 @@ export function TenantUserInstancesPage({
                     <Th>Name</Th>
                     <Th>Status</Th>
                     <Th>Project</Th>
-                    <Th>Profile</Th>
-                    <Th>Detail</Th>
+                    <Th>Configuration</Th>
                     <Th>Created</Th>
                     <Th screenReaderText="Actions" />
                   </Tr>
@@ -1458,8 +1262,6 @@ export function TenantUserInstancesPage({
                 <Tbody>
                   {filteredInstances.map((instance) => {
                     const tableSpecRows = getTenantInstanceSpecRows(instance)
-                    const profileRow = tableSpecRows[0]
-                    const detailRow = tableSpecRows[1]
 
                     return (
                     <Tr key={instance.id}>
@@ -1477,8 +1279,15 @@ export function TenantUserInstancesPage({
                       <InstanceStatusLabel status={instance.status} />
                     </Td>
                       <Td dataLabel="Project">{getTenantInstanceProjectLabel(instance, projects)}</Td>
-                      <Td dataLabel={profileRow?.label ?? 'Profile'}>{profileRow?.value ?? '—'}</Td>
-                      <Td dataLabel={detailRow?.label ?? 'Detail'}>{detailRow?.value ?? '—'}</Td>
+                      <Td dataLabel="Configuration">
+                        <CatalogSpecRowsList
+                          rows={tableSpecRows}
+                          className="catalog-table-specs-list"
+                          rowClassName="catalog-table-spec-row"
+                          labelClassName="catalog-table-spec-label"
+                          valueClassName="catalog-table-spec-value"
+                        />
+                      </Td>
                       <Td dataLabel="Created">
                         {formatTenantInstanceCreatedAt(instance.createdAt)}
                       </Td>
@@ -1542,7 +1351,7 @@ export function TenantUserInstancesPage({
         onClose={closeAttachPublicIp}
         aria-labelledby="attach-public-ip-title"
       >
-        <ModalHeader title="Attach public IP" labelId="attach-public-ip-title" />
+        <ModalHeader title="Attach external IP" labelId="attach-public-ip-title" />
         <ModalBody>
           <Form>
             <FormGroup label="IP family" fieldId="attach-public-ip-family" isRequired>

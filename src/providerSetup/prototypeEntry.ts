@@ -31,7 +31,6 @@ import {
   formatClusterPlatformLabel,
 } from '../catalog/catalogPublishConfig'
 import { getDefaultMasterTemplate, getStandardClusterTemplate } from '../providerAdmin/bmaasTemplates'
-import { MODEL_CATALOG_ITEM_IDS } from '../vision/modelCatalogSeed'
 import {
   addProviderCatalogItem,
   deleteProviderCatalogItem,
@@ -64,7 +63,12 @@ import {
   parseRateCardFromForm,
 } from './templateDemo'
 import { DEFAULT_PROVIDER_SERVICE_SELECTION, type ProviderServiceId } from './constants'
-import { DEMO_NORTH_SUMMIT_BANK_TENANT_ID } from '../providerAdmin/organizations'
+import {
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_SLUG,
+  DEMO_HARBORLINE_CAPITAL_TENANT_ID,
+  DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+} from '../providerAdmin/organizations'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
 
 /** Stable demo IDs so ensure can re-seed without creating duplicates. */
@@ -102,7 +106,6 @@ export const LEGACY_BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID = 'bm_hpe_dl380_a100
  * Tenant Admin / Tenant User use the same order with unpublished items filtered out.
  */
 export const DEMO_CATALOG_ITEM_ORDER = [
-  ...MODEL_CATALOG_ITEM_IDS,
   BARE_METAL_GPU_CATALOG_ITEM_ID,
   BARE_METAL_AI_INFERENCE_CATALOG_ITEM_ID,
   CLUSTER_NODE_SETS_CATALOG_ITEM_ID,
@@ -154,6 +157,7 @@ function createDefaultCatalogDraft(): ProviderCatalogDraft {
     serviceId: 'baremetal',
     instanceTypeId: BARE_METAL_GPU_TRAINING_INSTANCE_TYPE_ID,
     instanceTypeLabel: formatBaremetalInstanceTypeLabel(BARE_METAL_GPU_TRAINING_INSTANCE_TYPE_ID),
+    osImageMode: 'editable',
     networkPolicy: createAllEditableCatalogNetworkPolicy(),
     status: 'live',
     createdAt: new Date().toISOString(),
@@ -170,7 +174,7 @@ function createBareMetalAiInferenceCatalogDraft(): ProviderCatalogDraft {
     displayName: SECOND_CATALOG_ITEM_DISPLAY_NAME,
     description: CATALOG_ITEM_DESCRIPTIONS_BY_ID[DEMO_CATALOG_ITEM_IDS.bareMetalDenseGpu],
     scope: 'vip-enterprise',
-    enterpriseTenantId: DEMO_NORTH_SUMMIT_BANK_TENANT_ID,
+    enterpriseTenantId: DEMO_HARBORLINE_CAPITAL_TENANT_ID,
     rateCard,
     serviceId: 'baremetal',
     instanceTypeId: BARE_METAL_AI_INFERENCE_INSTANCE_TYPE_ID,
@@ -249,7 +253,7 @@ function syncBareMetalAiInferenceCatalogItem(): void {
     current.templateRefId !== BARE_METAL_AI_INFERENCE_TEMPLATE_REF_ID ||
     current.displayName !== SECOND_CATALOG_ITEM_DISPLAY_NAME ||
     current.scope !== 'vip-enterprise' ||
-    current.enterpriseTenantId !== DEMO_NORTH_SUMMIT_BANK_TENANT_ID
+    current.enterpriseTenantId !== DEMO_HARBORLINE_CAPITAL_TENANT_ID
 
   if (needsIdentitySync) {
     rewriteProviderCatalogItemIdentity(current.catalogItemId, {
@@ -258,7 +262,7 @@ function syncBareMetalAiInferenceCatalogItem(): void {
       displayName: SECOND_CATALOG_ITEM_DISPLAY_NAME,
       description: current.description ?? '',
       scope: 'vip-enterprise',
-      enterpriseTenantId: DEMO_NORTH_SUMMIT_BANK_TENANT_ID,
+      enterpriseTenantId: DEMO_HARBORLINE_CAPITAL_TENANT_ID,
     })
   }
 
@@ -271,20 +275,36 @@ function syncBareMetalAiInferenceCatalogItem(): void {
     BARE_METAL_AI_INFERENCE_INSTANCE_TYPE_ID,
   )
 
-  // Keep North Summit Bank pointed at this VIP offering so tenant personas resolve it.
   const denseGpu = synced
-  const northsummit = getProviderRegisteredOrganizations().find(
+  const organizations = getProviderRegisteredOrganizations()
+
+  const harborline = organizations.find(
     (organization) =>
-      organization.slug === 'northsummit' || organization.slug === 'northstar',
+      organization.id === DEMO_HARBORLINE_CAPITAL_ORG_ID ||
+      organization.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
   )
   if (
-    northsummit &&
-    (northsummit.catalogItemId !== denseGpu.catalogItemId ||
-      northsummit.catalogDisplayName !== denseGpu.displayName)
+    harborline &&
+    (harborline.catalogItemId !== denseGpu.catalogItemId ||
+      harborline.catalogDisplayName !== denseGpu.displayName)
   ) {
-    updateProviderRegisteredOrganization(northsummit.id, {
+    updateProviderRegisteredOrganization(harborline.id, {
       catalogItemId: denseGpu.catalogItemId,
       catalogDisplayName: denseGpu.displayName,
+    })
+  }
+
+  const northSummit = organizations.find(
+    (organization) => organization.id === DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  )
+  if (
+    northSummit &&
+    (northSummit.catalogItemId === denseGpu.catalogItemId ||
+      northSummit.catalogDisplayName === denseGpu.displayName)
+  ) {
+    updateProviderRegisteredOrganization(northSummit.id, {
+      catalogItemId: null,
+      catalogDisplayName: null,
     })
   }
 }
@@ -325,6 +345,14 @@ function syncBareMetalGpuTrainingCatalogItem(): void {
     BARE_METAL_GPU_CATALOG_ITEM_ID,
     BARE_METAL_GPU_TRAINING_INSTANCE_TYPE_ID,
   )
+
+  const synced =
+    getProviderCatalogItems().find(
+      (item) => item.catalogItemId === BARE_METAL_GPU_CATALOG_ITEM_ID,
+    ) ?? current
+  if (synced.osImageMode !== 'editable') {
+    patchProviderCatalogItem(BARE_METAL_GPU_CATALOG_ITEM_ID, { osImageMode: 'editable' })
+  }
 }
 
 /**
@@ -449,6 +477,8 @@ function syncClusterNodeSetsCatalogItem(): void {
     synced.diskImageLabel !== formatClusterPlatformLabel(DEFAULT_CLUSTER_CATALOG_VERSION_ID) ||
     synced.instanceTypeId !== 'ocp-small' ||
     synced.instanceTypeLabel !== 'OpenShift small' ||
+    synced.rateCard.hourlyRate !== CLUSTER_NODE_SETS_RATE_CARD.hourlyRate ||
+    synced.rateCard.monthlyRate !== CLUSTER_NODE_SETS_RATE_CARD.monthlyRate ||
     !synced.diskImageId ||
     !synced.diskImageLabel
 
@@ -458,6 +488,7 @@ function syncClusterNodeSetsCatalogItem(): void {
       instanceTypeLabel: 'OpenShift small',
       diskImageId: DEFAULT_CLUSTER_CATALOG_VERSION_ID,
       diskImageLabel: formatClusterPlatformLabel(DEFAULT_CLUSTER_CATALOG_VERSION_ID),
+      rateCard: { ...CLUSTER_NODE_SETS_RATE_CARD },
     })
   }
 }
@@ -576,7 +607,7 @@ function syncDemoCatalogItemDescriptions(): void {
 /** Ensures demo catalog offerings exist for finished Provider Admin screens. */
 export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   ensureDemoBareMetalTemplates()
-  // So VIP enterprise labels can resolve North Summit Bank on catalog cards.
+  // So VIP enterprise labels can resolve Harborline Capital on catalog cards.
   ensureProviderDemoOrganizations()
 
   let items = getProviderCatalogItems()
@@ -652,25 +683,19 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
-    value === 'genai-asset-endpoints' ||
-    value === 'genai-playground' ||
-    value === 'genai-api-keys' ||
-    value === 'ai-maas-governance' ||
-    value === 'ai-model-catalog-settings' ||
-    value === 'ai-admin-api-keys' ||
     value === 'projects-teams' ||
     value === 'infrastructure-data-centers' ||
     value === 'infrastructure-hardware-inventory' ||
     value === 'infrastructure-bmaas-templates' ||
+    value === 'networking' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-subnets' ||
     value === 'networking-security-groups' ||
     value === 'networking-external-ip-pools' ||
+    value === 'secrets' ||
     value === 'administration-organizations' ||
-    value === 'administration-quotas' ||
-    value === 'billing-metering' ||
-    value === 'system' ||
-    value === 'vision-model-fleet' ||
-    value === 'vision-model-catalog-patterns'
+    value === 'administration-billing' ||
+    value === 'administration-rate-cards' ||
+    value === 'system'
   )
 }

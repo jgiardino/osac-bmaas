@@ -28,6 +28,7 @@ import {
   getCatalogNetworkOptionLabel,
   type CatalogNetworkPolicy,
 } from '../../providerAdmin/catalogNetworkPolicy'
+import { CATALOG_SERVICE_FILTER_LABELS } from '../../providerSetup/templateDemo'
 import { getProviderCatalogItems } from '../../providerSetup/storage'
 import { resolveNetworkInventoryScope } from '../../shared/networkInventoryScope'
 import { getWorkspaceOrganization } from '../../tenantAdmin/organizations'
@@ -1525,7 +1526,7 @@ function VmInstancePageBody({
             aria-label="Virtual machine specifications"
           >
             <DescriptionListGroup>
-              <DescriptionListTerm>Public IP</DescriptionListTerm>
+              <DescriptionListTerm>External IP</DescriptionListTerm>
               <DescriptionListDescription>
                 {hasPublicIp ? (
                   vmConfig.publicIp
@@ -1536,7 +1537,7 @@ function VmInstancePageBody({
                     className="provider-admin-catalog-items__inline-link"
                     onClick={() => onAttachPublicIp?.(instance)}
                   >
-                    Attach public IP
+                    Attach external IP
                   </Button>
                 ) : (
                   '—'
@@ -1781,7 +1782,7 @@ function DefaultInstancePageBody({
                 <DescriptionListGroup key={row.label}>
                   <DescriptionListTerm>{row.label}</DescriptionListTerm>
                   <DescriptionListDescription>
-                    {row.label === 'Disk image' ? (
+                    {row.label === 'Disk image' || row.label === 'OS image' ? (
                       <CatalogDiskImageValue>{row.value}</CatalogDiskImageValue>
                     ) : (
                       row.value
@@ -1939,7 +1940,7 @@ export function TenantUserInstanceDetailsPage({
 
   return (
     <EntityDetailsPageShell
-      parentLabel="Services"
+      parentLabel={CATALOG_SERVICE_FILTER_LABELS[serviceId]}
       onBack={onBack}
       title={formatTenantInstanceName(instance.name)}
       titleId="tenant-user-instance-details-title"

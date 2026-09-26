@@ -11,9 +11,9 @@ import {
   Title,
 } from '@patternfly/react-core'
 import { EntityDetailsPageShell } from '../shared/EntityDetailsPageShell'
+import { EntityDetailsActionsDropdown } from '../shared/EntityDetailsActionsDropdown'
 import { BareMetalCatalogItemDetailsBody } from '../catalog/BareMetalCatalogItemDetailsBody'
 import { ClusterCatalogItemDetailsBody } from '../catalog/ClusterCatalogItemDetailsBody'
-import { ModelServingPresetDetailsBody } from '../catalog/ModelServingPresetDetailsBody'
 import { getCatalogServiceIcon } from '../../catalog/serviceIcons'
 import { formatCatalogItemCreatedAt } from '../../catalog/catalogDetails'
 import { getCatalogItemUserDescription } from '../../catalog/catalogItemDescriptions'
@@ -26,7 +26,6 @@ import {
 import { formatRateCardSummary } from '../../providerSetup/templateDemo'
 import { formatCatalogFieldPolicyMode } from '../../catalog/catalogPublishConfig'
 import { CatalogClusterVersionValue } from '../catalog/CatalogClusterVersionValue'
-import { CatalogSpecValueWithBadge } from '../catalog/CatalogSpecValueWithBadge'
 import { CatalogVmDefaultsSections } from '../catalog/CatalogVmDefaultsSections'
 import {
   TENANT_CATALOG_MANAGER_DEMO,
@@ -36,10 +35,12 @@ import {
 } from '../../tenantAdmin/catalogManager'
 import {
   getTenantAdminCatalogSourceLabel,
-  shouldShowTenantAdminCatalogOrigin,
-  TenantAdminCatalogSourceIcon,
 } from '../../tenantAdmin/catalogSource'
+import { isTenantScopedCatalogItemId } from '../../tenantAdmin/catalogItems'
 import { LAUNCH_INSTANCE_WIZARD_DEMO } from '../../tenantUser/launchInstanceWizard'
+
+const PROVIDER_ORIGIN_EDIT_DISABLED_REASON = 'Created by provider admin'
+const PROVIDER_ORIGIN_DELETE_DISABLED_REASON = 'Created by provider admin'
 
 type TenantCatalogItemDetailsPageProps = {
   item: TenantCatalogGovernanceItemWithNetworking
@@ -47,6 +48,10 @@ type TenantCatalogItemDetailsPageProps = {
   onBack: () => void
   onNavigateToProjectsTeams: () => void
   onLaunch?: () => void
+  onEdit?: () => void
+  onDuplicate?: () => void
+  onTogglePublish?: () => void
+  onDelete?: () => void
 }
 
 export function TenantCatalogItemDetailsPage({
@@ -55,12 +60,15 @@ export function TenantCatalogItemDetailsPage({
   onBack,
   onNavigateToProjectsTeams,
   onLaunch,
+  onEdit,
+  onDuplicate,
+  onTogglePublish,
+  onDelete,
 }: TenantCatalogItemDetailsPageProps) {
   const specRows = getTenantCatalogItemDetailSpecRows(item)
   const isBareMetal = item.serviceId === 'baremetal'
   const isVirtualMachine = item.serviceId === 'virtual-machine'
   const isCluster = item.serviceId === 'cluster'
-  const isModels = item.serviceId === 'models'
   const vmHighlightRows = isVirtualMachine
     ? resolveVmCatalogHighlightRows({
         serviceId: item.serviceId,
@@ -122,6 +130,21 @@ export function TenantCatalogItemDetailsPage({
     serviceId: item.serviceId,
     description: item.description,
   })
+  const canMutateOrigin = isTenantScopedCatalogItemId(item.id)
+  const isUnpublished = item.status === 'Unpublished'
+  const actionsAdditionalItems = [
+    ...(onDuplicate
+      ? [{ label: 'Duplicate', onClick: onDuplicate }]
+      : []),
+    ...(onTogglePublish
+      ? [
+          {
+            label: isUnpublished ? 'Publish' : 'Unpublish',
+            onClick: onTogglePublish,
+          },
+        ]
+      : []),
+  ]
 
   return (
     <EntityDetailsPageShell
@@ -136,33 +159,26 @@ export function TenantCatalogItemDetailsPage({
         </Icon>
       }
       actions={
-        onLaunch && item.status !== 'Unpublished' ? (
-          <Button variant="primary" icon={<RocketIcon />} onClick={onLaunch}>
-            {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
-          </Button>
-        ) : undefined
+        <>
+          {onLaunch && !isUnpublished ? (
+            <Button variant="primary" icon={<RocketIcon />} onClick={onLaunch}>
+              {LAUNCH_INSTANCE_WIZARD_DEMO.launchInstanceLabel}
+            </Button>
+          ) : null}
+          <EntityDetailsActionsDropdown
+            onEdit={onEdit}
+            editDisabled={!canMutateOrigin}
+            editDisabledReason={PROVIDER_ORIGIN_EDIT_DISABLED_REASON}
+            additionalItems={actionsAdditionalItems}
+            onRemove={onDelete}
+            removeLabel="Delete"
+            removeDisabled={!canMutateOrigin}
+            removeDisabledReason={PROVIDER_ORIGIN_DELETE_DISABLED_REASON}
+          />
+        </>
       }
     >
-      {isModels ? (
-        <ModelServingPresetDetailsBody
-          variant="entity"
-          content={{
-            service: item.service,
-            statusLabel: item.status,
-            statusColor: item.status === 'Unpublished' ? 'grey' : 'green',
-            rateSummary: formatRateCardSummary(item.rateCard),
-            scope: item.scope,
-            visibilityLabel: getTenantAdminCatalogSourceLabel(item),
-            createdAtLabel: formatCatalogItemCreatedAt(item.createdAt),
-            specRows: resolveCatalogSpecRows({
-              catalogItemId: item.catalogItemId ?? item.id,
-              serviceId: item.serviceId,
-              templateRefId: item.templateRefId,
-              templateName: item.templateName,
-            }),
-          }}
-        />
-      ) : isBareMetal ? (
+      {isBareMetal ? (
         <BareMetalCatalogItemDetailsBody
           variant="entity"
           content={{
@@ -182,6 +198,7 @@ export function TenantCatalogItemDetailsPage({
               diskImageLabel: item.diskImageLabel,
               diskImageId: item.diskImageId,
               hardwareOsMode: item.hardwareOsMode,
+              osImageMode: item.osImageMode,
             }),
           }}
         />
@@ -239,20 +256,12 @@ export function TenantCatalogItemDetailsPage({
                 </Label>
               </DescriptionListDescription>
             </DescriptionListGroup>
-            {shouldShowTenantAdminCatalogOrigin(item) ? (
-              <DescriptionListGroup>
-                <DescriptionListTerm>Origin</DescriptionListTerm>
-                <DescriptionListDescription>
-                  <span className="tenant-admin-catalog-manager__scope">
-                    <TenantAdminCatalogSourceIcon
-                      item={item}
-                      className="tenant-admin-catalog-manager__scope-icon"
-                    />
-                    <span>{getTenantAdminCatalogSourceLabel(item)}</span>
-                  </span>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            ) : null}
+            <DescriptionListGroup>
+              <DescriptionListTerm>Source</DescriptionListTerm>
+              <DescriptionListDescription>
+                {getTenantAdminCatalogSourceLabel(item)}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
             {!isVirtualMachine && !isCluster && item.instanceTypeLabel ? (
               <DescriptionListGroup>
                 <DescriptionListTerm>Instance type</DescriptionListTerm>
@@ -261,7 +270,7 @@ export function TenantCatalogItemDetailsPage({
             ) : null}
             {!isVirtualMachine && !isCluster && item.diskImageLabel ? (
               <DescriptionListGroup>
-                <DescriptionListTerm>Disk image</DescriptionListTerm>
+                <DescriptionListTerm>OS image</DescriptionListTerm>
                 <DescriptionListDescription>{item.diskImageLabel}</DescriptionListDescription>
               </DescriptionListGroup>
             ) : null}
@@ -318,8 +327,15 @@ export function TenantCatalogItemDetailsPage({
                         >
                           {row.value}
                         </CatalogClusterVersionValue>
+                      ) : row.badge ? (
+                        <span className="catalog-spec-row-value-with-badge">
+                          <span>{row.value}</span>
+                          <Label color={row.badge.color} isCompact>
+                            {row.badge.text}
+                          </Label>
+                        </span>
                       ) : (
-                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
+                        row.value
                       )}
                     </DescriptionListDescription>
                   </DescriptionListGroup>
@@ -406,7 +422,12 @@ export function TenantCatalogItemDetailsPage({
                     <DescriptionListTerm>{row.label}</DescriptionListTerm>
                     <DescriptionListDescription>
                       {row.badge ? (
-                        <CatalogSpecValueWithBadge value={row.value} badge={row.badge} />
+                        <span className="catalog-spec-row-value-with-badge">
+                          <span>{row.value}</span>
+                          <Label color={row.badge.color} isCompact>
+                            {row.badge.text}
+                          </Label>
+                        </span>
                       ) : (
                         row.value
                       )}

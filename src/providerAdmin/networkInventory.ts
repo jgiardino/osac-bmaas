@@ -6,7 +6,47 @@ export type NetworkInventoryOption = {
   detail: string
 }
 
-export type NetworkInventoryStatus = 'Ready' | 'Creating' | 'Error'
+export type NetworkInventoryStatus = 'Ready' | 'Provisioning' | 'Error'
+
+export type VirtualNetworkNatGateway = {
+  id: string
+  name: string
+  publicIp: string
+  status: NetworkInventoryStatus
+  attachedAt: string
+}
+
+export type NatGatewayProfile = {
+  id: string
+  name: string
+  publicIp: string
+  description: string
+}
+
+export const NAT_GATEWAY_PROFILES: readonly NatGatewayProfile[] = [
+  {
+    id: 'nat-edge-standard',
+    name: 'edge-nat',
+    publicIp: '203.0.113.10',
+    description: 'Standard edge NAT for outbound internet access.',
+  },
+  {
+    id: 'nat-ha-pair',
+    name: 'ha-nat',
+    publicIp: '203.0.113.20',
+    description: 'Highly available NAT for production workloads.',
+  },
+] as const
+
+export const DEMO_TENANT_WORKLOAD_VIRTUAL_NETWORK_ID = 'vnet-tenant-workload'
+
+export const DEMO_TENANT_WORKLOAD_NAT_GATEWAY: VirtualNetworkNatGateway = {
+  id: 'nat-tenant-workload-edge',
+  name: 'edge-nat',
+  publicIp: '203.0.113.10',
+  status: 'Ready',
+  attachedAt: '2026-07-02T10:30:00.000Z',
+}
 
 export type ProviderVirtualNetwork = {
   id: string
@@ -20,6 +60,7 @@ export type ProviderVirtualNetwork = {
   dataCenter?: string
   /** Defaults to Ready for inventory created before status existed. */
   status?: NetworkInventoryStatus
+  natGateway?: VirtualNetworkNatGateway | null
   createdAt: string
 }
 
@@ -51,20 +92,23 @@ export type ProviderSecurityGroup = {
 
 export const NETWORK_INVENTORY_STATUSES: NetworkInventoryStatus[] = [
   'Ready',
-  'Creating',
+  'Provisioning',
   'Error',
 ]
 
 export function getNetworkInventoryStatus(resource: {
-  status?: NetworkInventoryStatus
+  status?: NetworkInventoryStatus | 'Creating'
 }): NetworkInventoryStatus {
+  if (resource.status === 'Creating') {
+    return 'Provisioning'
+  }
   return resource.status ?? 'Ready'
 }
 
 export function getNetworkInventoryStatusLabelColor(
   status: NetworkInventoryStatus,
 ): 'green' | 'blue' | 'red' {
-  if (status === 'Creating') {
+  if (status === 'Provisioning') {
     return 'blue'
   }
   if (status === 'Error') {
@@ -84,6 +128,7 @@ export const DEFAULT_PROVIDER_VIRTUAL_NETWORKS: ProviderVirtualNetwork[] = [
     ipv6Cidr: '2001:db8:42::/48',
     dataCenter: 'eu-west-1-dc-a',
     status: 'Ready',
+    natGateway: { ...DEMO_TENANT_WORKLOAD_NAT_GATEWAY },
     createdAt: '2026-07-01T09:00:00.000Z',
   },
   {
@@ -116,8 +161,18 @@ export const DEFAULT_PROVIDER_SUBNETS: ProviderSubnet[] = [
     cidr: '10.42.1.0/24',
     vlan: '201',
     virtualNetworkId: 'vnet-tenant-workload',
-    status: 'Creating',
+    status: 'Provisioning',
     createdAt: '2026-07-01T09:00:00.000Z',
+  },
+  {
+    id: 'subnet-bm-compute-c',
+    name: 'bm-compute-c',
+    detail: '10.42.2.0/24 · VLAN 202',
+    cidr: '10.42.2.0/24',
+    vlan: '202',
+    virtualNetworkId: 'vnet-tenant-workload',
+    status: 'Ready',
+    createdAt: '2026-07-02T09:00:00.000Z',
   },
   {
     id: 'subnet-shared-services-a',
@@ -143,6 +198,16 @@ export const DEFAULT_PROVIDER_SECURITY_GROUPS: ProviderSecurityGroup[] = [
     createdAt: '2026-07-01T09:00:00.000Z',
   },
   {
+    id: 'sg-allow-internal',
+    name: 'allow-internal',
+    detail: 'East-west traffic within the virtual network',
+    virtualNetworkId: 'vnet-tenant-workload',
+    inboundRules: 'All from 10.42.0.0/16',
+    outboundRules: 'All to 10.42.0.0/16',
+    status: 'Ready',
+    createdAt: '2026-07-02T09:00:00.000Z',
+  },
+  {
     id: 'sg-restricted-egress',
     name: 'restricted-egress',
     detail: 'Deny all egress except registry',
@@ -156,6 +221,99 @@ export const DEFAULT_PROVIDER_SECURITY_GROUPS: ProviderSecurityGroup[] = [
 
 export function generateProviderVirtualNetworkId(): string {
   return `vnet-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function generateNatGatewayId(): string {
+  return `nat-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function hasVirtualNetworkNatGateway(
+  network: ProviderVirtualNetwork,
+): network is ProviderVirtualNetwork & { natGateway: VirtualNetworkNatGateway } {
+  return Boolean(network.natGateway)
+}
+
+export function ensureDemoNatGatewayOnTenantWorkload(
+  networks: readonly ProviderVirtualNetwork[],
+): ProviderVirtualNetwork[] {
+  return networks.map((network) => {
+    if (
+      network.id === DEMO_TENANT_WORKLOAD_VIRTUAL_NETWORK_ID &&
+      network.natGateway === undefined
+    ) {
+      return {
+        ...network,
+        natGateway: { ...DEMO_TENANT_WORKLOAD_NAT_GATEWAY },
+      }
+    }
+
+    return network
+  })
+}
+
+export function attachNatGatewayProfileToVirtualNetwork(
+  network: ProviderVirtualNetwork,
+  profile: NatGatewayProfile,
+): ProviderVirtualNetwork {
+  return {
+    ...network,
+    natGateway: {
+      id: generateNatGatewayId(),
+      name: profile.name,
+      publicIp: profile.publicIp,
+      status: 'Ready',
+      attachedAt: new Date().toISOString(),
+    },
+  }
+}
+
+export function findNatGatewayProfileForGateway(
+  gateway: VirtualNetworkNatGateway,
+): NatGatewayProfile | null {
+  return (
+    NAT_GATEWAY_PROFILES.find(
+      (profile) => profile.name === gateway.name && profile.publicIp === gateway.publicIp,
+    ) ??
+    NAT_GATEWAY_PROFILES.find((profile) => profile.name === gateway.name) ??
+    NAT_GATEWAY_PROFILES[0] ??
+    null
+  )
+}
+
+export function updateNatGatewayProfileOnVirtualNetwork(
+  network: ProviderVirtualNetwork,
+  profile: NatGatewayProfile,
+): ProviderVirtualNetwork {
+  if (!hasVirtualNetworkNatGateway(network)) {
+    return network
+  }
+
+  return {
+    ...network,
+    natGateway: {
+      ...network.natGateway,
+      name: profile.name,
+      publicIp: profile.publicIp,
+    },
+  }
+}
+
+export function detachNatGatewayFromVirtualNetwork(
+  network: ProviderVirtualNetwork,
+): ProviderVirtualNetwork {
+  return {
+    ...network,
+    natGateway: null,
+  }
+}
+
+export const NETWORK_INVENTORY_PROVISIONING_DELETE_TOOLTIP =
+  'Delete is unavailable while provisioning'
+
+export function isNetworkInventoryResourceDeletable(resource: {
+  status?: NetworkInventoryStatus | 'Creating'
+}): boolean {
+  return getNetworkInventoryStatus(resource) !== 'Provisioning'
 }
 
 export function generateProviderSubnetId(): string {
@@ -190,6 +348,22 @@ export function getSecurityGroupsForVirtualNetwork(
   virtualNetworkId: string,
 ): ProviderSecurityGroup[] {
   return securityGroups.filter((group) => group.virtualNetworkId === virtualNetworkId)
+}
+
+export function formatVirtualNetworkResourceCount(count: number): string {
+  if (count === 0) {
+    return '—'
+  }
+
+  return String(count)
+}
+
+export function formatVirtualNetworkSubnetsSummary(count: number): string {
+  return formatVirtualNetworkResourceCount(count)
+}
+
+export function formatVirtualNetworkSecurityGroupsSummary(count: number): string {
+  return formatVirtualNetworkResourceCount(count)
 }
 
 export function formatSubnetDetail(cidr: string, vlan: string): string {

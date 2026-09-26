@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
 import {
   Button,
+  Card,
+  CardBody,
   Content,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
-  Flex,
-  FlexItem,
   FormSelect,
   FormSelectOption,
   Label,
@@ -24,16 +25,32 @@ import {
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr, type IAction } from '@patternfly/react-table'
 import { CatalogFilterEmptyState } from '../components/catalog/CatalogFilterEmptyState'
 import { CatalogFilterResultsSummary } from '../components/catalog/CatalogFilterResultsSummary'
+import { ResourceCreatingGridCardBody } from '../components/catalog/ResourceCreatingGridCardBody'
+import { ResourceCreatingTableRow } from '../components/catalog/ResourceCreatingTableRow'
+import {
+  orderItemsForDisplay,
+  sortItemsByCreatedAtDesc,
+  useResourceCreateReveal,
+} from '../catalog/resourceCreateReveal'
+import { ViewModeToggle } from '../components/catalog/CatalogViewToggle'
+import { getAdministrationViewMode, setAdministrationViewMode, type ViewMode } from '../catalog/viewMode'
 import { OrganizationDetailsPage } from '../components/provider-admin/OrganizationDetailsPage'
-import { RegisterOrganizationWizard } from '../components/provider-admin/RegisterOrganizationWizard'
+import { ProviderAdminWorkspacePageHeader } from '../components/provider-admin/ProviderAdminWorkspacePageHeader'
+import { TenantOnboardingWizard } from '../components/provider-admin/TenantOnboardingWizard'
 import { SetupIdentityProviderWizard } from '../components/provider-admin/SetupIdentityProviderWizard'
 import { AddTenantAdministratorWizard } from '../components/tenant-admin/AddTenantAdministratorWizard'
 import { IdpManagerIdentityProviderPage } from './idp-manager/IdpManagerIdentityProviderPage'
 import { IDP_MANAGER_ROLES_COPY } from '../idpManager/constants'
+import { BillingPendingLabel } from '../components/billing/BillingPendingLabel'
+import { isOrganizationM360AccountInactive } from '../billing/m360'
 import {
+  getOrganizationBillingAccountDisplay,
+  getOrganizationBillingPendingTooltip,
   getOrganizationSetupNextAction,
   getOrganizationSetupSignal,
   buildOrganizationFilterParts,
+  getOrganizationNameInitial,
+  isOrganizationBillingPending,
   matchesOrganizationSetupFilter,
   ORGANIZATION_SETUP_FILTER_OPTIONS,
   organizationMatchesSearch,
@@ -41,6 +58,7 @@ import {
   type OrganizationSetupFilter,
   type OrganizationSetupNextAction,
   type RegisteredOrganization,
+  type TenantOnboardingStepId,
 } from '../providerAdmin/organizations'
 import {
   addProviderRegisteredOrganization,
@@ -55,6 +73,13 @@ import {
   updateProviderRegisteredOrganization,
 } from '../providerSetup/storage'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
+import {
+  getWorkspaceActionParam,
+  getWorkspaceOrganizationParam,
+  syncWorkspaceActionParam,
+  syncWorkspaceOrganizationParam,
+  WORKSPACE_ACTION_REGISTER_TENANT,
+} from '../shared/workspaceNavUrl'
 
 function formatRegisteredAt(iso: string): string {
   return new Date(iso).toLocaleString([], {
@@ -100,18 +125,34 @@ function getOrganizationActions(
   ]
 }
 
+function renderOrganizationBillingPendingLabel(organization: RegisteredOrganization) {
+  const inactive = isOrganizationM360AccountInactive(organization)
+
+  return (
+    <BillingPendingLabel
+      label={inactive ? 'Billing account inactive' : 'Billing pending'}
+      tooltip={getOrganizationBillingPendingTooltip(organization)}
+    />
+  )
+}
+
 export function ProviderAdminOrganizationsPage({
   onNavigate,
 }: {
   onNavigate?: (navId: ProviderAdminNavId) => void
 }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [organizations, setOrganizations] = useState<RegisteredOrganization[]>(() =>
     ensureProviderDemoOrganizations(),
   )
-  const [isWizardOpen, setIsWizardOpen] = useState(false)
+  const [isOnboardingWizardOpen, setIsOnboardingWizardOpen] = useState(false)
+  const [onboardingResumeOrganization, setOnboardingResumeOrganization] =
+    useState<RegisteredOrganization | null>(null)
   const [editingOrganization, setEditingOrganization] = useState<RegisteredOrganization | null>(
     null,
   )
+  const [onboardingInitialStepId, setOnboardingInitialStepId] =
+    useState<TenantOnboardingStepId>('general')
   const [editReturnToDetails, setEditReturnToDetails] = useState(false)
   const [selectedOrganization, setSelectedOrganization] = useState<RegisteredOrganization | null>(
     null,
@@ -129,15 +170,28 @@ export function ProviderAdminOrganizationsPage({
     'all',
   )
   const [selectedSetup, setSelectedSetup] = useState<OrganizationSetupFilter>('all')
-  const [registeringOrganizationId, setRegisteringOrganizationId] = useState<string | null>(null)
-  const registeringTimerRef = useRef<number | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getAdministrationViewMode())
+  const organizationDisplayOrderRef = useRef<string[] | null>(null)
+  const {
+    creatingItemId: registeringOrganizationId,
+    creatingCardHeightPx,
+    cardGridRef,
+    beginCreateReveal: beginOrganizationCreateReveal,
+    measureCreatingCardHeight,
+  } = useResourceCreateReveal()
   const [activatingOrganizationId, setActivatingOrganizationId] = useState<string | null>(null)
   const activatingTimerRef = useRef<number | null>(null)
   const pendingActivationAfterIdpCloseRef = useRef<string | null>(null)
   const catalogDraft = getProviderCatalogDraft()
 
+  const orderedOrganizations = useMemo(
+    () =>
+      orderItemsForDisplay(organizations, organizationDisplayOrderRef, sortItemsByCreatedAtDesc),
+    [organizations],
+  )
+
   const filteredOrganizations = useMemo(() => {
-    return organizations.filter((organization) => {
+    return orderedOrganizations.filter((organization) => {
       if (selectedStatus !== 'all' && organization.status !== selectedStatus) {
         return false
       }
@@ -148,7 +202,11 @@ export function ProviderAdminOrganizationsPage({
 
       return organizationMatchesSearch(organization, searchValue)
     })
-  }, [organizations, searchValue, selectedSetup, selectedStatus])
+  }, [orderedOrganizations, searchValue, selectedSetup, selectedStatus])
+
+  useLayoutEffect(() => {
+    measureCreatingCardHeight(viewMode === 'grid', 'provider-admin-catalog-items__card--creating')
+  }, [filteredOrganizations, measureCreatingCardHeight, registeringOrganizationId, viewMode])
 
   const filterDescriptionParts = useMemo(
     () => buildOrganizationFilterParts(searchValue, selectedStatus, selectedSetup),
@@ -161,11 +219,9 @@ export function ProviderAdminOrganizationsPage({
     setSelectedSetup('all')
   }
 
-  const clearRegisteringTimer = () => {
-    if (registeringTimerRef.current !== null) {
-      window.clearTimeout(registeringTimerRef.current)
-      registeringTimerRef.current = null
-    }
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode)
+    setAdministrationViewMode(mode)
   }
 
   const clearActivatingTimer = () => {
@@ -179,19 +235,51 @@ export function ProviderAdminOrganizationsPage({
     if (consumeProviderOpenRegisterOrgWizard()) {
       setEditingOrganization(null)
       setEditReturnToDetails(false)
-      setIsWizardOpen(true)
+      setOnboardingResumeOrganization(null)
+      setOnboardingInitialStepId('general')
+      setIsOnboardingWizardOpen(true)
+      syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_REGISTER_TENANT, {
+        replace: true,
+      })
     }
-  }, [])
+  }, [setSearchParams])
+
+  useEffect(() => {
+    if (getWorkspaceActionParam(searchParams) !== WORKSPACE_ACTION_REGISTER_TENANT) {
+      return
+    }
+
+    setEditingOrganization(null)
+    setEditReturnToDetails(false)
+    setOnboardingResumeOrganization(null)
+    setOnboardingInitialStepId('general')
+    setIsDetailsOpen(false)
+    setIsOnboardingWizardOpen(true)
+  }, [searchParams])
 
   useEffect(() => {
     return () => {
-      clearRegisteringTimer()
       clearActivatingTimer()
     }
   }, [])
 
+  useEffect(() => {
+    const organizationId = getWorkspaceOrganizationParam(searchParams)
+    if (!organizationId) {
+      return
+    }
+
+    const organization = organizations.find((entry) => entry.id === organizationId)
+    if (!organization) {
+      return
+    }
+
+    setSelectedOrganization(organization)
+    setIsDetailsOpen(true)
+  }, [organizations, searchParams])
+
   const refreshOrganizations = (nextSelectedId?: string | null) => {
-    const next = getProviderRegisteredOrganizations()
+    const next = ensureProviderDemoOrganizations()
     setOrganizations(next)
 
     setIdpDirectoryOrganization((current) => {
@@ -255,33 +343,68 @@ export function ProviderAdminOrganizationsPage({
   const openRegisterWizard = () => {
     setEditingOrganization(null)
     setEditReturnToDetails(false)
-    setIsWizardOpen(true)
+    setOnboardingResumeOrganization(null)
+    setOnboardingInitialStepId('general')
+    setIsOnboardingWizardOpen(true)
+    syncWorkspaceActionParam(setSearchParams, WORKSPACE_ACTION_REGISTER_TENANT, {
+      replace: true,
+    })
   }
 
   const openEdit = (organization: RegisteredOrganization, returnToDetails = false) => {
     setSelectedOrganization(organization)
     setEditingOrganization(organization)
+    setOnboardingResumeOrganization(null)
+    setOnboardingInitialStepId('general')
     setEditReturnToDetails(returnToDetails)
     setIsDetailsOpen(false)
-    setIsWizardOpen(true)
+    setIsOnboardingWizardOpen(true)
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
   }
 
-  const closeWizard = () => {
-    setIsWizardOpen(false)
+  const openBillingSetup = (organization: RegisteredOrganization, returnToDetails = false) => {
+    // Same editable Edit-tenant wizard, but land on Billing.
+    setSelectedOrganization(organization)
+    setEditingOrganization(organization)
+    setOnboardingResumeOrganization(null)
+    setOnboardingInitialStepId('billing_account')
+    setEditReturnToDetails(returnToDetails)
+    setIsDetailsOpen(false)
+    setIsOnboardingWizardOpen(true)
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
+  }
+
+  const closeOnboardingWizard = () => {
+    const shouldReturnToDetails = editReturnToDetails && selectedOrganization
+    setIsOnboardingWizardOpen(false)
+    setOnboardingResumeOrganization(null)
     setEditingOrganization(null)
-    if (editReturnToDetails && selectedOrganization) {
+    setOnboardingInitialStepId('general')
+    setEditReturnToDetails(false)
+    if (shouldReturnToDetails) {
       setIsDetailsOpen(true)
     }
-    setEditReturnToDetails(false)
+    if (getWorkspaceActionParam(searchParams) === WORKSPACE_ACTION_REGISTER_TENANT) {
+      syncWorkspaceActionParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const openDetails = (organization: RegisteredOrganization) => {
     setSelectedOrganization(organization)
     setIsDetailsOpen(true)
+    syncWorkspaceOrganizationParam(setSearchParams, organization.id, { replace: true })
   }
 
   const closeDetails = () => {
     setIsDetailsOpen(false)
+    setSelectedOrganization(null)
+    if (getWorkspaceOrganizationParam(searchParams)) {
+      syncWorkspaceOrganizationParam(setSearchParams, null, { replace: true })
+    }
   }
 
   const openRemove = (organization: RegisteredOrganization) => {
@@ -314,48 +437,84 @@ export function ProviderAdminOrganizationsPage({
     setOrganizationPendingRemove(null)
   }
 
-  const handleRegister = (organization: RegisteredOrganization) => {
-    addProviderRegisteredOrganization(organization)
-    if (organization.externalIpPoolId) {
-      assignExternalIpPoolToRegisteredOrganization(organization.externalIpPoolId, organization.id)
+  const handleOnboardingPersist = (organization: RegisteredOrganization) => {
+    const existing = getProviderRegisteredOrganizations().find(
+      (item) => item.id === organization.id,
+    )
+    if (existing) {
+      updateProviderRegisteredOrganization(organization.id, {
+        name: organization.name,
+        tenantId: organization.tenantId,
+        slug: organization.slug,
+        displayName: organization.displayName,
+        primaryDomain: organization.primaryDomain,
+        additionalDomains: organization.additionalDomains,
+        logoSrc: organization.logoSrc,
+        logoFileName: organization.logoFileName,
+        m360AccountId: organization.m360AccountId,
+        m360ConnectionStatus: organization.m360ConnectionStatus,
+        m360RateCardId: organization.m360RateCardId,
+        m360RateCardName: organization.m360RateCardName,
+        billingAccountId: organization.billingAccountId,
+        billingAccountName: organization.billingAccountName,
+        billingAccountLinked: organization.billingAccountLinked,
+        tenantSetupStatus: organization.tenantSetupStatus,
+      })
+    } else {
+      addProviderRegisteredOrganization(organization)
+      if (organization.externalIpPoolId) {
+        assignExternalIpPoolToRegisteredOrganization(
+          organization.externalIpPoolId,
+          organization.id,
+        )
+      }
+      if (organization.catalogItemId && catalogDraft) {
+        assignCatalogToRegisteredOrganization(organization.id, catalogDraft)
+      }
     }
-    if (organization.catalogItemId && catalogDraft) {
-      assignCatalogToRegisteredOrganization(organization.id, catalogDraft)
+    refreshOrganizations(organization.id)
+  }
+
+  const handleOnboardingComplete = (organization: RegisteredOrganization) => {
+    if (editingOrganization) {
+      refreshOrganizations(organization.id)
+      const shouldReturnToDetails = editReturnToDetails
+      setIsOnboardingWizardOpen(false)
+      setOnboardingResumeOrganization(null)
+      setEditingOrganization(null)
+      setOnboardingInitialStepId('general')
+      setEditReturnToDetails(false)
+      if (shouldReturnToDetails) {
+        setSelectedOrganization(
+          getProviderRegisteredOrganizations().find((item) => item.id === organization.id) ??
+            organization,
+        )
+        setIsDetailsOpen(true)
+      }
+      return
     }
-    setOrganizations(getProviderRegisteredOrganizations())
-    closeWizard()
+
+    setSearchValue('')
+    setSelectedStatus('all')
+    setSelectedSetup('all')
 
     if (peekProviderVipCatalogResumeIntent()) {
       onNavigate?.('catalog')
       return
     }
 
-    clearRegisteringTimer()
-    setRegisteringOrganizationId(organization.id)
-    registeringTimerRef.current = window.setTimeout(() => {
-      setRegisteringOrganizationId(null)
-      registeringTimerRef.current = null
-    }, 1500)
-  }
-
-  const handleSave = (organization: RegisteredOrganization) => {
-    updateProviderRegisteredOrganization(organization.id, {
-      name: organization.name,
-      slug: organization.slug,
-      primaryDomain: organization.primaryDomain,
-      additionalDomains: organization.additionalDomains,
-      billingAccountName: organization.billingAccountName,
-      logoSrc: organization.logoSrc,
-      logoFileName: organization.logoFileName,
-    })
-    refreshOrganizations(organization.id)
-    closeWizard()
+    beginOrganizationCreateReveal(organization.id)
   }
 
   const handleSetupNextAction = (
     organization: RegisteredOrganization,
     action: OrganizationSetupNextAction,
   ) => {
+    if (action === 'billing') {
+      openBillingSetup(organization)
+      return
+    }
+
     if (action === 'idp') {
       if (organization.identityProviderConnected) {
         openIdpDirectory(organization)
@@ -430,16 +589,16 @@ export function ProviderAdminOrganizationsPage({
             setRolesOrganization(null)
           }}
         />
-      ) : isWizardOpen ? (
-        <RegisterOrganizationWizard
-          key={editingOrganization?.id ?? 'register-tenant'}
-          presentation="page"
-          isOpen={isWizardOpen}
+      ) : isOnboardingWizardOpen ? (
+        <TenantOnboardingWizard
+          isOpen={isOnboardingWizardOpen}
           catalogDraft={catalogDraft}
+          resumeOrganization={onboardingResumeOrganization}
           editingOrganization={editingOrganization}
-          onClose={closeWizard}
-          onRegister={handleRegister}
-          onSave={handleSave}
+          initialStepId={onboardingInitialStepId}
+          onClose={closeOnboardingWizard}
+          onPersistOrganization={handleOnboardingPersist}
+          onComplete={handleOnboardingComplete}
         />
       ) : idpDelegationOrganization !== null ? (
         <SetupIdentityProviderWizard
@@ -470,6 +629,7 @@ export function ProviderAdminOrganizationsPage({
           onBack={closeDetails}
           onEdit={() => openEdit(selectedOrganization, true)}
           onRemove={() => openRemove(selectedOrganization)}
+          onReviewBilling={(organization) => openBillingSetup(organization, true)}
           onReviewIdentityProvider={(organization) => {
             if (organization.identityProviderConnected) {
               openIdpDirectory(organization)
@@ -482,37 +642,18 @@ export function ProviderAdminOrganizationsPage({
         />
       ) : (
       <div className="provider-admin-workspace-page provider-admin-organizations">
-        {organizations.length > 0 ? (
-          <Flex
-            className="provider-admin-organizations__header"
-            alignItems={{ default: 'alignItemsFlexStart' }}
-            justifyContent={{ default: 'justifyContentSpaceBetween' }}
-            gap={{ default: 'gapMd' }}
-          >
-            <FlexItem>
-              <Title headingLevel="h1" size="3xl" className="provider-admin-organizations__title">
-                Tenants
-              </Title>
-              <Content component="p" className="provider-admin-organizations__lede">
-                {PROVIDER_ORGANIZATIONS_DEMO.lede}
-              </Content>
-            </FlexItem>
-            <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
+        <ProviderAdminWorkspacePageHeader
+          kicker="Administration"
+          title="Tenants"
+          lede={PROVIDER_ORGANIZATIONS_DEMO.lede}
+          action={
+            organizations.length > 0 ? (
               <Button variant="primary" icon={<PlusIcon />} onClick={openRegisterWizard}>
                 {PROVIDER_ORGANIZATIONS_DEMO.registerOrganizationLabel}
               </Button>
-            </FlexItem>
-          </Flex>
-        ) : (
-          <>
-            <Title headingLevel="h1" size="3xl" className="provider-admin-organizations__title">
-              Tenants
-            </Title>
-            <Content component="p" className="provider-admin-organizations__lede">
-              {PROVIDER_ORGANIZATIONS_DEMO.lede}
-            </Content>
-          </>
-        )}
+            ) : undefined
+          }
+        />
 
         {organizations.length > 0 ? (
           <div className="catalog-view-toolbar">
@@ -552,6 +693,12 @@ export function ProviderAdminOrganizationsPage({
                 aria-label="Search tenants"
               />
             </div>
+            <ViewModeToggle
+              viewMode={viewMode}
+              onChange={handleViewModeChange}
+              idPrefix="tenants-view"
+              ariaLabel="Tenants view"
+            />
           </div>
         ) : null}
 
@@ -577,6 +724,156 @@ export function ProviderAdminOrganizationsPage({
             description="Try a different status, setup state, or search term."
             onClearFilters={clearAllFilters}
           />
+        ) : viewMode === 'grid' ? (
+          <>
+            <CatalogFilterResultsSummary
+              filteredCount={filteredOrganizations.length}
+              totalCount={organizations.length}
+              singular="tenant"
+              filterParts={filterDescriptionParts}
+              onClearFilters={clearAllFilters}
+            />
+            <div
+              ref={cardGridRef}
+              className="catalog-card-grid catalog-card-grid--stable provider-admin-organizations__grid"
+            >
+              {filteredOrganizations.map((org) => {
+                const isRegistering = registeringOrganizationId === org.id
+                const isActivating = activatingOrganizationId === org.id
+                const setupSignal = isRegistering || isActivating ? null : getOrganizationSetupSignal(org)
+                const nextAction =
+                  isRegistering || isActivating ? null : getOrganizationSetupNextAction(org)
+
+                return (
+                  <Card
+                    key={org.id}
+                    isCompact={false}
+                    className={[
+                      'provider-admin-catalog-items__card',
+                      'provider-admin-organizations__card',
+                      isRegistering ? 'provider-admin-catalog-items__card--creating' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    style={
+                      isRegistering && creatingCardHeightPx
+                        ? { height: creatingCardHeightPx, minBlockSize: creatingCardHeightPx }
+                        : undefined
+                    }
+                  >
+                    {isRegistering ? (
+                      <ResourceCreatingGridCardBody label="Registering tenant…" />
+                    ) : (
+                    <CardBody>
+                      <div className="provider-admin-organizations__card-main">
+                      <div className="provider-admin-catalog-items__card-header">
+                        <span
+                          className="provider-admin-catalog-items__card-icon provider-admin-organizations__card-logo provider-admin-organizations__card-logo--initial"
+                          aria-hidden
+                        >
+                          <span className="provider-admin-organizations__card-initial">
+                            {getOrganizationNameInitial(org.name)}
+                          </span>
+                        </span>
+                        <div className="provider-admin-catalog-items__card-header-actions">
+                          {isActivating || isRegistering ? (
+                            <Spinner
+                              size="sm"
+                              aria-label={
+                                isActivating ? `Activating ${org.name}` : `Registering ${org.name}`
+                              }
+                            />
+                          ) : (
+                            <Label
+                              color={org.status === 'Active' ? 'green' : 'orange'}
+                              isCompact
+                              className="provider-admin-catalog-items__card-label"
+                            >
+                              {org.status}
+                            </Label>
+                          )}
+                          <ActionsColumn
+                            items={getOrganizationActions(
+                              org,
+                              openDetails,
+                              openEdit,
+                              openRemove,
+                              (organization) => openIdpDirectory(organization),
+                            )}
+                          />
+                        </div>
+                      </div>
+                      <Content
+                        component="p"
+                        className="provider-admin-catalog-items__primary-cell"
+                      >
+                        <Button
+                          variant="link"
+                          isInline
+                          className="provider-admin-catalog-items__name-link catalog-item-name-link"
+                          onClick={() => openDetails(org)}
+                        >
+                          {org.name}
+                        </Button>
+                      </Content>
+                      <dl
+                        className="provider-admin-catalog-items__specs-list provider-admin-organizations__card-specs"
+                      >
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Domain</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {org.primaryDomain || '—'}
+                          </dd>
+                        </div>
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Billing</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {isOrganizationBillingPending(org) ? (
+                              renderOrganizationBillingPendingLabel(org)
+                            ) : (
+                              getOrganizationBillingAccountDisplay(org)
+                            )}
+                          </dd>
+                        </div>
+                        <div className="provider-admin-catalog-items__spec-row">
+                          <dt className="provider-admin-catalog-items__spec-label">Registered</dt>
+                          <dd className="provider-admin-catalog-items__spec-value">
+                            {formatRegisteredAt(org.createdAt)}
+                          </dd>
+                        </div>
+                      </dl>
+                      </div>
+                      {setupSignal ? (
+                        <div
+                          className="provider-admin-catalog-items__card-footer provider-admin-organizations__card-footer"
+                          aria-label="Setup"
+                        >
+                          {nextAction ? (
+                            <Button
+                              variant="link"
+                              isInline
+                              className="provider-admin-organizations__setup-signal-link"
+                              onClick={() => handleSetupNextAction(org, nextAction)}
+                            >
+                              {setupSignal}
+                            </Button>
+                          ) : (
+                            <Content
+                              component="p"
+                              className="provider-admin-organizations__setup-signal"
+                            >
+                              {setupSignal}
+                            </Content>
+                          )}
+                        </div>
+                      ) : null}
+                    </CardBody>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </>
         ) : (
           <div className="catalog-table-panel">
             <CatalogFilterResultsSummary
@@ -606,6 +903,19 @@ export function ProviderAdminOrganizationsPage({
                 const isRegistering = registeringOrganizationId === org.id
                 const isActivating = activatingOrganizationId === org.id
                 const isStatusPending = isRegistering || isActivating
+
+                if (isRegistering) {
+                  return (
+                    <ResourceCreatingTableRow
+                      key={org.id}
+                      itemId={org.id}
+                      label="Registering tenant…"
+                      colSpan={6}
+                      className="provider-admin-organizations__row--registering catalog-resource-creating-row"
+                    />
+                  )
+                }
+
                 const setupSignal = isStatusPending ? null : getOrganizationSetupSignal(org)
                 const nextAction = isStatusPending ? null : getOrganizationSetupNextAction(org)
 
@@ -613,9 +923,7 @@ export function ProviderAdminOrganizationsPage({
                   <Tr
                     key={org.id}
                     className={
-                      isStatusPending
-                        ? 'provider-admin-organizations__row--registering'
-                        : undefined
+                      isActivating ? 'provider-admin-organizations__row--registering' : undefined
                     }
                   >
                     <Td modifier="wrap" dataLabel="Tenant">
@@ -628,9 +936,6 @@ export function ProviderAdminOrganizationsPage({
                         >
                           {org.name}
                         </Button>
-                      </Content>
-                      <Content component="p" className="provider-admin-organizations__secondary-cell">
-                        <code>{org.tenantId}</code>
                       </Content>
                     </Td>
                     <Td modifier="wrap" dataLabel="Status">
@@ -649,15 +954,6 @@ export function ProviderAdminOrganizationsPage({
                             {org.status}
                           </Label>
                         )}
-                        {isRegistering ? (
-                          <span className="provider-admin-organizations__registering-status">
-                            <Spinner
-                              size="sm"
-                              aria-label={`Registering ${org.name}`}
-                            />
-                            <span className="pf-v6-screen-reader">Registering tenant</span>
-                          </span>
-                        ) : null}
                         {setupSignal && nextAction ? (
                           <Button
                             variant="link"
@@ -684,12 +980,18 @@ export function ProviderAdminOrganizationsPage({
                       </Content>
                     </Td>
                     <Td modifier="wrap" dataLabel="Billing account">
-                      <Content component="p" className="provider-admin-organizations__primary-cell">
-                        {org.billingAccountName}
-                      </Content>
-                      <Content component="p" className="provider-admin-organizations__secondary-cell">
-                        <code>{org.billingAccountId}</code>
-                      </Content>
+                      {isOrganizationBillingPending(org) ? (
+                        renderOrganizationBillingPendingLabel(org)
+                      ) : (
+                        <>
+                          <Content component="p" className="provider-admin-organizations__primary-cell">
+                            {org.billingAccountName}
+                          </Content>
+                          <Content component="p" className="provider-admin-organizations__secondary-cell">
+                            <code>{getOrganizationBillingAccountDisplay(org)}</code>
+                          </Content>
+                        </>
+                      )}
                     </Td>
                     <Td modifier="wrap" dataLabel="Registered">
                       {formatRegisteredAt(org.createdAt)}

@@ -1,23 +1,18 @@
 export type TenantAdminNavId =
   | 'overview'
-  | 'vision-model-fleet'
   | 'catalog'
   | 'services-baremetal'
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
-  | 'genai-asset-endpoints'
-  | 'genai-playground'
-  | 'genai-api-keys'
-  | 'ai-maas-governance'
-  | 'ai-model-catalog-settings'
-  | 'ai-admin-api-keys'
   | 'projects-teams'
-  | 'administrators'
+  | 'administration-roles'
+  | 'administration-billing'
   | 'networking-virtual-networks'
   | 'networking-subnets'
   | 'networking-security-groups'
   | 'networking-external-ip-pools'
+  | 'secrets'
 
 export type TenantAdminNavItem = {
   id: string
@@ -41,32 +36,25 @@ export const TENANT_ADMIN_SERVICES_NAV_ITEMS: ReadonlyArray<{
   { id: 'services-virtual-machines', label: 'Virtual machines' },
 ]
 
+export const TENANT_EXTERNAL_IPS_PAGE_LABEL = 'External IPs'
+
+/** Shown on tenant external IP pool surfaces — pools are provisioned by the provider, not tenants. */
+export const TENANT_EXTERNAL_IP_POOL_MANAGED_BY_LABEL = 'Provider administrator'
+
 export const TENANT_ADMIN_NETWORKING_NAV_ITEMS: ReadonlyArray<{
   id: TenantAdminNavId
   label: string
 }> = [
   { id: 'networking-virtual-networks', label: 'Virtual networks' },
-  { id: 'networking-subnets', label: 'Subnets' },
-  { id: 'networking-security-groups', label: 'Security groups' },
-  { id: 'networking-external-ip-pools', label: 'External IP pools' },
+  { id: 'networking-external-ip-pools', label: TENANT_EXTERNAL_IPS_PAGE_LABEL },
 ]
 
-export const TENANT_ADMIN_GENAI_NAV_ITEMS: ReadonlyArray<{
+export const TENANT_ADMIN_ADMINISTRATION_NAV_ITEMS: ReadonlyArray<{
   id: TenantAdminNavId
   label: string
 }> = [
-  { id: 'genai-asset-endpoints', label: 'AI asset endpoints' },
-  { id: 'genai-playground', label: 'Playground' },
-  { id: 'genai-api-keys', label: 'API keys' },
-]
-
-export const TENANT_ADMIN_AI_NAV_ITEMS: ReadonlyArray<{
-  id: TenantAdminNavId
-  label: string
-}> = [
-  { id: 'ai-maas-governance', label: 'MaaS governance' },
-  { id: 'ai-model-catalog-settings', label: 'Model catalog settings' },
-  { id: 'ai-admin-api-keys', label: 'API keys' },
+  { id: 'administration-roles', label: 'Roles' },
+  { id: 'administration-billing', label: 'Billing' },
 ]
 
 export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
@@ -77,23 +65,18 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
     label: 'Services',
     children: TENANT_ADMIN_SERVICES_NAV_ITEMS,
   },
-  {
-    id: 'genai-studio',
-    label: 'GenAI studio',
-    children: TENANT_ADMIN_GENAI_NAV_ITEMS,
-  },
   { id: 'projects-teams', label: 'Projects' },
-  {
-    id: 'ai',
-    label: 'AI',
-    children: TENANT_ADMIN_AI_NAV_ITEMS,
-  },
   {
     id: 'networking',
     label: 'Networking',
     children: TENANT_ADMIN_NETWORKING_NAV_ITEMS,
   },
-  { id: 'administrators', label: 'Administration' },
+  {
+    id: 'administration',
+    label: 'Administration',
+    children: TENANT_ADMIN_ADMINISTRATION_NAV_ITEMS,
+  },
+  { id: 'secrets', label: 'Secrets' },
 ]
 
 export function getTenantAdminLeafNavItems(
@@ -112,6 +95,10 @@ export function isNetworkingNavId(navId: string): boolean {
 
 export function isServicesNavId(navId: string): boolean {
   return navId.startsWith('services-')
+}
+
+export function isAdministrationNavId(navId: string): boolean {
+  return navId.startsWith('administration-')
 }
 
 /** @deprecated Use TENANT_ADMIN_NAV_ITEMS for navigation. */

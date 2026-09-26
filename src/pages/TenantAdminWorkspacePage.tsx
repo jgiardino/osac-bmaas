@@ -1,29 +1,18 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { syncWorkspaceCatalogItemParam, syncWorkspaceNavParam } from '../shared/workspaceNavUrl'
 import { TenantShell } from '../components/tenant/TenantShell'
 import { DEMO_TENANT_DISPLAY_ADMIN, isDemoTenantId } from '../demoTenant'
 import { PlaceholderTenantAdminPage } from './PlaceholderTenantAdminPage'
-import { ProviderAdminExternalIpPoolsPage } from './infrastructure/ProviderAdminExternalIpPoolsPage'
-import { ProviderAdminSecurityGroupsPage } from './infrastructure/ProviderAdminSecurityGroupsPage'
-import { ProviderAdminSubnetsPage } from './infrastructure/ProviderAdminSubnetsPage'
+import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
 import { TenantAdminCatalogPage } from './tenant-admin/TenantAdminCatalogPage'
 import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminAdministratorsPage } from './tenant-admin/TenantAdminAdministratorsPage'
+import { TenantAdminBillingPage } from './tenant-admin/TenantAdminBillingPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
+import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
-import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
-import { GenaiApiKeysPage } from './tenant-user/genai/api-keys/GenaiApiKeysPage'
-import {
-  clearGenaiApiKeysDetailParams,
-  clearMaasGovernanceDetailParams,
-  isGenaiApiKeysNavId,
-} from './tenant-user/genai/genaiNavParams'
-import { PlaygroundPage } from './tenant-user/genai/playground/PlaygroundPage'
-import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
-import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
-import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
@@ -36,6 +25,7 @@ import {
   ensureTenantDemoProjects,
   setTenantActiveNav,
   setTenantOnboardingComplete,
+  addTenantProject,
 } from '../tenantAdmin/storage'
 import type { TenantProject } from '../tenantAdmin/projects'
 import {
@@ -45,7 +35,15 @@ import {
   type ProjectScopeId,
 } from '../tenantUser/projectScope'
 import type { CatalogServiceId } from '../providerSetup/templateDemo'
-import { activateProviderRegisteredOrganizationBySlug, getProviderCatalogDraft, getProviderCatalogItems } from '../providerSetup/storage'
+import {
+  activateProviderRegisteredOrganizationBySlug,
+  ensureProviderDemoOrganizations,
+  getProviderCatalogDraft,
+} from '../providerSetup/storage'
+import {
+  shouldHideDemoServicesInstances,
+  syncNorthSummitBillingInactiveScenarioFromSearch,
+} from '../demo/billingInactiveScenario'
 import {
   addTenantUserInstance,
   ensureTenantDemoInstances,
@@ -58,13 +56,6 @@ import {
   type TenantInstance,
 } from '../tenantUser/instances'
 import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROVISIONING_MS } from '../tenantUser/launchInstanceWizard'
-import {
-  MODEL_FLEET_VISION_NAV_ID,
-  MODEL_FLEET_VISION_VALUE,
-  isModelFleetVision,
-  mergeVisionCatalogItems,
-} from '../vision/modelFleet'
-import { visionOrgIdForTenantSlug } from '../vision/fleetWorld'
 
 const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
   Record<TenantAdminNavId, { title: string; description: string }>
@@ -73,24 +64,17 @@ const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
 function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
   return (
     value === 'overview' ||
-    value === 'vision-model-fleet' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
-    value === 'genai-asset-endpoints' ||
-    value === 'genai-playground' ||
-    value === 'genai-api-keys' ||
-    value === 'ai-maas-governance' ||
-    value === 'ai-model-catalog-settings' ||
-    value === 'ai-admin-api-keys' ||
     value === 'projects-teams' ||
-    value === 'administrators' ||
+    value === 'administration-roles' ||
+    value === 'administration-billing' ||
     value === 'networking-virtual-networks' ||
-    value === 'networking-subnets' ||
-    value === 'networking-security-groups' ||
-    value === 'networking-external-ip-pools'
+    value === 'networking-external-ip-pools' ||
+    value === 'secrets'
   )
 }
 
@@ -98,8 +82,17 @@ function normalizeTenantAdminNavParam(value: string | null): TenantAdminNavId | 
   if (isTenantAdminNavId(value)) {
     return value
   }
+  if (value === 'administrators') {
+    return 'administration-roles'
+  }
+  if (value === 'billing') {
+    return 'administration-billing'
+  }
   if (value === 'services' || value === 'my-instances' || value === 'instances') {
     return 'services-baremetal'
+  }
+  if (value === 'networking-subnets' || value === 'networking-security-groups') {
+    return 'networking-virtual-networks'
   }
   return null
 }
@@ -133,10 +126,18 @@ function getServicesNavId(serviceId: CatalogServiceId): TenantAdminNavId {
 }
 
 /** Seeds Tenant Admin state so landing-page prototype links can open finished screens. */
-function ensureTenantAdminPostOnboardingPrototype(tenant: string, navId: TenantAdminNavId) {
+function ensureTenantAdminPostOnboardingPrototype(
+  tenant: string,
+  navId: TenantAdminNavId,
+  searchParams?: URLSearchParams,
+) {
   setTenantOnboardingComplete(tenant)
   setTenantActiveNav(tenant, navId)
+  ensureProviderDemoOrganizations()
   activateProviderRegisteredOrganizationBySlug(tenant)
+  if (searchParams) {
+    syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
+  }
 }
 
 function readInitialTenantAdminNav(
@@ -145,10 +146,11 @@ function readInitialTenantAdminNav(
 ): TenantAdminNavId {
   const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
   if (requestedNav) {
-    ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav)
+    ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav, searchParams)
     return requestedNav
   }
 
+  syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
   return getTenantActiveNav(tenant)
 }
 
@@ -168,11 +170,15 @@ export function TenantAdminWorkspacePage() {
   const [projectScopeId, setProjectScopeIdState] = useState<ProjectScopeId>(() =>
     getProjectScopeId(tenant),
   )
-  const [instances, setInstances] = useState(() =>
-    isValidTenant
-      ? getOrEnsureTenantUserInstances(tenant, getWorkspaceOrganization(tenant).name)
-      : [],
-  )
+  const [instances, setInstances] = useState(() => {
+    if (!isValidTenant) {
+      return []
+    }
+    if (shouldHideDemoServicesInstances(tenant)) {
+      return []
+    }
+    return getOrEnsureTenantUserInstances(tenant, getWorkspaceOrganization(tenant).name)
+  })
   const [openVirtualNetworkId, setOpenVirtualNetworkId] = useState<string | null>(null)
   const [openSubnetId, setOpenSubnetId] = useState<string | null>(null)
   const [openSecurityGroupId, setOpenSecurityGroupId] = useState<string | null>(null)
@@ -181,14 +187,6 @@ export function TenantAdminWorkspacePage() {
   const [openProjectId, setOpenProjectId] = useState<string | null>(null)
   const [navContentKey, setNavContentKey] = useState(0)
   const provisioningTimersRef = useRef<Map<string, number>>(new Map())
-  const visionEnabled = isModelFleetVision(searchParams)
-  const navItems = useMemo(() => {
-    if (!visionEnabled && activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
-      return TENANT_ADMIN_NAV_ITEMS
-    }
-    const [overview, ...rest] = TENANT_ADMIN_NAV_ITEMS
-    return [overview, { id: MODEL_FLEET_VISION_NAV_ID, label: 'AI Grid' }, ...rest]
-  }, [activeNavId, visionEnabled])
 
   useLayoutEffect(() => {
     if (!isValidTenant) {
@@ -197,16 +195,22 @@ export function TenantAdminWorkspacePage() {
 
     // Login and prototype shortcuts both land here with onboarding already complete.
     setTenantOnboardingComplete(tenant)
+    ensureProviderDemoOrganizations()
     activateProviderRegisteredOrganizationBySlug(tenant)
+    syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
     const workspaceOrganization = getWorkspaceOrganization(tenant)
     setOrganization(workspaceOrganization)
-    setInstances(ensureTenantDemoInstances(tenant, workspaceOrganization.name))
+    setInstances(
+      shouldHideDemoServicesInstances(tenant)
+        ? []
+        : ensureTenantDemoInstances(tenant, workspaceOrganization.name),
+    )
     setProjects(ensureTenantDemoProjects(tenant))
     setProjectScopeIdState(getProjectScopeId(tenant))
 
     const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
     if (requestedNav) {
-      ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav)
+      ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav, searchParams)
       setActiveNavId(requestedNav)
       setTenantActiveNav(tenant, requestedNav)
       return
@@ -215,27 +219,11 @@ export function TenantAdminWorkspacePage() {
     syncWorkspaceNavParam(setSearchParams, getTenantActiveNav(tenant), { replace: true })
   }, [isValidTenant, searchParams, setSearchParams, tenant])
 
-  useLayoutEffect(() => {
-    if (activeNavId !== MODEL_FLEET_VISION_NAV_ID) {
-      return
-    }
-    if (searchParams.get('vision') === MODEL_FLEET_VISION_VALUE) {
-      return
-    }
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.set('vision', MODEL_FLEET_VISION_VALUE)
-      next.set('nav', activeNavId)
-      return next
-    }, { replace: true })
-  }, [activeNavId, searchParams, setSearchParams])
-
   if (!isValidTenant) {
     return <Navigate to="/" replace />
   }
 
   const catalogDraft = getProviderCatalogDraft()
-  const displayCatalogItems = mergeVisionCatalogItems(getProviderCatalogItems())
   const displayName = organization.tenantAdminName ?? DEMO_TENANT_DISPLAY_ADMIN.northsummit
   const lockedServiceId = getLockedServiceIdFromNav(activeNavId)
 
@@ -250,48 +238,12 @@ export function TenantAdminWorkspacePage() {
     setTenantActiveNav(tenant, nextNavId)
     setNavContentKey((current) => current + 1)
     syncWorkspaceNavParam(setSearchParams, nextNavId, { showLanding: true })
-
-    // GenAI / AI drill-in params — clear on sidebar nav (does not change syncWorkspaceNavParam).
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (isGenaiApiKeysNavId(nextNavId)) {
-        next.set('nav', nextNavId)
-        clearGenaiApiKeysDetailParams(next)
-        clearMaasGovernanceDetailParams(next)
-        return next
-      }
-      if (nextNavId === 'ai-maas-governance') {
-        next.set('nav', 'ai-maas-governance')
-        clearGenaiApiKeysDetailParams(next)
-        clearMaasGovernanceDetailParams(next)
-        return next
-      }
-      let changed = false
-      for (const key of [
-        'keyId',
-        'subscriptionId',
-        'subTab',
-        'tab',
-        'modal',
-        'maasWizard',
-        'maasSubId',
-        'maasPolId',
-        'edit',
-        'prefillModel',
-        'prefillGroup',
-        'from',
-        'view',
-      ] as const) {
-        if (next.has(key)) {
-          next.delete(key)
-          changed = true
-        }
-      }
-      return changed ? next : current
-    })
-
     if (isServicesNavId(nextNavId)) {
-      setInstances(ensureTenantDemoInstances(tenant, organization.name))
+      setInstances(
+        shouldHideDemoServicesInstances(tenant)
+          ? []
+          : ensureTenantDemoInstances(tenant, organization.name),
+      )
     }
   }
 
@@ -359,18 +311,6 @@ export function TenantAdminWorkspacePage() {
     }
 
     switch (activeNavId) {
-      case 'vision-model-fleet':
-        return (
-          <VisionModelFleetPage
-            key={searchParams.get('scenario') || 'default'}
-            catalogItems={displayCatalogItems}
-            lockedOrgId={visionOrgIdForTenantSlug(tenant)}
-            onOpenCatalogPreset={(catalogItemId) => {
-              handleNavChange('catalog')
-              syncWorkspaceCatalogItemParam(setSearchParams, catalogItemId)
-            }}
-          />
-        )
       case 'services-baremetal':
       case 'services-clusters':
       case 'services-models':
@@ -385,7 +325,6 @@ export function TenantAdminWorkspacePage() {
             onProjectScopeChange={handleProjectScopeChange}
             organization={organization}
             lockedServiceId={lockedServiceId ?? 'baremetal'}
-            activeNavId={activeNavId}
             onNavigateToCatalogItem={(catalogItemDisplayName) => {
               handleNavChange('catalog')
               syncWorkspaceCatalogItemParam(setSearchParams, catalogItemDisplayName)
@@ -401,22 +340,6 @@ export function TenantAdminWorkspacePage() {
             }}
           />
         )
-      case 'genai-asset-endpoints':
-        return (
-          <AiAssetEndpointsPage
-            onNavigateToPlayground={() => handleNavChange('genai-playground')}
-          />
-        )
-      case 'genai-playground':
-        return <PlaygroundPage />
-      case 'genai-api-keys':
-        return <GenaiApiKeysPage />
-      case 'ai-maas-governance':
-        return <MaaSGovernancePage />
-      case 'ai-model-catalog-settings':
-        return <ModelCatalogSettingsPage />
-      case 'ai-admin-api-keys':
-        return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
       case 'catalog':
         return (
           <TenantAdminCatalogPage
@@ -425,7 +348,12 @@ export function TenantAdminWorkspacePage() {
             projects={projects}
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}
+            onCreateProject={(project) => {
+              addTenantProject(tenant, project)
+              setProjects((current) => [...current, project])
+            }}
             onNavigateToProjectsTeams={() => handleNavChange('projects-teams')}
+            onNavigateToBilling={() => handleNavChange('administration-billing')}
             existingInstanceNames={instances.map((instance) => instance.name)}
             openCatalogItemKey={openCatalogItemKey}
             onOpenCatalogItemConsumed={() => setOpenCatalogItemKey(null)}
@@ -454,61 +382,45 @@ export function TenantAdminWorkspacePage() {
             }}
           />
         )
-      case 'administrators':
+      case 'administration-roles':
         return (
           <TenantAdminAdministratorsPage
             organization={organization}
             onOrganizationChange={setOrganization}
           />
         )
+      case 'administration-billing':
+        return <TenantAdminBillingPage organization={organization} />
       case 'networking-virtual-networks':
         return (
           <ProviderAdminVirtualNetworksPage
             tenantSlug={tenant}
             openVirtualNetworkId={openVirtualNetworkId}
-            onOpenVirtualNetworkConsumed={() => setOpenVirtualNetworkId(null)}
-            onNavigateToSubnet={(subnetId) => {
-              setOpenSubnetId(subnetId)
-              handleNavChange('networking-subnets')
-            }}
-            onNavigateToSecurityGroup={(securityGroupId) => {
-              setOpenSecurityGroupId(securityGroupId)
-              handleNavChange('networking-security-groups')
-            }}
-          />
-        )
-      case 'networking-subnets':
-        return (
-          <ProviderAdminSubnetsPage
-            tenantSlug={tenant}
             openSubnetId={openSubnetId}
-            onOpenSubnetConsumed={() => setOpenSubnetId(null)}
-            onNavigateToVirtualNetwork={(virtualNetworkId) => {
-              setOpenVirtualNetworkId(virtualNetworkId)
-              handleNavChange('networking-virtual-networks')
-            }}
-          />
-        )
-      case 'networking-security-groups':
-        return (
-          <ProviderAdminSecurityGroupsPage
-            tenantSlug={tenant}
             openSecurityGroupId={openSecurityGroupId}
+            onOpenVirtualNetworkConsumed={() => setOpenVirtualNetworkId(null)}
+            onOpenSubnetConsumed={() => setOpenSubnetId(null)}
             onOpenSecurityGroupConsumed={() => setOpenSecurityGroupId(null)}
-            onNavigateToVirtualNetwork={(virtualNetworkId) => {
-              setOpenVirtualNetworkId(virtualNetworkId)
-              handleNavChange('networking-virtual-networks')
-            }}
           />
         )
       case 'networking-external-ip-pools':
         return (
-          <ProviderAdminExternalIpPoolsPage
+          <ProviderAdminExternalNetworksPage
             tenantSlug={tenant}
-            readOnly
             scopeOrganization={organization}
+            serviceInstances={instances}
+            onNavigateToServiceInstance={(instance) => {
+              const project = projects.find((entry) => entry.name === instance.projectName)
+              if (project) {
+                handleProjectScopeChange(project.id)
+              }
+              setOpenInstanceId(instance.id)
+              handleNavChange(getServicesNavId(getTenantInstanceServiceId(instance)))
+            }}
           />
         )
+      case 'secrets':
+        return <TenantSecretsPage tenantSlug={tenant} />
       case 'overview':
       default:
         return <TenantAdminOverviewPage />
@@ -519,19 +431,15 @@ export function TenantAdminWorkspacePage() {
     <TenantShell
       role="tenant-admin"
       displayName={displayName}
-      navItems={navItems}
+      navItems={TENANT_ADMIN_NAV_ITEMS}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
-      isContentFilled={activeNavId === MODEL_FLEET_VISION_NAV_ID}
       companyLogoSrc={resolveOrganizationCompanyLogo(organization)}
       companyLogoAlt={organization.name}
+      organizationSlug={organization.slug}
     >
-      {activeNavId === MODEL_FLEET_VISION_NAV_ID ? (
-        renderWorkspaceContent()
-      ) : (
-        <div key={navContentKey}>{renderWorkspaceContent()}</div>
-      )}
+      <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>
   )
 }

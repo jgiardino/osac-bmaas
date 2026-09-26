@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon'
 import { ShieldAltIcon } from '@patternfly/react-icons/dist/esm/icons/shield-alt-icon'
 import {
@@ -20,6 +20,14 @@ import {
   type ProviderVirtualNetwork,
 } from '../../providerAdmin/networkInventory'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
+import {
+  buildSecurityGroupEditSnapshot,
+  buildSecurityGroupEditSnapshotFromGroup,
+  getNetworkInventoryEditModifiedStepIds,
+  getSecurityGroupEditChanges,
+  type NetworkInventoryEditStepId,
+} from '../../networking/networkInventoryEditDiff'
+import { NetworkInventoryEditReviewPanel } from '../../networking/NetworkInventoryEditReviewPanel'
 import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
 import { resolveNetworkInventoryScope } from '../../shared/networkInventoryScope'
 import { NetworkInventoryCreateWizardShell } from './NetworkInventoryCreateWizardShell'
@@ -32,11 +40,20 @@ type CreateSecurityGroupForm = {
   outboundRules: string
 }
 
-function buildDemoForm(virtualNetworks: ProviderVirtualNetwork[]): CreateSecurityGroupForm {
+function buildDemoForm(
+  virtualNetworks: ProviderVirtualNetwork[],
+  defaultVirtualNetworkId?: string,
+): CreateSecurityGroupForm {
+  const preferredVirtualNetworkId =
+    defaultVirtualNetworkId &&
+    virtualNetworks.some((network) => network.id === defaultVirtualNetworkId)
+      ? defaultVirtualNetworkId
+      : (virtualNetworks[0]?.id ?? '')
+
   return {
     name: 'allow-demo-workload',
     detail: 'Demo ingress for SSH, HTTPS, and API',
-    virtualNetworkId: virtualNetworks[0]?.id ?? '',
+    virtualNetworkId: preferredVirtualNetworkId,
     inboundRules: 'SSH (22), HTTPS (443), API (6443)',
     outboundRules: 'Allow all',
   }
@@ -59,8 +76,10 @@ const SECURITY_GROUP_WIZARD_STEPS = [
 
 type CreateSecurityGroupWizardProps = {
   isOpen: boolean
+  presentation?: 'modal' | 'page'
   parentLabel?: string
   virtualNetworks: ProviderVirtualNetwork[]
+  defaultVirtualNetworkId?: string
   tenantSlug?: string
   resource?: ProviderSecurityGroup | null
   onClose: () => void
@@ -69,24 +88,32 @@ type CreateSecurityGroupWizardProps = {
 
 export function CreateSecurityGroupWizard({
   isOpen,
+  presentation = 'page',
   parentLabel = 'Security groups',
   virtualNetworks,
+  defaultVirtualNetworkId,
   tenantSlug,
   resource = null,
   onClose,
   onCreated,
 }: CreateSecurityGroupWizardProps) {
   const isEditMode = resource !== null
-  const [form, setForm] = useState<CreateSecurityGroupForm>(() => buildDemoForm(virtualNetworks))
+  const [form, setForm] = useState<CreateSecurityGroupForm>(() =>
+    buildDemoForm(virtualNetworks, defaultVirtualNetworkId),
+  )
 
   useEffect(() => {
     if (!isOpen) {
-      setForm(buildDemoForm(virtualNetworks))
+      setForm(buildDemoForm(virtualNetworks, defaultVirtualNetworkId))
       return
     }
 
-    setForm(resource ? buildFormFromSecurityGroup(resource) : buildDemoForm(virtualNetworks))
-  }, [isOpen, resource, virtualNetworks])
+    setForm(
+      resource
+        ? buildFormFromSecurityGroup(resource)
+        : buildDemoForm(virtualNetworks, defaultVirtualNetworkId),
+    )
+  }, [defaultVirtualNetworkId, isOpen, resource, virtualNetworks])
 
   const isNameValid = isValidKubernetesResourceName(form.name)
   const isDetailsStepValid =
@@ -95,8 +122,39 @@ export function CreateSecurityGroupWizard({
   const selectedNetwork =
     virtualNetworks.find((network) => network.id === form.virtualNetworkId) ?? null
 
+  const editBaseline = useMemo(() => {
+    if (!isEditMode || !resource) {
+      return null
+    }
+
+    return buildSecurityGroupEditSnapshotFromGroup(resource, virtualNetworks)
+  }, [isEditMode, resource, virtualNetworks])
+
+  const currentEditSnapshot = useMemo(() => {
+    if (!isEditMode) {
+      return null
+    }
+
+    return buildSecurityGroupEditSnapshot(form, virtualNetworks)
+  }, [form, isEditMode, virtualNetworks])
+
+  const editChanges = useMemo(() => {
+    if (!editBaseline || !currentEditSnapshot) {
+      return []
+    }
+
+    return getSecurityGroupEditChanges(editBaseline, currentEditSnapshot)
+  }, [currentEditSnapshot, editBaseline])
+
+  const modifiedStepIds = useMemo(
+    () => getNetworkInventoryEditModifiedStepIds(editChanges),
+    [editChanges],
+  )
+
+  const canSaveEdit = !isEditMode || editChanges.length > 0
+
   const handleClose = () => {
-    setForm(buildDemoForm(virtualNetworks))
+    setForm(buildDemoForm(virtualNetworks, defaultVirtualNetworkId))
     onClose()
   }
 
@@ -210,28 +268,34 @@ export function CreateSecurityGroupWizard({
     }
 
     return (
-      <DescriptionList isCompact className="provider-admin-network-inventory__wizard-review">
-        <DescriptionListGroup>
-          <DescriptionListTerm>Name</DescriptionListTerm>
-          <DescriptionListDescription>{form.name.trim() || '—'}</DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Virtual network</DescriptionListTerm>
-          <DescriptionListDescription>
-            {selectedNetwork ? `${selectedNetwork.name} (${selectedNetwork.cidr})` : '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Inbound rules</DescriptionListTerm>
-          <DescriptionListDescription>{form.inboundRules.trim() || 'None'}</DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Outbound rules</DescriptionListTerm>
-          <DescriptionListDescription>
-            {form.outboundRules.trim() || 'Allow all'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-      </DescriptionList>
+      <NetworkInventoryEditReviewPanel
+        isEditMode={isEditMode}
+        editChanges={editChanges}
+        createReview={
+          <DescriptionList isCompact className="provider-admin-network-inventory__wizard-review">
+            <DescriptionListGroup>
+              <DescriptionListTerm>Name</DescriptionListTerm>
+              <DescriptionListDescription>{form.name.trim() || '—'}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Virtual network</DescriptionListTerm>
+              <DescriptionListDescription>
+                {selectedNetwork ? `${selectedNetwork.name} (${selectedNetwork.cidr})` : '—'}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Inbound rules</DescriptionListTerm>
+              <DescriptionListDescription>{form.inboundRules.trim() || 'None'}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Outbound rules</DescriptionListTerm>
+              <DescriptionListDescription>
+                {form.outboundRules.trim() || 'Allow all'}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          </DescriptionList>
+        }
+      />
     )
   }
 
@@ -250,7 +314,7 @@ export function CreateSecurityGroupWizard({
           </span>
         ),
         onNext: handleSubmit,
-        isNextDisabled: !isDetailsStepValid,
+        isNextDisabled: !isDetailsStepValid || !canSaveEdit,
       }
     }
 
@@ -260,6 +324,7 @@ export function CreateSecurityGroupWizard({
   return (
     <NetworkInventoryCreateWizardShell
       isOpen={isOpen}
+      presentation={presentation}
       parentLabel={parentLabel}
       title={isEditMode ? 'Edit security group' : 'Create security group'}
       titleId="create-security-group-wizard-title"
@@ -268,6 +333,11 @@ export function CreateSecurityGroupWizard({
       getStepFooter={getStepFooter}
       onClose={handleClose}
       leaveConfirmPrimaryActionLabel={isEditMode ? 'Discard changes' : 'Leave'}
+      getStepName={(step) =>
+        isEditMode && modifiedStepIds.has(step.id as NetworkInventoryEditStepId)
+          ? `${step.label} (modified)`
+          : step.label
+      }
     />
   )
 }

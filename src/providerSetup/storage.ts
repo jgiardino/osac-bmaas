@@ -1,9 +1,11 @@
 import type { ProviderServiceId } from './constants'
 import type { ProviderAdminNavId } from '../providerAdmin/constants'
+import { resolveProviderAdminNavId } from '../providerAdmin/constants'
 import {
   createDemoBlueSolaceOnboardingOrganization,
   createDemoHarborlineCapitalOrganization,
   createDemoNorthSummitBankOrganization,
+  createDemoRedwoodMutualOrganization,
   DEMO_BLUESOLACE_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_ORG_ID,
   DEMO_HARBORLINE_CAPITAL_SLUG,
@@ -15,6 +17,9 @@ import {
   DEMO_NORTH_SUMMIT_BANK_ORG_ID,
   DEMO_NORTH_SUMMIT_BANK_ORG_NAME,
   DEMO_NORTH_SUMMIT_BANK_PRIMARY_DOMAIN,
+  DEMO_NORTH_SUMMIT_BANK_SLUG,
+  DEMO_REDWOOD_MUTUAL_ORG_ID,
+  DEMO_REDWOOD_MUTUAL_SLUG,
   DEMO_BLUESOLACE_ADDITIONAL_DOMAIN,
   DEMO_BLUESOLACE_BILLING_ACCOUNT_NAME,
   DEMO_BLUESOLACE_IDP_CLIENT_ID,
@@ -32,6 +37,7 @@ import {
   migrateLegacyIdentityProviderClientId,
   hydrateIdentityProvidersFromOrganizationFields,
   normalizeAdditionalDomains,
+  normalizeDemoCompanyLogoSrc,
   normalizeOrganizationIdentityProviders,
   resolveIdentityProviderConnectedBy,
   type OrganizationRoleAssignment,
@@ -40,7 +46,7 @@ import {
 import type { ComputeImage } from '../providerAdmin/computeImages'
 import { DEFAULT_COMPUTE_IMAGES } from '../providerAdmin/computeImages'
 import type { ExternalIpPool } from '../providerAdmin/externalIpPools'
-import { DEFAULT_EXTERNAL_IP_POOLS, getExternalIpPoolById } from '../providerAdmin/externalIpPools'
+import { DEFAULT_EXTERNAL_IP_POOLS, DEFAULT_NORTHSUMMIT_EXTERNAL_IP_POOL_DESCRIPTION, DEFAULT_PROVIDER_EXTERNAL_IP_POOL_DESCRIPTION, getExternalIpPoolById, getExternalIpPoolDefaultDescription } from '../providerAdmin/externalIpPools'
 import type {
   ProviderSecurityGroup,
   ProviderSubnet,
@@ -50,11 +56,12 @@ import {
   DEFAULT_PROVIDER_SECURITY_GROUPS,
   DEFAULT_PROVIDER_SUBNETS,
   DEFAULT_PROVIDER_VIRTUAL_NETWORKS,
+  ensureDemoNatGatewayOnTenantWorkload,
   getNetworkInventoryStatus,
   toCatalogNetworkOption,
 } from '../providerAdmin/networkInventory'
 import type { CatalogNetworkPolicy, CatalogNetworkResourceOption } from '../providerAdmin/catalogNetworkPolicy'
-import { replaceInventoryItemById } from '../networking/networkInventoryStorageUtils'
+import { removeInventoryItemById, replaceInventoryItemById } from '../networking/networkInventoryStorageUtils'
 import {
   normalizeCatalogNetworkPolicy,
   resolveCatalogNetworkPolicy,
@@ -166,28 +173,20 @@ export function getProviderActiveNav(): ProviderAdminNavId {
       value === 'services-clusters' ||
       value === 'services-models' ||
       value === 'services-virtual-machines' ||
-      value === 'genai-asset-endpoints' ||
-      value === 'genai-playground' ||
-      value === 'genai-api-keys' ||
-      value === 'ai-maas-governance' ||
-      value === 'ai-model-catalog-settings' ||
-      value === 'ai-admin-api-keys' ||
       value === 'projects-teams' ||
       value === 'infrastructure-data-centers' ||
       value === 'infrastructure-hardware-inventory' ||
       value === 'infrastructure-bmaas-templates' ||
+      value === 'networking' ||
       value === 'networking-virtual-networks' ||
-      value === 'networking-subnets' ||
-      value === 'networking-security-groups' ||
       value === 'networking-external-ip-pools' ||
+      value === 'secrets' ||
       value === 'administration-organizations' ||
-      value === 'administration-quotas' ||
-      value === 'billing-metering' ||
-      value === 'system' ||
-      value === 'vision-model-fleet' ||
-      value === 'vision-model-catalog-patterns'
+      value === 'administration-billing' ||
+      value === 'administration-rate-cards' ||
+      value === 'system'
     ) {
-      return value
+      return resolveProviderAdminNavId(value)
     }
 
     if (value === 'infrastructure-compute-images') {
@@ -195,7 +194,7 @@ export function getProviderActiveNav(): ProviderAdminNavId {
     }
 
     if (value === 'services' || value === 'my-instances' || value === 'instances') {
-      return 'services-baremetal'
+      return 'catalog'
     }
 
     if (value === 'administration-rbac' || value === 'administration-roles') {
@@ -207,23 +206,25 @@ export function getProviderActiveNav(): ProviderAdminNavId {
     }
 
     if (value === 'infrastructure-virtual-networks') {
-      return 'networking-virtual-networks'
+      return 'catalog'
     }
 
-    if (value === 'infrastructure-subnets') {
-      return 'networking-subnets'
+    if (
+      value === 'infrastructure-subnets' ||
+      value === 'networking-subnets' ||
+      value === 'infrastructure-security-groups' ||
+      value === 'networking-security-groups' ||
+      value === 'infrastructure-external-ip-pools'
+    ) {
+      return resolveProviderAdminNavId('networking-external-ip-pools')
     }
 
-    if (value === 'infrastructure-security-groups') {
-      return 'networking-security-groups'
+    if (value === 'administration-quotas' || value === 'administration-organizations-quotas') {
+      return 'administration-billing'
     }
 
-    if (value === 'infrastructure-external-ip-pools') {
-      return 'networking-external-ip-pools'
-    }
-
-    if (value === 'administration-organizations-quotas') {
-      return 'administration-quotas'
+    if (value === 'billing-metering') {
+      return 'administration-rate-cards'
     }
 
     if (value === 'administration' || value === 'access-security') {
@@ -278,10 +279,15 @@ export type ProviderCatalogDraft = {
    */
   clusterVersionMode?: CatalogClusterVersionMode
   /**
-   * Bare metal only. When `editable`, tenants may change instance type and disk
-   * image at launch. Defaults to locked when omitted.
+   * Bare metal only. When `editable`, tenants may change instance type at launch.
+   * Defaults to locked when omitted.
    */
   hardwareOsMode?: CatalogHardwareOsMode
+  /**
+   * Bare metal only. When `editable`, tenants may change disk image at launch.
+   * Defaults to `hardwareOsMode` when omitted (legacy catalog items).
+   */
+  osImageMode?: CatalogHardwareOsMode
   /** Cluster default worker node set. */
   nodeSetId?: string
   nodeSetLabel?: string
@@ -669,6 +675,7 @@ export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCat
     ...(source.diskImageLabel ? { diskImageLabel: source.diskImageLabel } : {}),
     ...(source.clusterVersionMode ? { clusterVersionMode: source.clusterVersionMode } : {}),
     ...(source.hardwareOsMode ? { hardwareOsMode: source.hardwareOsMode } : {}),
+    ...(source.osImageMode ? { osImageMode: source.osImageMode } : {}),
     ...(source.nodeSetId ? { nodeSetId: source.nodeSetId } : {}),
     ...(source.nodeSetLabel ? { nodeSetLabel: source.nodeSetLabel } : {}),
     ...(source.hostTypeId ? { hostTypeId: source.hostTypeId } : {}),
@@ -824,6 +831,7 @@ export function updateProviderCatalogItemFromPayload(
       ? { clusterVersionMode: payload.clusterVersionMode }
       : {}),
     ...(payload.hardwareOsMode ? { hardwareOsMode: payload.hardwareOsMode } : {}),
+    ...(payload.osImageMode ? { osImageMode: payload.osImageMode } : {}),
     ...(payload.nodeSetId ? { nodeSetId: payload.nodeSetId } : {}),
     ...(payload.nodeSetLabel ? { nodeSetLabel: payload.nodeSetLabel } : {}),
     ...(payload.hostTypeId ? { hostTypeId: payload.hostTypeId } : {}),
@@ -932,6 +940,9 @@ export function patchProviderCatalogItem(
       | 'hostTypeId'
       | 'hostTypeLabel'
       | 'clusterNodeTopologyMode'
+      | 'hardwareOsMode'
+      | 'osImageMode'
+      | 'rateCard'
     >
   >,
 ): ProviderCatalogDraft | null {
@@ -1393,7 +1404,9 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
                 ? 'silverpine-trust'
                 : org.name === 'Redwood Mutual'
                   ? 'redwood-mutual'
-                  : org.name,
+                  : org.name === 'Cedar Ridge Credit'
+                    ? 'cedar-ridge-credit'
+                    : org.name,
     primaryDomain,
     additionalDomains,
     catalogItemId:
@@ -1426,8 +1439,9 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
       : null,
     externalIpPoolCidr: org.externalIpPoolCidr ?? null,
     billingAccountName,
-    logoSrc:
+    logoSrc: normalizeDemoCompanyLogoSrc(
       typeof org.logoSrc === 'string' && org.logoSrc.trim() ? org.logoSrc.trim() : null,
+    ),
     logoFileName:
       typeof org.logoFileName === 'string' && org.logoFileName.trim()
         ? org.logoFileName.trim()
@@ -1545,7 +1559,96 @@ function normalizeRegisteredOrganization(org: RegisteredOrganization): Registere
     normalized.idpInviteStatus = 'expired'
   }
 
+  const tenantName = normalized.name.trim()
+  if (tenantName) {
+    normalized.tenantId = tenantName
+  }
+
   return normalized
+}
+
+const CANONICAL_DEMO_ORG_IDS = new Set([
+  DEMO_NORTH_SUMMIT_BANK_ORG_ID,
+  DEMO_HARBORLINE_CAPITAL_ORG_ID,
+  DEMO_REDWOOD_MUTUAL_ORG_ID,
+  DEMO_BLUESOLACE_ORG_ID,
+])
+
+function organizationCompletenessScore(org: RegisteredOrganization): number {
+  let score = 0
+  if (CANONICAL_DEMO_ORG_IDS.has(org.id)) {
+    score += 1000
+  }
+  if (org.billingAccountLinked) {
+    score += 100
+  }
+  if (org.tenantSetupStatus === 'ready') {
+    score += 80
+  }
+  if (org.tenantSetupStatus === 'billing_configured') {
+    score += 60
+  }
+  if (org.identityProviderConnected) {
+    score += 40
+  }
+  if (org.status === 'Active') {
+    score += 20
+  }
+  return score
+}
+
+function pickPreferredRegisteredOrganization(
+  current: RegisteredOrganization,
+  candidate: RegisteredOrganization,
+): RegisteredOrganization {
+  const currentScore = organizationCompletenessScore(current)
+  const candidateScore = organizationCompletenessScore(candidate)
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current
+  }
+
+  return candidate.createdAt >= current.createdAt ? candidate : current
+}
+
+function dedupeRegisteredOrganizationsBySlug(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  const bySlug = new Map<string, RegisteredOrganization>()
+
+  for (const organization of organizations) {
+    const slug = organization.slug.trim().toLowerCase()
+    if (!slug) {
+      continue
+    }
+
+    const existing = bySlug.get(slug)
+    bySlug.set(
+      slug,
+      existing ? pickPreferredRegisteredOrganization(existing, organization) : organization,
+    )
+  }
+
+  return Array.from(bySlug.values())
+}
+
+function pruneIncompleteOnboardingOrphans(
+  organizations: readonly RegisteredOrganization[],
+): RegisteredOrganization[] {
+  return organizations.filter((organization) => {
+    if (CANONICAL_DEMO_ORG_IDS.has(organization.id)) {
+      return true
+    }
+    if (organization.billingAccountLinked || organization.tenantSetupStatus === 'ready') {
+      return true
+    }
+    if (organization.tenantSetupStatus === 'billing_configured') {
+      return true
+    }
+    if (organization.identityProviderConnected || organization.status === 'Active') {
+      return true
+    }
+    return false
+  })
 }
 
 function isRegisteredOrganization(value: unknown): value is RegisteredOrganization {
@@ -1584,32 +1687,41 @@ export function getProviderRegisteredOrganizations(): RegisteredOrganization[] {
 
     const tenants = parsed.filter(isRegisteredOrganization)
     const normalized = tenants.map(normalizeRegisteredOrganization)
-    const needsPersist = normalized.some((tenant, index) => {
-      const original = tenants[index]!
-      return (
-        original.id !== tenant.id ||
-        original.name !== tenant.name ||
-        original.catalogItemId !== tenant.catalogItemId ||
-        original.catalogDisplayName !== tenant.catalogDisplayName ||
-        original.externalIpPoolName !== tenant.externalIpPoolName ||
-        original.billingAccountName !== tenant.billingAccountName ||
-        original.primaryDomain !== tenant.primaryDomain ||
-        original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
-        original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
-        original.identityProviderClientId !== tenant.identityProviderClientId ||
-        original.identityProviderConnectedBy !== tenant.identityProviderConnectedBy ||
-        original.tenantAdminName !== tenant.tenantAdminName ||
-        original.tenantAdminEmail !== tenant.tenantAdminEmail ||
-        original.breakGlassUsername !== tenant.breakGlassUsername ||
-        original.breakGlassPassword !== tenant.breakGlassPassword ||
-        JSON.stringify(original.additionalDomains ?? []) !==
-          JSON.stringify(tenant.additionalDomains)
-      )
-    })
+    const deduped = dedupeRegisteredOrganizationsBySlug(
+      pruneIncompleteOnboardingOrphans(normalized),
+    )
+    const needsPersist =
+      deduped.length !== tenants.length ||
+      deduped.some((tenant, index) => {
+        const original = tenants[index]
+        if (!original) {
+          return true
+        }
+        return (
+          original.id !== tenant.id ||
+          original.name !== tenant.name ||
+          original.tenantId !== tenant.tenantId ||
+          original.catalogItemId !== tenant.catalogItemId ||
+          original.catalogDisplayName !== tenant.catalogDisplayName ||
+          original.externalIpPoolName !== tenant.externalIpPoolName ||
+          original.billingAccountName !== tenant.billingAccountName ||
+          original.primaryDomain !== tenant.primaryDomain ||
+          original.identityProviderDisplayName !== tenant.identityProviderDisplayName ||
+          original.identityProviderIssuerUrl !== tenant.identityProviderIssuerUrl ||
+          original.identityProviderClientId !== tenant.identityProviderClientId ||
+          original.identityProviderConnectedBy !== tenant.identityProviderConnectedBy ||
+          original.tenantAdminName !== tenant.tenantAdminName ||
+          original.tenantAdminEmail !== tenant.tenantAdminEmail ||
+          original.breakGlassUsername !== tenant.breakGlassUsername ||
+          original.breakGlassPassword !== tenant.breakGlassPassword ||
+          JSON.stringify(original.additionalDomains ?? []) !==
+            JSON.stringify(tenant.additionalDomains)
+        )
+      })
     if (needsPersist) {
-      setProviderRegisteredOrganizations(normalized)
+      setProviderRegisteredOrganizations(deduped)
     }
-    return normalized
+    return deduped
   } catch {
     return []
   }
@@ -1735,20 +1847,11 @@ function removeRegisteredOrganizationsRaw(): void {
 }
 
 /**
- * Seeds North Summit Bank + Harborline Capital as Tenants page baselines:
- * Active, IdP connected, roles defined — two enterprises for VIP multi-select demos.
+ * Seeds North Summit Bank, Harborline Capital, and Redwood Mutual as Tenants page baselines.
  */
 export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
   try {
     const current = getProviderRegisteredOrganizations()
-    const catalogItems = getProviderCatalogItems()
-    const denseGpu =
-      catalogItems.find((item) => item.catalogItemId === 'cat-bm-dense-gpu') ??
-      catalogItems.find((item) => item.catalogItemId === 'cat_BM_AI_INFERENCE') ??
-      catalogItems.find((item) => item.displayName === 'bare-metal-dense-gpu-node') ??
-      catalogItems.find((item) => item.displayName === 'Bare Metal - Dense GPU Node') ??
-      null
-    const catalogDraft = denseGpu ?? getProviderCatalogDraft()
     const pools = getProviderExternalIpPools()
     const northSummitPool =
       getExternalIpPoolById(pools, DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId) ??
@@ -1761,8 +1864,8 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       null
 
     const northSummitBase = createDemoNorthSummitBankOrganization({
-      catalogItemId: catalogDraft?.catalogItemId ?? null,
-      catalogDisplayName: catalogDraft?.displayName ?? null,
+      catalogItemId: null,
+      catalogDisplayName: null,
       externalIpPoolId:
         northSummitPool?.id ?? DEFAULT_REGISTER_ORGANIZATION_FORM.externalIpPoolId,
       externalIpPoolName: northSummitPool?.name ?? null,
@@ -1777,16 +1880,27 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
       externalIpPoolCidr: harborlinePool?.cidr ?? null,
     })
 
+    const redwoodBase = createDemoRedwoodMutualOrganization()
+
     const replacedTenants = current.filter(
       (tenant) =>
         tenant.id === northSummitBase.id ||
         tenant.slug === northSummitBase.slug ||
         tenant.id === harborlineBase.id ||
-        tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG,
+        tenant.slug === DEMO_HARBORLINE_CAPITAL_SLUG ||
+        tenant.id === redwoodBase.id ||
+        tenant.slug === DEMO_REDWOOD_MUTUAL_SLUG ||
+        tenant.name === 'redwood-mutual' ||
+        tenant.name === 'Redwood Mutual',
     )
     const replacedIds = new Set(replacedTenants.map((tenant) => tenant.id))
     const remainingTenants = current.filter(
-      (tenant) => !replacedIds.has(tenant.id),
+      (tenant) =>
+        !replacedIds.has(tenant.id) &&
+        tenant.id !== 'org-cedar-ridge-credit' &&
+        tenant.slug !== 'cedar-ridge-credit' &&
+        tenant.name !== 'cedar-ridge-credit' &&
+        tenant.name !== 'Cedar Ridge Credit',
     )
 
     const pendingInviteSource = replacedTenants.find(
@@ -1830,11 +1944,16 @@ export function ensureProviderDemoOrganizations(): RegisteredOrganization[] {
     setProviderRegisteredOrganizations([
       northSummit,
       harborlineBase,
+      redwoodBase,
       ...remainingTenants,
     ])
 
     if (northSummitPool) {
       assignExternalIpPoolToRegisteredOrganization(northSummitPool.id, northSummit.id)
+    }
+    const northSummitReservedPool = getExternalIpPoolById(pools, 'eipool-northsummit-reserved')
+    if (northSummitReservedPool) {
+      assignExternalIpPoolToRegisteredOrganization(northSummitReservedPool.id, northSummit.id)
     }
     if (harborlinePool) {
       assignExternalIpPoolToRegisteredOrganization(harborlinePool.id, harborlineBase.id)
@@ -1899,7 +2018,26 @@ export function ensureBlueSolaceOnboardingOrganization(): RegisteredOrganization
 export function addProviderRegisteredOrganization(org: RegisteredOrganization): void {
   try {
     const current = getProviderRegisteredOrganizations()
-    writeRegisteredOrganizationsRaw(JSON.stringify([...current, org]))
+    const slug = org.slug.trim().toLowerCase()
+    const existingIndex = current.findIndex(
+      (tenant) => tenant.slug.trim().toLowerCase() === slug,
+    )
+    if (existingIndex >= 0) {
+      const existing = current[existingIndex]!
+      const updated = normalizeRegisteredOrganization({
+        ...existing,
+        ...org,
+        id: existing.id,
+      })
+      setProviderRegisteredOrganizations(
+        current.map((tenant, index) => (index === existingIndex ? updated : tenant)),
+      )
+      return
+    }
+
+    writeRegisteredOrganizationsRaw(
+      JSON.stringify([...current, normalizeRegisteredOrganization(org)]),
+    )
   } catch {
     /* demo storage unavailable */
   }
@@ -2062,6 +2200,15 @@ function isExternalIpPool(value: unknown): value is ExternalIpPool {
   )
 }
 
+function isNorthSummitDemoExternalIpPool(pool: ExternalIpPool): boolean {
+  return (
+    pool.id === 'eipool-northsummit-edge' ||
+    pool.id === 'eipool-northsummit-reserved' ||
+    pool.name === 'northsummit-public-edge' ||
+    pool.name === 'northsummit-reserved-edge'
+  )
+}
+
 function normalizeExternalIpPool(pool: ExternalIpPool): ExternalIpPool {
   const assignedOrganizationName =
     pool.assignedOrganizationId === DEMO_NORTH_SUMMIT_BANK_ORG_ID ||
@@ -2069,7 +2216,8 @@ function normalizeExternalIpPool(pool: ExternalIpPool): ExternalIpPool {
     pool.assignedOrganizationId === 'org_northstar_bank' ||
     pool.assignedOrganizationName === 'North Summit Bank' ||
     pool.assignedOrganizationName === 'Northstar Bank' ||
-    pool.assignedOrganizationName === 'Northsummit Bank'
+    pool.assignedOrganizationName === 'Northsummit Bank' ||
+    (isNorthSummitDemoExternalIpPool(pool) && !pool.assignedOrganizationId)
       ? DEMO_NORTH_SUMMIT_BANK_ORG_NAME
       : pool.assignedOrganizationName === 'BlueSolace Financial Group' ||
           pool.assignedOrganizationName === 'Bluestone Financial Group'
@@ -2080,15 +2228,87 @@ function normalizeExternalIpPool(pool: ExternalIpPool): ExternalIpPool {
     pool.assignedOrganizationId === 'org-northstar-bank' ||
     pool.assignedOrganizationId === 'org_northstar_bank'
       ? DEMO_NORTH_SUMMIT_BANK_ORG_ID
-      : pool.assignedOrganizationId
+      : isNorthSummitDemoExternalIpPool(pool) && !pool.assignedOrganizationId
+        ? DEMO_NORTH_SUMMIT_BANK_ORG_ID
+        : pool.assignedOrganizationId
+
+  const isHarborlinePool =
+    pool.id === 'eipool-standby-a' ||
+    pool.name === 'standby-pool-a' ||
+    pool.name === 'harborline-capital-public-edge'
+
+  let description = pool.description
+  if (!description) {
+    description = getExternalIpPoolDefaultDescription(pool)
+  } else if (isHarborlinePool && description === DEFAULT_NORTHSUMMIT_EXTERNAL_IP_POOL_DESCRIPTION) {
+    description = DEFAULT_PROVIDER_EXTERNAL_IP_POOL_DESCRIPTION
+  }
 
   return {
     ...pool,
     id: pool.id === 'eipool-northstar-edge' ? 'eipool-northsummit-edge' : pool.id,
     name: migrateDns1123ResourceName(pool.name),
+    description,
     dataCenter: migrateDns1123DataCenter(pool.dataCenter),
     assignedOrganizationId,
     assignedOrganizationName,
+  }
+}
+
+function mergeMissingDefaultExternalIpPools(pools: ExternalIpPool[]): ExternalIpPool[] {
+  const existingIds = new Set(pools.map((pool) => pool.id))
+  const missing = DEFAULT_EXTERNAL_IP_POOLS.filter((pool) => !existingIds.has(pool.id))
+  const normalized = pools.map(normalizeExternalIpPool)
+  const assignmentChanged = normalized.some(
+    (pool, index) =>
+      pool.assignedOrganizationId !== pools[index]?.assignedOrganizationId ||
+      pool.assignedOrganizationName !== pools[index]?.assignedOrganizationName,
+  )
+
+  if (missing.length === 0) {
+    if (assignmentChanged) {
+      setProviderExternalIpPools(normalized)
+      ensureNorthSummitDemoPoolAssignments()
+      return normalized
+    }
+
+    return normalized
+  }
+
+  const merged = [...normalized, ...missing.map(normalizeExternalIpPool)]
+  setProviderExternalIpPools(merged)
+  ensureNorthSummitDemoPoolAssignments()
+
+  try {
+    const raw = sessionStorage.getItem(PROVIDER_EXTERNAL_IP_POOLS_KEY)
+    if (!raw) {
+      return merged
+    }
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return merged
+    }
+
+    return parsed.filter(isExternalIpPool).map(normalizeExternalIpPool)
+  } catch {
+    return merged
+  }
+}
+
+function ensureNorthSummitDemoPoolAssignments(): void {
+  const northSummit = getProviderRegisteredOrganizations().find(
+    (organization) =>
+      organization.id === DEMO_NORTH_SUMMIT_BANK_ORG_ID ||
+      organization.slug === DEMO_NORTH_SUMMIT_BANK_SLUG,
+  )
+
+  if (!northSummit) {
+    return
+  }
+
+  for (const poolId of ['eipool-northsummit-edge', 'eipool-northsummit-reserved'] as const) {
+    assignExternalIpPoolToRegisteredOrganization(poolId, northSummit.id)
   }
 }
 
@@ -2100,7 +2320,9 @@ export function getProviderExternalIpPools(): ExternalIpPool[] {
         PROVIDER_EXTERNAL_IP_POOLS_KEY,
         JSON.stringify(DEFAULT_EXTERNAL_IP_POOLS),
       )
-      return [...DEFAULT_EXTERNAL_IP_POOLS]
+      return mergeMissingDefaultExternalIpPools(
+        DEFAULT_EXTERNAL_IP_POOLS.map(normalizeExternalIpPool),
+      )
     }
 
     const parsed: unknown = JSON.parse(raw)
@@ -2121,7 +2343,9 @@ export function getProviderExternalIpPools(): ExternalIpPool[] {
       const candidate = original as ExternalIpPool
       return (
         candidate.name !== pool.name ||
+        candidate.description !== pool.description ||
         candidate.dataCenter !== pool.dataCenter ||
+        candidate.assignedOrganizationId !== pool.assignedOrganizationId ||
         candidate.assignedOrganizationName !== pool.assignedOrganizationName
       )
     })
@@ -2129,7 +2353,7 @@ export function getProviderExternalIpPools(): ExternalIpPool[] {
       sessionStorage.setItem(PROVIDER_EXTERNAL_IP_POOLS_KEY, JSON.stringify(pools))
     }
 
-    return pools
+    return mergeMissingDefaultExternalIpPools(pools)
   } catch {
     return [...DEFAULT_EXTERNAL_IP_POOLS]
   }
@@ -2150,6 +2374,12 @@ export function addProviderExternalIpPool(pool: ExternalIpPool): void {
 
 export function updateProviderExternalIpPool(pool: ExternalIpPool): void {
   setProviderExternalIpPools(replaceInventoryItemById(getProviderExternalIpPools(), pool))
+}
+
+export function deleteProviderExternalIpPool(poolId: string): void {
+  setProviderExternalIpPools(
+    removeInventoryItemById(getProviderExternalIpPools(), poolId),
+  )
 }
 
 export function assignExternalIpPoolToOrganization(
@@ -2263,6 +2493,12 @@ function normalizeProviderVirtualNetwork(network: ProviderVirtualNetwork): Provi
       : network.dataCenter,
     ipv6Cidr: network.ipv6Cidr?.trim() ?? '',
     status: getNetworkInventoryStatus(network),
+    natGateway: network.natGateway
+      ? {
+          ...network.natGateway,
+          status: getNetworkInventoryStatus(network.natGateway),
+        }
+      : network.natGateway,
   }
 }
 
@@ -2340,17 +2576,17 @@ export function getProviderVirtualNetworks(): ProviderVirtualNetwork[] {
         PROVIDER_VIRTUAL_NETWORKS_KEY,
         JSON.stringify(DEFAULT_PROVIDER_VIRTUAL_NETWORKS),
       )
-      return [...DEFAULT_PROVIDER_VIRTUAL_NETWORKS]
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
     }
 
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) {
-      return [...DEFAULT_PROVIDER_VIRTUAL_NETWORKS]
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
     }
 
     const networks = parsed.filter(isProviderVirtualNetwork).map(normalizeProviderVirtualNetwork)
     if (networks.length === 0) {
-      return [...DEFAULT_PROVIDER_VIRTUAL_NETWORKS]
+      return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
     }
 
     const needsPersist = networks.some((network, index) => {
@@ -2369,9 +2605,9 @@ export function getProviderVirtualNetworks(): ProviderVirtualNetwork[] {
       sessionStorage.setItem(PROVIDER_VIRTUAL_NETWORKS_KEY, JSON.stringify(networks))
     }
 
-    return networks
+    return ensureDemoNatGatewayOnTenantWorkload(networks)
   } catch {
-    return [...DEFAULT_PROVIDER_VIRTUAL_NETWORKS]
+    return ensureDemoNatGatewayOnTenantWorkload([...DEFAULT_PROVIDER_VIRTUAL_NETWORKS])
   }
 }
 
@@ -2389,6 +2625,16 @@ export function addProviderVirtualNetwork(network: ProviderVirtualNetwork): void
 
 export function updateProviderVirtualNetwork(network: ProviderVirtualNetwork): void {
   setProviderVirtualNetworks(replaceInventoryItemById(getProviderVirtualNetworks(), network))
+}
+
+export function deleteProviderVirtualNetwork(networkId: string): void {
+  setProviderVirtualNetworks(removeInventoryItemById(getProviderVirtualNetworks(), networkId))
+  setProviderSubnets(
+    getProviderSubnets().filter((subnet) => subnet.virtualNetworkId !== networkId),
+  )
+  setProviderSecurityGroups(
+    getProviderSecurityGroups().filter((group) => group.virtualNetworkId !== networkId),
+  )
 }
 
 export function getProviderSubnets(): ProviderSubnet[] {
@@ -2425,6 +2671,10 @@ export function addProviderSubnet(subnet: ProviderSubnet): void {
 
 export function updateProviderSubnet(subnet: ProviderSubnet): void {
   setProviderSubnets(replaceInventoryItemById(getProviderSubnets(), subnet))
+}
+
+export function deleteProviderSubnet(subnetId: string): void {
+  setProviderSubnets(removeInventoryItemById(getProviderSubnets(), subnetId))
 }
 
 export function getProviderSecurityGroups(): ProviderSecurityGroup[] {
@@ -2488,6 +2738,10 @@ export function addProviderSecurityGroup(group: ProviderSecurityGroup): void {
 
 export function updateProviderSecurityGroup(group: ProviderSecurityGroup): void {
   setProviderSecurityGroups(replaceInventoryItemById(getProviderSecurityGroups(), group))
+}
+
+export function deleteProviderSecurityGroup(groupId: string): void {
+  setProviderSecurityGroups(removeInventoryItemById(getProviderSecurityGroups(), groupId))
 }
 
 export function getCatalogVirtualNetworkOptions(): CatalogNetworkResourceOption[] {

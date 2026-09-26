@@ -19,7 +19,7 @@ const LANDING_DATE_FORMAT: Intl.DateTimeFormatOptions = {
 }
 
 /** Landing footer date — bump when shipping a prototype update. */
-const LANDING_LAST_UPDATED_LABEL = 'August 31, 2026'
+const LANDING_LAST_UPDATED_LABEL = 'September 25, 2026'
 
 /** Prefer explicit label; fall back to latest git commit or today. */
 function getLandingLastUpdatedLabel(): string {
@@ -49,7 +49,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5184,
-    strictPort: false,
+    strictPort: true,
     open: true,
     watch: {
       usePolling: true,

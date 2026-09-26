@@ -1,5 +1,6 @@
 import {
   getEffectiveProjectMembers,
+  getTenantRootProject,
   type TenantProject,
   type TenantProjectTreeRow,
 } from '../tenantAdmin/projects'
@@ -48,12 +49,47 @@ export function isTenantUserProjectManager(
   return projects.some((project) => isProjectManagerEmail(projects, project, userEmail))
 }
 
+export function resolveTenantUserDisplayName(
+  projects: readonly TenantProject[],
+  email: string,
+): string {
+  const normalizedEmail = normalizeMemberEmail(email)
+
+  for (const project of projects) {
+    for (const member of project.members) {
+      if (
+        normalizeMemberEmail(member.email) === normalizedEmail &&
+        normalizeMemberEmail(member.name) !== normalizedEmail
+      ) {
+        return member.name
+      }
+    }
+  }
+
+  return email
+}
+
 /** Projects the signed-in tenant user can access (direct membership or inherited). */
 export function getTenantUserAccessibleProjects(
   projects: readonly TenantProject[],
   userEmail: string,
 ): TenantProject[] {
   return projects.filter((project) => isProjectMemberEmail(projects, project, userEmail))
+}
+
+/** Membership-scoped projects plus the structural Root row for the Projects page tree. */
+export function getTenantUserProjectsPageProjects(
+  projects: readonly TenantProject[],
+  userEmail: string,
+): TenantProject[] {
+  const accessibleProjects = getTenantUserAccessibleProjects(projects, userEmail)
+  const root = getTenantRootProject(projects)
+
+  if (!root || accessibleProjects.some((project) => project.id === root.id)) {
+    return accessibleProjects
+  }
+
+  return [root, ...accessibleProjects]
 }
 
 export function buildTenantUserProjectTreeRows(

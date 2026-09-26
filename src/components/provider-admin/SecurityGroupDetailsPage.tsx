@@ -9,6 +9,7 @@ import {
   Title,
 } from "@patternfly/react-core";
 import { EntityDetailsPageShell } from "../shared/EntityDetailsPageShell";
+import type { EntityDetailsBreadcrumbAncestor } from "../shared/EntityDetailsPageShell";
 import { EntityDetailsActionsDropdown } from "../shared/EntityDetailsActionsDropdown";
 import {
   getNetworkInventoryStatus,
@@ -46,11 +47,15 @@ export function SecurityGroupDetailsPage({
   onNavigateToVirtualNetwork,
 }: SecurityGroupDetailsPageProps) {
   const status = getNetworkInventoryStatus(group);
+  const breadcrumbAncestors: EntityDetailsBreadcrumbAncestor[] = onNavigateToVirtualNetwork
+    ? [{ label: virtualNetworkName, onClick: onNavigateToVirtualNetwork }]
+    : [{ label: virtualNetworkName }];
 
   return (
     <EntityDetailsPageShell
-      parentLabel="Security groups"
+      parentLabel="Virtual networks"
       onBack={onBack}
+      breadcrumbAncestors={breadcrumbAncestors}
       title={group.name}
       titleId="security-group-details-title"
       description={
@@ -90,12 +95,6 @@ export function SecurityGroupDetailsPage({
                 >
                   {status}
                 </Label>
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Security group ID</DescriptionListTerm>
-              <DescriptionListDescription>
-                <code>{group.id}</code>
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>

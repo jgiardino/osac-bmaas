@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon'
 import { PlusIcon } from '@patternfly/react-icons/dist/esm/icons/plus-icon'
 import {
@@ -13,7 +13,7 @@ import {
   FormSelectOption,
   TextInput,
 } from '@patternfly/react-core'
-import { AdditionalEmailDomainsField, AdditionalEmailDomainsValue } from '../provider-admin/AdditionalEmailDomainsField'
+import { AdditionalEmailDomainsValue } from '../provider-admin/AdditionalEmailDomainsField'
 import {
   ORGANIZATION_ACTION_SUCCESS_AUTO_CLOSE_MS,
   ORGANIZATION_ACTION_WORKING_MS,
@@ -26,18 +26,20 @@ import {
   type NetworkInventoryCreateBreadcrumbAncestor,
 } from '../networking/NetworkInventoryCreateWizardShell'
 import { NETWORK_INVENTORY_CREATE_REVIEW_STEP } from '../../networking/networkInventoryCreateWizard'
+import {
+  buildIdentityProviderEditSnapshot,
+  getIdentityProviderEditChanges,
+  getIdentityProviderEditModifiedStepIds,
+} from '../../networking/networkInventoryEditDiff'
+import { NetworkInventoryEditReviewPanel } from '../../networking/NetworkInventoryEditReviewPanel'
 import { ResourceCreatePageShell } from '../shared/ResourceCreatePageShell'
 import { IDP_MANAGER_IDENTITY_PROVIDER_COPY } from '../../idpManager/constants'
 import {
-  areAdditionalDomainsValid,
-  buildDefaultAdditionalDomains,
-  getTakenEmailDomains,
   identityProviderProtocolLabel,
   type IdentityProviderConnectedBy,
   type OrganizationIdentityProvider,
   type RegisteredOrganization,
 } from '../../providerAdmin/organizations'
-import { getProviderRegisteredOrganizations } from '../../providerSetup/storage'
 import {
   addOrganizationIdentityProvider,
   buildDefaultIdentityProviderDraft,
@@ -76,9 +78,6 @@ export function ConnectIdentityProviderWizard({
       ? draftFromIdentityProvider(editingProvider)
       : buildDefaultIdentityProviderDraft(organization),
   )
-  const [additionalDomains, setAdditionalDomains] = useState(() =>
-    buildDefaultAdditionalDomains(organization),
-  )
   const [completionPhase, setCompletionPhase] =
     useState<OrganizationActionCompletionPhase>('idle')
   const completionTimersRef = useRef<number[]>([])
@@ -94,20 +93,53 @@ export function ConnectIdentityProviderWizard({
     }
   }, [])
 
-  const takenEmailDomains = getTakenEmailDomains(
-    getProviderRegisteredOrganizations(),
-    organization.id,
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    setForm(
+      editingProvider
+        ? draftFromIdentityProvider(editingProvider)
+        : buildDefaultIdentityProviderDraft(organization),
+    )
+  }, [editingProvider, isOpen, organization])
+
+  const editBaseline = useMemo(() => {
+    if (!isEditing || !editingProvider) {
+      return null
+    }
+
+    return buildIdentityProviderEditSnapshot(draftFromIdentityProvider(editingProvider))
+  }, [editingProvider, isEditing])
+
+  const currentEditSnapshot = useMemo(() => {
+    if (!isEditing) {
+      return null
+    }
+
+    return buildIdentityProviderEditSnapshot(form)
+  }, [form, isEditing])
+
+  const editChanges = useMemo(() => {
+    if (!editBaseline || !currentEditSnapshot) {
+      return []
+    }
+
+    return getIdentityProviderEditChanges(editBaseline, currentEditSnapshot)
+  }, [currentEditSnapshot, editBaseline])
+
+  const modifiedStepIds = useMemo(
+    () => getIdentityProviderEditModifiedStepIds(editChanges),
+    [editChanges],
   )
-  const additionalDomainsValid = areAdditionalDomainsValid(
-    additionalDomains,
-    organization.primaryDomain,
-    takenEmailDomains,
-  )
+
+  const canSaveEdit = !isEditing || editChanges.length > 0
+
   const isDetailsStepValid =
     Boolean(form.displayName.trim()) &&
     Boolean(form.issuerUrl.trim()) &&
-    Boolean(form.clientId.trim()) &&
-    additionalDomainsValid
+    Boolean(form.clientId.trim())
   const issuerLabel = form.protocol === 'SAML' ? 'Metadata URL' : 'Issuer URL'
   const clientLabel = form.protocol === 'SAML' ? 'Entity ID' : 'Client ID'
   const parentLabel = IDP_MANAGER_IDENTITY_PROVIDER_COPY.title
@@ -122,13 +154,8 @@ export function ConnectIdentityProviderWizard({
 
   const persistProvider = () => {
     return editingProvider
-      ? updateOrganizationIdentityProvider(
-          organization,
-          editingProvider.id,
-          form,
-          additionalDomains,
-        )
-      : addOrganizationIdentityProvider(organization, form, additionalDomains, connectedBy)
+      ? updateOrganizationIdentityProvider(organization, editingProvider.id, form)
+      : addOrganizationIdentityProvider(organization, form, connectedBy)
   }
 
   const handleSave = () => {
@@ -182,13 +209,6 @@ export function ConnectIdentityProviderWizard({
                 aria-readonly="true"
               />
             </FormGroup>
-            <AdditionalEmailDomainsField
-              idPrefix="connect-idp-additional-domain"
-              primaryDomain={organization.primaryDomain}
-              domains={additionalDomains}
-              onChange={setAdditionalDomains}
-              takenDomains={takenEmailDomains}
-            />
             <FormGroup label="Protocol" fieldId="connect-idp-protocol" isRequired>
               <FormSelect
                 id="connect-idp-protocol"
@@ -238,42 +258,49 @@ export function ConnectIdentityProviderWizard({
     }
 
     return (
-      <DescriptionList isCompact className="provider-admin-organizations__wizard-review">
-        <DescriptionListGroup>
-          <DescriptionListTerm>Primary email domain</DescriptionListTerm>
-          <DescriptionListDescription>
-            {organization.primaryDomain || '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Additional email domains</DescriptionListTerm>
-          <DescriptionListDescription>
-            <AdditionalEmailDomainsValue domains={additionalDomains} />
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Protocol</DescriptionListTerm>
-          <DescriptionListDescription>
-            {identityProviderProtocolLabel(form.protocol)}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>Display name</DescriptionListTerm>
-          <DescriptionListDescription>{form.displayName.trim() || '—'}</DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>{issuerLabel}</DescriptionListTerm>
-          <DescriptionListDescription>
-            {form.issuerUrl.trim() || '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-        <DescriptionListGroup>
-          <DescriptionListTerm>{clientLabel}</DescriptionListTerm>
-          <DescriptionListDescription>
-            {form.clientId.trim() || '—'}
-          </DescriptionListDescription>
-        </DescriptionListGroup>
-      </DescriptionList>
+      <NetworkInventoryEditReviewPanel
+        isEditMode={isEditing}
+        editChanges={editChanges}
+        ariaLabel="Identity provider changes"
+        createReview={
+          <DescriptionList isCompact className="provider-admin-organizations__wizard-review">
+            <DescriptionListGroup>
+              <DescriptionListTerm>Primary email domain</DescriptionListTerm>
+              <DescriptionListDescription>
+                {organization.primaryDomain || '—'}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Additional email domains</DescriptionListTerm>
+              <DescriptionListDescription>
+                <AdditionalEmailDomainsValue domains={organization.additionalDomains ?? []} />
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Protocol</DescriptionListTerm>
+              <DescriptionListDescription>
+                {identityProviderProtocolLabel(form.protocol)}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Display name</DescriptionListTerm>
+              <DescriptionListDescription>{form.displayName.trim() || '—'}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>{issuerLabel}</DescriptionListTerm>
+              <DescriptionListDescription>
+                {form.issuerUrl.trim() || '—'}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>{clientLabel}</DescriptionListTerm>
+              <DescriptionListDescription>
+                {form.clientId.trim() || '—'}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          </DescriptionList>
+        }
+      />
     )
   }
 
@@ -292,7 +319,7 @@ export function ConnectIdentityProviderWizard({
           </span>
         ),
         onNext: handleSave,
-        isNextDisabled: !isDetailsStepValid,
+        isNextDisabled: !isDetailsStepValid || !canSaveEdit,
       }
     }
 
@@ -347,6 +374,11 @@ export function ConnectIdentityProviderWizard({
       getStepFooter={getStepFooter}
       onClose={handleClose}
       className="idp-manager-identity-provider__wizard"
+      getStepName={(step) =>
+        isEditing && modifiedStepIds.has('identity-provider') && step.id === 'identity-provider'
+          ? `${step.label} (modified)`
+          : step.label
+      }
     />
   )
 }

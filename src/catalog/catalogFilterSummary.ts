@@ -6,9 +6,10 @@ export function formatFilteredResultCount(
   totalCount: number,
   singular: string,
   plural = `${singular}s`,
+  forceOfFormat = false,
 ): string {
   const noun = filteredCount === 1 ? singular : plural
-  if (filteredCount === totalCount) {
+  if (!forceOfFormat && filteredCount === totalCount) {
     return `${filteredCount} ${noun}`
   }
   return `${filteredCount} of ${totalCount} ${plural}`
@@ -49,6 +50,11 @@ function humanizeFilterPart(part: string): string {
   const organizationMatch = part.match(/^(?:organization|tenant):\s*(.+)$/i)
   if (organizationMatch) {
     return `items for ${organizationMatch[1].trim()}`
+  }
+
+  const projectMatch = part.match(/^project:\s*(.+)$/i)
+  if (projectMatch) {
+    return `items in the ${projectMatch[1].trim()} project`
   }
 
   const statusMatch = part.match(/^status:\s*(.+)$/i)

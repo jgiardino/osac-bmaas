@@ -1,31 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Fragment } from 'react'
 import { ArrowLeftIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-left-icon'
 import { ArrowRightIcon } from '@patternfly/react-icons/dist/esm/icons/arrow-right-icon'
 import { CheckIcon } from '@patternfly/react-icons/dist/esm/icons/check-icon'
-import { EnvelopeIcon } from '@patternfly/react-icons/dist/esm/icons/envelope-icon'
-import { TimesIcon } from '@patternfly/react-icons/dist/esm/icons/times-icon'
-import { UserPlusIcon } from '@patternfly/react-icons/dist/esm/icons/user-plus-icon'
-import { UsersIcon } from '@patternfly/react-icons/dist/esm/icons/users-icon'
 import {
-  Button,
+  Alert,
   Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  EmptyState,
-  EmptyStateBody,
-  Flex,
-  FlexItem,
+  Dropdown,
+  DropdownList,
   Form,
   FormGroup,
   FormHelperText,
   FormSelect,
   FormSelectOption,
-  Modal,
-  ModalVariant,
   HelperText,
   HelperTextItem,
+  MenuToggle,
+  Modal,
+  ModalVariant,
   Slider,
   type SliderOnChangeEvent,
   TextArea,
@@ -35,6 +30,7 @@ import {
   WizardStep,
 } from '@patternfly/react-core'
 import { KubernetesResourceNameField } from '../shared/KubernetesResourceNameHelper'
+import { ProjectTreeDropdownItems } from '../shared/ProjectTreeDropdownItems'
 import { ResourceCreatePageShell } from '../shared/ResourceCreatePageShell'
 import { useWizardLeaveConfirm } from '../shared/useWizardLeaveConfirm'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
@@ -43,14 +39,8 @@ import {
   CREATE_PROJECT_WIZARD_STEPS,
   DEFAULT_CREATE_PROJECT_WIZARD_FORM,
   formFromTenantProject,
-  generateProjectWizardMemberId,
-  getProjectMemberInitials,
-  getTenantProjectMemberRoleShortLabel,
-  isProjectMemberEmailValid,
-  TENANT_PROJECT_MEMBER_ROLES,
   type CreateProjectWizardForm,
   type CreateProjectWizardStepId,
-  type TenantProjectWizardMember,
 } from '../../tenantAdmin/createProjectWizard'
 import {
   generateTenantProjectId,
@@ -58,9 +48,12 @@ import {
   getAvailableInstanceQuotaForProject,
   getEffectiveProjectMembers,
   getTenantProjectById,
+  getTenantProjectLocationPath,
+  getTenantRootProject,
+  buildTenantProjectScopeTreeRows,
+  isTenantRootProject,
   resolveOrganizationExternalIpPool,
   resolveOrganizationExternalIpPools,
-  TENANT_PROJECTS_TEAMS_DEMO,
   type TenantProject,
 } from '../../tenantAdmin/projects'
 import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
@@ -79,6 +72,8 @@ type CreateTenantProjectWizardProps = {
   organization: RegisteredOrganization
   projects?: readonly TenantProject[]
   parentProject?: TenantProject | null
+  /** When true, parent project is chosen from the full project tree instead of fixed context. */
+  allowParentSelection?: boolean
   breadcrumbAncestors?: Array<{ label: string; onClick?: () => void }>
   onOpenParentProject?: (project: TenantProject) => void
   onClose: () => void
@@ -93,6 +88,7 @@ export function CreateTenantProjectWizard({
   organization,
   projects = [],
   parentProject = null,
+  allowParentSelection = false,
   breadcrumbAncestors,
   onOpenParentProject,
   onClose,
@@ -103,14 +99,36 @@ export function CreateTenantProjectWizard({
   const [form, setForm] = useState<CreateProjectWizardForm>(() =>
     editingProject ? formFromTenantProject(editingProject) : DEFAULT_CREATE_PROJECT_WIZARD_FORM,
   )
+  const [selectedParentProjectId, setSelectedParentProjectId] = useState<string | null>(null)
+  const [isParentMenuOpen, setIsParentMenuOpen] = useState(false)
   const isEditMode = editingProject !== null
+  const parentTreeRows = useMemo(
+    () => buildTenantProjectScopeTreeRows(projects),
+    [projects],
+  )
 
   const resolvedParentProject = useMemo(() => {
     if (isEditMode && editingProject?.parentProjectId) {
       return getTenantProjectById(projects, editingProject.parentProjectId)
     }
-    return parentProject
-  }, [editingProject, isEditMode, parentProject, projects])
+    if (allowParentSelection) {
+      if (selectedParentProjectId) {
+        return getTenantProjectById(projects, selectedParentProjectId) ?? getTenantRootProject(projects)
+      }
+      return parentProject ?? getTenantRootProject(projects)
+    }
+    if (parentProject) {
+      return parentProject
+    }
+    return getTenantRootProject(projects)
+  }, [
+    allowParentSelection,
+    editingProject,
+    isEditMode,
+    parentProject,
+    projects,
+    selectedParentProjectId,
+  ])
 
   const maxInstanceQuota = useMemo(
     () =>
@@ -207,18 +225,27 @@ export function CreateTenantProjectWizard({
 
   const canSaveProjectEdit = !isEditMode || editChanges.length > 0
 
-  const resetWizard = () => {
+  const resetWizard = (parentOverride?: TenantProject | null) => {
+    const parent = parentOverride ?? resolvedParentProject
+    const quota = getAvailableInstanceQuotaForProject(
+      projects,
+      organization,
+      parent,
+      editingProject?.id,
+    )
     const defaultPool = resolveOrganizationExternalIpPool(organization)
     const defaultQuota = Math.max(
       1,
-      Math.min(DEFAULT_CREATE_PROJECT_WIZARD_FORM.instanceQuota, maxInstanceQuota),
+      Math.min(DEFAULT_CREATE_PROJECT_WIZARD_FORM.instanceQuota, quota),
     )
     setForm({
       ...DEFAULT_CREATE_PROJECT_WIZARD_FORM,
-      name: generateUniqueTenantProjectName(projects, parentProject),
+      name: generateUniqueTenantProjectName(projects, parent),
       environmentType:
-        parentProject?.environmentType ?? DEFAULT_CREATE_PROJECT_WIZARD_FORM.environmentType,
-      instanceQuota: defaultQuota,
+        parent?.environmentType ??
+        parentProject?.environmentType ??
+        DEFAULT_CREATE_PROJECT_WIZARD_FORM.environmentType,
+      instanceQuota: quota < 1 ? 0 : defaultQuota,
       externalIpPoolId: defaultPool?.id ?? organizationPools[0]?.id ?? '',
     })
   }
@@ -251,13 +278,44 @@ export function CreateTenantProjectWizard({
       return
     }
 
+    const initialParent = parentProject ?? getTenantRootProject(projects)
+
+    if (allowParentSelection) {
+      setSelectedParentProjectId(initialParent?.id ?? null)
+      setIsParentMenuOpen(false)
+    }
+
     if (editingProject) {
       resetEditWizard()
       return
     }
 
-    resetWizard()
-  }, [editingProject, isOpen, maxInstanceQuota, parentProject?.id, projects])
+    resetWizard(initialParent)
+    // Re-init only when the wizard opens or launch context parent changes — not when
+    // the user picks a different parent inside allowParentSelection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init snapshot
+  }, [isOpen, editingProject?.id, parentProject?.id, allowParentSelection, projects])
+
+  const handleParentProjectSelect = (projectId: string) => {
+    setSelectedParentProjectId(projectId)
+    setIsParentMenuOpen(false)
+
+    const parent = getTenantProjectById(projects, projectId) ?? getTenantRootProject(projects)
+    const quota = getAvailableInstanceQuotaForProject(projects, organization, parent)
+    const defaultQuota = Math.max(
+      1,
+      Math.min(DEFAULT_CREATE_PROJECT_WIZARD_FORM.instanceQuota, quota),
+    )
+
+    setForm((current) => ({
+      ...current,
+      name: generateUniqueTenantProjectName(projects, parent),
+      environmentType: parent?.environmentType ?? current.environmentType,
+      instanceQuota: quota < 1 ? 0 : defaultQuota,
+    }))
+  }
+
+  const parentProjectToggleLabel = resolvedParentProject?.name ?? 'Select parent project'
 
   const handleCreateProject = () => {
     if (!isValidKubernetesResourceName(form.name)) {
@@ -278,16 +336,10 @@ export function CreateTenantProjectWizard({
       externalIpPoolName: organizationPool?.name ?? null,
       externalIpPoolCidr: form.ipPoolSlice.trim(),
       catalogItems: [],
-      members: form.members.map((member) => ({
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-      })),
-      parentProjectId: parentProject?.id ?? null,
+      members: [],
+      parentProjectId: resolvedParentProject?.id ?? null,
       createdAt: new Date().toISOString(),
     })
-    handleClose()
   }
 
   const handleUpdateProject = () => {
@@ -308,47 +360,57 @@ export function CreateTenantProjectWizard({
       externalIpPoolId: organizationPool?.id ?? null,
       externalIpPoolName: organizationPool?.name ?? null,
       externalIpPoolCidr: form.ipPoolSlice.trim(),
-      members: form.members.map((member) => ({
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-      })),
     })
     handleClose()
   }
 
-  const handleAddMember = () => {
-    if (!form.memberName.trim() || !isProjectMemberEmailValid(form.memberEmail)) {
-      return
-    }
-
-    const member: TenantProjectWizardMember = {
-      id: generateProjectWizardMemberId(),
-      name: form.memberName.trim(),
-      email: form.memberEmail.trim(),
-      role: form.memberRole,
-    }
-
-    setForm((current) => ({
-      ...current,
-      members: [...current.members, member],
-      memberName: '',
-      memberEmail: '',
-      memberRole: 'manager',
-    }))
-  }
-
-  const handleRemoveMember = (memberId: string) => {
-    setForm((current) => ({
-      ...current,
-      members: current.members.filter((member) => member.id !== memberId),
-    }))
-  }
-
   const renderProjectInfoStep = () => (
     <Form autoComplete="off" className="tenant-admin-projects-teams__wizard-form">
-      {resolvedParentProject ? (
+      {allowParentSelection && !isEditMode ? (
+        <FormGroup
+          label={CREATE_PROJECT_WIZARD_DEMO.parentProjectLabel}
+          fieldId="new-project-parent"
+          isRequired
+        >
+          <div className="tenant-user-launch-wizard__project-control">
+            <Dropdown
+              isOpen={isParentMenuOpen}
+              onOpenChange={setIsParentMenuOpen}
+              onSelect={(_event, value) => {
+                if (value == null) {
+                  return
+                }
+                handleParentProjectSelect(String(value))
+              }}
+              toggle={(toggleRef) => (
+                <MenuToggle
+                  ref={toggleRef}
+                  id="new-project-parent"
+                  isExpanded={isParentMenuOpen}
+                  onClick={() => setIsParentMenuOpen((open) => !open)}
+                  className="bmaas-dropdown-toggle tenant-user-launch-wizard__project-toggle"
+                  aria-label={`Parent project: ${parentProjectToggleLabel}`}
+                >
+                  {parentProjectToggleLabel}
+                </MenuToggle>
+              )}
+            >
+              <DropdownList>
+                <ProjectTreeDropdownItems
+                  projects={projects}
+                  treeRows={parentTreeRows}
+                  selectedProjectId={resolvedParentProject?.id ?? null}
+                />
+              </DropdownList>
+            </Dropdown>
+          </div>
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>{CREATE_PROJECT_WIZARD_DEMO.parentProjectHelper}</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
+        </FormGroup>
+      ) : resolvedParentProject && !isTenantRootProject(resolvedParentProject) ? (
         <FormGroup label={CREATE_PROJECT_WIZARD_DEMO.parentProjectLabel} fieldId="new-project-parent">
           <TextInput
             id="new-project-parent"
@@ -429,135 +491,6 @@ export function CreateTenantProjectWizard({
     </Form>
   )
 
-  const renderTeamMembersStep = () => (
-    <div className="tenant-admin-projects-teams__wizard-members">
-      {resolvedParentProject && inheritedMembers.length > 0 ? (
-        <Content component="p" className="tenant-admin-projects-teams__wizard-inherit-note">
-          {TENANT_PROJECTS_TEAMS_DEMO.inheritedMembersHelp} {inheritedMembers.length} member
-          {inheritedMembers.length === 1 ? '' : 's'} inherit access from {resolvedParentProject.name}.
-        </Content>
-      ) : null}
-      <Form autoComplete="off" className="tenant-admin-projects-teams__wizard-form">
-        <Flex
-          alignItems={{ default: 'alignItemsFlexEnd' }}
-          gap={{ default: 'gapMd' }}
-          className="tenant-admin-projects-teams__wizard-member-form"
-        >
-          <FlexItem grow={{ default: 'grow' }}>
-            <FormGroup label="Full name" fieldId="new-project-member-name">
-              <TextInput
-                id="new-project-member-name"
-                value={form.memberName}
-                onChange={(_event, value) =>
-                  setForm((current) => ({ ...current, memberName: value }))
-                }
-                placeholder={CREATE_PROJECT_WIZARD_DEMO.memberNamePlaceholder}
-              />
-            </FormGroup>
-          </FlexItem>
-          <FlexItem grow={{ default: 'grow' }}>
-            <FormGroup label="Email" fieldId="new-project-member-email">
-              <TextInput
-                id="new-project-member-email"
-                type="email"
-                value={form.memberEmail}
-                onChange={(_event, value) =>
-                  setForm((current) => ({ ...current, memberEmail: value }))
-                }
-                placeholder={CREATE_PROJECT_WIZARD_DEMO.memberEmailPlaceholder}
-              />
-            </FormGroup>
-          </FlexItem>
-        </Flex>
-        <Flex alignItems={{ default: 'alignItemsFlexEnd' }} gap={{ default: 'gapMd' }}>
-          <FlexItem grow={{ default: 'grow' }}>
-            <FormGroup label="Role" fieldId="new-project-member-role">
-              <FormSelect
-                id="new-project-member-role"
-                value={form.memberRole}
-                onChange={(_event, value) =>
-                  setForm((current) => ({
-                    ...current,
-                    memberRole: value as CreateProjectWizardForm['memberRole'],
-                  }))
-                }
-                aria-label="Project member role"
-              >
-                {TENANT_PROJECT_MEMBER_ROLES.map((role) => (
-                  <FormSelectOption key={role.id} value={role.id} label={role.label} />
-                ))}
-              </FormSelect>
-            </FormGroup>
-          </FlexItem>
-          <FlexItem>
-            <Button
-              variant="primary"
-              icon={<UserPlusIcon />}
-              onClick={handleAddMember}
-              isDisabled={
-                !form.memberName.trim() || !isProjectMemberEmailValid(form.memberEmail)
-              }
-            >
-              {CREATE_PROJECT_WIZARD_DEMO.addMemberLabel}
-            </Button>
-          </FlexItem>
-        </Flex>
-      </Form>
-
-      {form.members.length > 0 ? (
-        <div className="tenant-admin-projects-teams__wizard-member-list">
-          {form.members.map((member) => (
-            <Flex
-              key={member.id}
-              alignItems={{ default: 'alignItemsCenter' }}
-              justifyContent={{ default: 'justifyContentSpaceBetween' }}
-              gap={{ default: 'gapMd' }}
-              className="tenant-admin-projects-teams__wizard-member-row"
-            >
-              <FlexItem grow={{ default: 'grow' }} className="tenant-admin-projects-teams__wizard-member-main">
-                <Flex alignItems={{ default: 'alignItemsCenter' }} gap={{ default: 'gapMd' }}>
-                  <FlexItem>
-                    <span className="tenant-admin-projects-teams__wizard-member-avatar" aria-hidden>
-                      {getProjectMemberInitials(member.name)}
-                    </span>
-                  </FlexItem>
-                  <FlexItem className="tenant-admin-projects-teams__wizard-member-copy">
-                    <span className="tenant-admin-projects-teams__wizard-member-name">
-                      {member.name}
-                    </span>
-                    <span className="tenant-admin-projects-teams__wizard-member-email">
-                      <code>{member.email}</code>
-                    </span>
-                  </FlexItem>
-                </Flex>
-              </FlexItem>
-              <FlexItem className="tenant-admin-projects-teams__wizard-member-actions">
-                <span className="tenant-admin-projects-teams__wizard-member-role">
-                  {getTenantProjectMemberRoleShortLabel(member.role)}
-                </span>
-                <Button
-                  variant="plain"
-                  icon={<TimesIcon />}
-                  aria-label={`Remove ${member.name}`}
-                  onClick={() => handleRemoveMember(member.id)}
-                />
-              </FlexItem>
-            </Flex>
-          ))}
-        </div>
-      ) : (
-        <EmptyState className="tenant-admin-projects-teams__wizard-members-empty">
-          <UsersIcon className="tenant-admin-projects-teams__wizard-members-empty-icon" />
-          <EmptyStateBody>{CREATE_PROJECT_WIZARD_DEMO.membersEmptyTitle}</EmptyStateBody>
-        </EmptyState>
-      )}
-
-      <Content component="p" className="tenant-admin-projects-teams__wizard-invite-note">
-        <EnvelopeIcon aria-hidden /> {CREATE_PROJECT_WIZARD_DEMO.membersInviteNote}
-      </Content>
-    </div>
-  )
-
   const renderReviewStep = () => (
     <div className="tenant-admin-projects-teams__wizard-review">
       <Content component="p" className="tenant-admin-projects-teams__wizard-review-lede">
@@ -567,8 +500,18 @@ export function CreateTenantProjectWizard({
       {isEditMode ? (
         <CatalogEditChangesSummary changes={editChanges} />
       ) : (
-        <DescriptionList isCompact className="tenant-admin-projects-teams__wizard-review-list">
-          {resolvedParentProject ? (
+        <Fragment>
+          <DescriptionList isCompact className="tenant-admin-projects-teams__wizard-review-list">
+          {allowParentSelection && !isEditMode ? (
+            <DescriptionListGroup>
+              <DescriptionListTerm>
+                {CREATE_PROJECT_WIZARD_DEMO.reviewLocationLabel}
+              </DescriptionListTerm>
+              <DescriptionListDescription>
+                {getTenantProjectLocationPath(projects, resolvedParentProject, form.name)}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          ) : resolvedParentProject && !isTenantRootProject(resolvedParentProject) ? (
             <DescriptionListGroup>
               <DescriptionListTerm>Parent project</DescriptionListTerm>
               <DescriptionListDescription>{resolvedParentProject.name}</DescriptionListDescription>
@@ -590,7 +533,9 @@ export function CreateTenantProjectWizard({
             <DescriptionListTerm>Instance quota</DescriptionListTerm>
             <DescriptionListDescription>
               {form.instanceQuota} instance{form.instanceQuota === 1 ? '' : 's'}
-              {resolvedParentProject ? ` from ${resolvedParentProject.name}` : ''}
+              {resolvedParentProject && !isTenantRootProject(resolvedParentProject)
+                ? ` from ${resolvedParentProject.name}`
+                : ''}
             </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
@@ -601,24 +546,18 @@ export function CreateTenantProjectWizard({
                 : form.ipPoolSlice.trim() || '—'}
             </DescriptionListDescription>
           </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Team members</DescriptionListTerm>
-            <DescriptionListDescription>
-              {form.members.length === 0 ? (
-                CREATE_PROJECT_WIZARD_DEMO.reviewNoMembers
-              ) : (
-                <ul className="tenant-admin-projects-teams__wizard-review-members">
-                  {form.members.map((member) => (
-                    <li key={member.id}>
-                      {member.name} · {member.email} ·{' '}
-                      {getTenantProjectMemberRoleShortLabel(member.role)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
         </DescriptionList>
+        <Alert
+          variant="info"
+          isInline
+          title={CREATE_PROJECT_WIZARD_DEMO.reviewMembersAlertTitle}
+          className="tenant-admin-projects-teams__wizard-review-alert"
+        >
+          {resolvedParentProject && inheritedMembers.length > 0
+            ? CREATE_PROJECT_WIZARD_DEMO.reviewInheritedMembersAlertBody
+            : CREATE_PROJECT_WIZARD_DEMO.reviewMembersAlertBody}
+        </Alert>
+        </Fragment>
       )}
     </div>
   )
@@ -627,8 +566,6 @@ export function CreateTenantProjectWizard({
     switch (stepId) {
       case 'project-info':
         return renderProjectInfoStep()
-      case 'team-members':
-        return renderTeamMembersStep()
       case 'review':
         return renderReviewStep()
       default:
@@ -644,24 +581,6 @@ export function CreateTenantProjectWizard({
           maxInstanceQuota < 1 ||
           form.instanceQuota < 1 ||
           form.instanceQuota > maxInstanceQuota,
-        nextButtonText: (
-          <span className="tenant-admin-projects-teams__wizard-footer-label">
-            <span>{CREATE_PROJECT_WIZARD_DEMO.continueLabel}</span>
-            <ArrowRightIcon aria-hidden />
-          </span>
-        ),
-      })
-    }
-
-    if (stepId === 'team-members') {
-      return wrapStepFooter({
-        isCancelHidden: true,
-        backButtonText: (
-          <span className="tenant-admin-projects-teams__wizard-footer-label">
-            <ArrowLeftIcon aria-hidden />
-            <span>Back</span>
-          </span>
-        ),
         nextButtonText: (
           <span className="tenant-admin-projects-teams__wizard-footer-label">
             <span>{CREATE_PROJECT_WIZARD_DEMO.continueLabel}</span>
@@ -732,21 +651,21 @@ export function CreateTenantProjectWizard({
 
   const wizardTitle = isEditMode
     ? CREATE_PROJECT_WIZARD_DEMO.editProjectLabel
-    : parentProject
+    : resolvedParentProject && !isTenantRootProject(resolvedParentProject)
       ? CREATE_PROJECT_WIZARD_DEMO.createNestedProjectLabel
       : 'New project'
   const createActionLabel = isEditMode
     ? CREATE_PROJECT_WIZARD_DEMO.saveProjectLabel
-    : parentProject
+    : resolvedParentProject && !isTenantRootProject(resolvedParentProject)
       ? CREATE_PROJECT_WIZARD_DEMO.createNestedProjectLabel
       : CREATE_PROJECT_WIZARD_DEMO.createProjectLabel
   const isPage = presentation === 'page'
 
   const wizard = isOpen ? (
     <Wizard
-      key={editingProject?.id ?? parentProject?.id ?? 'create-tenant-project-wizard'}
+      key={editingProject?.id ?? 'create-tenant-project-wizard'}
       className="tenant-admin-projects-teams__wizard"
-      height={isPage ? '100%' : '40rem'}
+      height={isPage ? '100%' : '43rem'}
       isPlain={isPage}
       onClose={isPage ? undefined : requestClose}
       header={

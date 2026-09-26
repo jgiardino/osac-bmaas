@@ -321,7 +321,7 @@ export const CATALOG_SERVICE_OFFERINGS: CatalogServiceOffering[] = [
 export const CATALOG_SERVICE_LABELS: Record<CatalogServiceId, string> = {
   baremetal: 'Bare Metal',
   cluster: 'Cluster',
-  models: 'Model',
+  models: 'MaaS',
   'virtual-machine': 'Virtual Machine',
 }
 
@@ -347,8 +347,9 @@ export function getCatalogServiceOffering(serviceId: CatalogServiceId): CatalogS
 export const PUBLISH_CATALOG_STEPS = [
   { id: 'service', label: 'Service' },
   { id: 'template', label: 'Template' },
-  { id: 'display-name', label: 'Name' },
-  { id: 'hardware-os', label: 'Hardware & OS' },
+  { id: 'display-name', label: 'General' },
+  { id: 'hardware', label: 'Hardware' },
+  { id: 'os', label: 'OS' },
   { id: 'node-topology', label: 'Node topology' },
   { id: 'field-policies', label: 'Lock fields' },
   { id: 'publish-scope', label: 'Visibility' },
@@ -392,6 +393,8 @@ export type PublishedTemplatePayload = {
   clusterVersionMode?: 'locked' | 'editable'
   /** Bare metal Hardware & OS: locked (default) or editable at provisioning. */
   hardwareOsMode?: 'locked' | 'editable'
+  /** Bare metal OS image: locked (default) or editable at provisioning. */
+  osImageMode?: 'locked' | 'editable'
   /** Cluster default worker node set id/label. */
   nodeSetId?: string
   nodeSetLabel?: string

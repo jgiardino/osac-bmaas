@@ -9,6 +9,7 @@ import {
   Title,
 } from "@patternfly/react-core";
 import { EntityDetailsPageShell } from "../shared/EntityDetailsPageShell";
+import type { EntityDetailsBreadcrumbAncestor } from "../shared/EntityDetailsPageShell";
 import { EntityDetailsActionsDropdown } from "../shared/EntityDetailsActionsDropdown";
 import {
   getNetworkInventoryStatus,
@@ -46,11 +47,15 @@ export function SubnetDetailsPage({
   onNavigateToVirtualNetwork,
 }: SubnetDetailsPageProps) {
   const status = getNetworkInventoryStatus(subnet);
+  const breadcrumbAncestors: EntityDetailsBreadcrumbAncestor[] = onNavigateToVirtualNetwork
+    ? [{ label: virtualNetworkName, onClick: onNavigateToVirtualNetwork }]
+    : [{ label: virtualNetworkName }];
 
   return (
     <EntityDetailsPageShell
-      parentLabel="Subnets"
+      parentLabel="Virtual networks"
       onBack={onBack}
+      breadcrumbAncestors={breadcrumbAncestors}
       title={subnet.name}
       titleId="subnet-details-title"
       description={
@@ -90,12 +95,6 @@ export function SubnetDetailsPage({
                 >
                   {status}
                 </Label>
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Subnet ID</DescriptionListTerm>
-              <DescriptionListDescription>
-                <code>{subnet.id}</code>
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>

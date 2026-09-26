@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarsIcon } from '@patternfly/react-icons/dist/esm/icons/bars-icon'
@@ -36,41 +36,32 @@ import {
 } from '@patternfly/react-core'
 import {
   PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS,
-  PROVIDER_ADMIN_AI_NAV_ITEMS,
-  PROVIDER_ADMIN_GENAI_NAV_ITEMS,
-  PROVIDER_ADMIN_NETWORKING_NAV_ITEMS,
-  PROVIDER_ADMIN_SERVICES_NAV_ITEMS,
+  PROVIDER_ADMIN_NETWORKING_NAV_ID,
+  PROVIDER_ADMIN_NETWORKING_NAV_LABEL,
+  resolveProviderAdminNavId,
   isAdministrationNavId,
-  isAiSettingsNavId,
-  isGenaiStudioNavId,
   isNetworkingNavId,
-  isServicesNavId,
   type ProviderAdminNavId,
 } from '../../providerAdmin/constants'
 import { clearProviderOnboardingState } from '../../providerSetup/storage'
 import type { WorkspaceTransition } from '../../providerAdmin/workspace'
-import { SHOW_LOCAL_DEV_PATTERNS_NAV } from '../../vision/modelFleet'
 import { UserPreferencesModal } from '../shared/UserPreferencesModal'
 import { VertexaCloudMastheadLogo } from './VertexaCloudMastheadLogo'
 
 type ProviderAdminShellProps = {
   children: ReactNode
   showNavigation?: boolean
-  showVisionNav?: boolean
   activeNavId?: ProviderAdminNavId
   onNavChange?: (navId: ProviderAdminNavId) => void
   workspaceTransition?: WorkspaceTransition
-  isContentFilled?: boolean
 }
 
 export function ProviderAdminShell({
   children,
   showNavigation = false,
-  showVisionNav = false,
   activeNavId = 'overview',
   onNavChange,
   workspaceTransition = 'idle',
-  isContentFilled = false,
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
@@ -84,11 +75,11 @@ export function ProviderAdminShell({
             <BarsIcon />
           </PageToggleButton>
         </MastheadToggle>
-        <MastheadLogo className="vertexa-masthead-logo">
-          <MastheadBrand>
+        <MastheadBrand>
+          <MastheadLogo className="vertexa-masthead-logo">
             <VertexaCloudMastheadLogo />
-          </MastheadBrand>
-        </MastheadLogo>
+          </MastheadLogo>
+        </MastheadBrand>
       </MastheadMain>
 
       <MastheadContent className="provider-admin-masthead-content">
@@ -167,7 +158,7 @@ export function ProviderAdminShell({
         <Nav
           aria-label="Provider admin"
           onSelect={(_event, item) => {
-            const navId = String(item.itemId) as ProviderAdminNavId
+            const navId = resolveProviderAdminNavId(String(item.itemId) as ProviderAdminNavId)
             onNavChange?.(navId)
           }}
         >
@@ -180,74 +171,8 @@ export function ProviderAdminShell({
             >
               Overview
             </NavItem>
-            {showVisionNav ? (
-              <>
-                <NavItem
-                  itemId="vision-model-fleet"
-                  isActive={activeNavId === 'vision-model-fleet'}
-                  to="#"
-                  preventDefault
-                >
-                  AI Grid
-                </NavItem>
-                {SHOW_LOCAL_DEV_PATTERNS_NAV ? (
-                  <NavItem
-                    itemId="vision-model-catalog-patterns"
-                    isActive={activeNavId === 'vision-model-catalog-patterns'}
-                    to="#"
-                    preventDefault
-                  >
-                    Patterns
-                  </NavItem>
-                ) : null}
-              </>
-            ) : null}
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
               Catalog
-            </NavItem>
-            <NavExpandable
-              id="provider-admin-services-nav"
-              title="Services"
-              isExpanded
-              isActive={isServicesNavId(activeNavId)}
-            >
-              {PROVIDER_ADMIN_SERVICES_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
-            <NavExpandable
-              id="provider-admin-genai-studio-nav"
-              title="GenAI studio"
-              isExpanded
-              isActive={isGenaiStudioNavId(activeNavId)}
-            >
-              {PROVIDER_ADMIN_GENAI_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
-            <NavItem
-              itemId="projects-teams"
-              isActive={activeNavId === 'projects-teams'}
-              to="#"
-              preventDefault
-            >
-              Projects
             </NavItem>
             <NavExpandable
               id="provider-admin-administration-nav"
@@ -267,42 +192,17 @@ export function ProviderAdminShell({
                 </NavItem>
               ))}
             </NavExpandable>
-            <NavExpandable
-              id="provider-admin-ai-nav"
-              title="AI"
-              isExpanded
-              isActive={isAiSettingsNavId(activeNavId)}
-            >
-              {PROVIDER_ADMIN_AI_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
-            <NavExpandable
-              id="provider-admin-networking-nav"
-              title="Networking"
-              isExpanded
+            <NavItem
+              itemId={PROVIDER_ADMIN_NETWORKING_NAV_ID}
               isActive={isNetworkingNavId(activeNavId)}
+              to="#"
+              preventDefault
             >
-              {PROVIDER_ADMIN_NETWORKING_NAV_ITEMS.map((item) => (
-                <NavItem
-                  key={item.id}
-                  itemId={item.id}
-                  isActive={activeNavId === item.id}
-                  to="#"
-                  preventDefault
-                >
-                  {item.label}
-                </NavItem>
-              ))}
-            </NavExpandable>
+              {PROVIDER_ADMIN_NETWORKING_NAV_LABEL}
+            </NavItem>
+            <NavItem itemId="secrets" isActive={activeNavId === 'secrets'} to="#" preventDefault>
+              Secrets
+            </NavItem>
           </NavList>
         </Nav>
       </PageSidebarBody>
@@ -315,45 +215,29 @@ export function ProviderAdminShell({
         masthead={header}
         sidebar={sidebar}
         isManagedSidebar={showNavigation}
-        isContentFilled={isContentFilled}
-        style={
-          isContentFilled
-            ? ({
-                '--pf-v6-c-page__main-container--MaxHeight':
-                  'calc(100% - var(--pf-t--global--spacer--md))',
-                '--pf-v6-c-page__main-container--MarginBlockEnd':
-                  'var(--pf-t--global--spacer--md)',
-              } as CSSProperties)
-            : undefined
-        }
         className={[
           showNavigation ? 'provider-admin-shell-page' : undefined,
-          isContentFilled ? 'provider-admin-shell-page--filled' : undefined,
           workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {workspaceTransition !== 'idle' ? (
-          <div
-            className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <Spinner size="xl" aria-label="Publishing catalog item" />
-          </div>
-        ) : null}
-        {isContentFilled ? (
-          children
-        ) : (
-          <PageSection
-            isWidthLimited={!showNavigation}
-            isCenterAligned={!showNavigation}
-            className="provider-admin-shell__main"
-          >
-            <div className="provider-admin-shell__content">{children}</div>
-          </PageSection>
-        )}
+        <PageSection
+          isWidthLimited={!showNavigation}
+          isCenterAligned={!showNavigation}
+          className="provider-admin-shell__main"
+        >
+          {workspaceTransition !== 'idle' ? (
+            <div
+              className={`provider-admin-publishing-overlay provider-admin-publishing-overlay--${workspaceTransition}`}
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Spinner size="xl" aria-label="Publishing catalog item" />
+            </div>
+          ) : null}
+          <div className="provider-admin-shell__content">{children}</div>
+        </PageSection>
       </Page>
       <UserPreferencesModal
         isOpen={isPreferencesModalOpen}
