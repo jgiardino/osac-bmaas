@@ -6,7 +6,6 @@ import {
   DrawerContentBody,
   DrawerPanelContent,
   Divider,
-  PageSection,
   Stack,
   StackItem,
 } from '@patternfly/react-core'
@@ -250,8 +249,8 @@ export const VisionModelFleetPage = ({
   }
 
   return (
-    <>
-      <PageSection aria-label="Tenant and catalog or services view">
+    <div className="ai-grid-future-vision">
+      <div className="ai-grid-future-vision__toolbar">
         <VisionGridFilters
           orgFilter={orgFilter}
           view={drawerTab}
@@ -259,20 +258,16 @@ export const VisionModelFleetPage = ({
           onViewChange={handleViewChange}
           showTenantFilter={!lockedOrgId}
         />
-      </PageSection>
-      <PageSection
-        isFilled
-        padding={{ default: 'noPadding' }}
-        hasBodyWrapper={false}
-        className="ai-grid-future-vision__fleet pf-v6-u-min-height"
-        aria-label="AI Grid map and drawer"
-      >
-        <Stack className="pf-v6-u-h-100">
-          <StackItem>
-            <Divider inset={{ default: 'insetNone' }} />
-          </StackItem>
-          <StackItem isFilled className="pf-v6-u-min-height">
-        <Drawer isExpanded isInline isStatic className="pf-v6-u-h-100" id="vision-grid-layout">
+      </div>
+      <Divider inset={{ default: 'insetNone' }} />
+      <div className="ai-grid-future-vision__fleet" aria-label="AI Grid map and drawer">
+        <Drawer
+          isExpanded
+          isInline
+          isStatic
+          className="pf-v6-u-h-100 pf-v6-u-min-height"
+          id="vision-grid-layout"
+        >
           <DrawerContent
             className="pf-v6-u-h-100 pf-v6-u-min-height"
             panelContent={
@@ -372,10 +367,8 @@ export const VisionModelFleetPage = ({
               </Stack>
             </DrawerContentBody>
           </DrawerContent>
-        </Drawer>
-          </StackItem>
-        </Stack>
-      </PageSection>
+      </Drawer>
+      </div>
 
       <VisionPlaceModelModal
         key={placePresetId ?? 'place-closed'}
@@ -397,6 +390,6 @@ export const VisionModelFleetPage = ({
         onClose={() => setAddOfferingId(null)}
         onAdd={handleAddCluster}
       />
-    </>
+    </div>
   )
 }

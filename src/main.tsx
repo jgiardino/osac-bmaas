@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@patternfly/react-core/dist/styles/base.css'
+import '@patternfly/react-styles/css/utilities/_index.css'
 import '@patternfly/react-topology/dist/esm/css/topology-components.css'
 import '@patternfly/react-topology/dist/esm/css/topology-controlbar.css'
 import '@patternfly/react-topology/dist/esm/css/topology-side-bar.css'

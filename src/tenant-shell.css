@@ -32,6 +32,34 @@
   min-width: 0;
 }
 
+.tenant-shell-page:has(.ai-grid-future-vision) {
+  height: 100dvh;
+}
+
+.tenant-shell-page__main.osac-page-main-section:has(.ai-grid-future-vision) {
+  min-width: 0;
+  overflow: hidden;
+  padding-block: 0;
+}
+
+.tenant-shell-page__main.osac-page-main-section:has(.ai-grid-future-vision)
+  > .pf-v6-c-page__main-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tenant-shell-page__main.osac-page-main-section:has(.ai-grid-future-vision)
+  .pf-v6-c-page__main-body > div {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .osac-shell-sidebar-inner {
   display: flex;
   flex-direction: column;

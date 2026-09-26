@@ -218,6 +218,7 @@ export function ProviderAdminShell({
         masthead={header}
         sidebar={sidebar}
         isManagedSidebar={showNavigation}
+        isContentFilled={activeNavId === 'ai-grid'}
         className={[
           showNavigation ? 'provider-admin-shell-page' : undefined,
           workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
@@ -226,6 +227,7 @@ export function ProviderAdminShell({
           .join(' ')}
       >
         <PageSection
+          isFilled={activeNavId === 'ai-grid'}
           isWidthLimited={!showNavigation}
           isCenterAligned={!showNavigation}
           className="provider-admin-shell__main"

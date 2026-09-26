@@ -2163,6 +2163,53 @@
   max-width: none;
 }
 
+/* Let AI Grid occupy the shell's one filled page section without nested PageSections. */
+.provider-admin-shell-page:has(.ai-grid-future-vision) {
+  height: 100dvh;
+}
+
+.provider-admin-shell-page .provider-admin-shell__main.pf-v6-c-page-section:has(.ai-grid-future-vision) {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding-block-start: 0;
+  padding-block-end: 0;
+}
+
+.provider-admin-shell-page .provider-admin-shell__main:has(.ai-grid-future-vision) > .pf-v6-c-page__main-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.provider-admin-shell-page .provider-admin-shell__content:has(.ai-grid-future-vision) {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.provider-admin-shell-page .provider-admin-shell__content:has(.ai-grid-future-vision) > div {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.provider-admin-shell-page .ai-grid-future-vision {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .provider-admin-publishing-overlay {
   position: fixed;
   inset: 0;

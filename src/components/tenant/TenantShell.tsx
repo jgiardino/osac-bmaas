@@ -55,6 +55,7 @@ type TenantShellProps = {
   onNavChange?: (navId: string) => void
   disabledNavIds?: string[]
   isOnboardingLayout?: boolean
+  isContentFilled?: boolean
   organizationSlug?: string
   companyLogoSrc?: string | null
   companyLogoAlt?: string
@@ -78,6 +79,7 @@ export function TenantShell({
   onNavChange,
   disabledNavIds = [],
   isOnboardingLayout = false,
+  isContentFilled = false,
   organizationSlug,
   companyLogoSrc = null,
   companyLogoAlt,
@@ -308,6 +310,7 @@ export function TenantShell({
         masthead={masthead}
         sidebar={showNavigation ? sidebar : undefined}
         isManagedSidebar={showNavigation}
+        isContentFilled={isContentFilled}
         className={[
           'tenant-shell-page',
           isOnboardingLayout ? 'tenant-shell-page--onboarding' : undefined,
@@ -316,6 +319,7 @@ export function TenantShell({
           .join(' ')}
       >
         <PageSection
+          isFilled={isContentFilled}
           isWidthLimited={isOnboardingLayout}
           isCenterAligned={isOnboardingLayout}
           className="tenant-shell-page__main osac-page-main-section"
