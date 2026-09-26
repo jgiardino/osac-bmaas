@@ -133,6 +133,10 @@ function SingleEnterActions({
 export function BmaasLandingPage() {
   const providerPrototypeLinks: PrototypeLink[] = [
     {
+      label: 'Model authoring flows',
+      to: '/model-authoring-flows',
+    },
+    {
       label: 'Catalog',
       to: '/provider/workspace?nav=catalog',
     },

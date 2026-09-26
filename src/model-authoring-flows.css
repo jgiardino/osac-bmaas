@@ -1,0 +1,16 @@
+.vision-model-authoring-flows__alert {
+  margin-block: var(--pf-t--global--spacer--md);
+}
+
+.vision-model-flow-preview {
+  margin-block-start: var(--pf-t--global--spacer--md);
+  min-width: 0;
+}
+
+.vision-model-flow-preview__success {
+  margin-block-start: var(--pf-t--global--spacer--lg);
+}
+
+.vision-model-flow-preview__cluster-cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}

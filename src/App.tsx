@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ConceptualDesignSticker } from './components/ConceptualDesignSticker'
 import { BmaasLandingPage } from './pages/BmaasLandingPage'
+import { VisionModelAuthoringFlowsPage } from './pages/provider-admin/vision/VisionModelAuthoringFlowsPage'
 import { IdpManagerSetupPage } from './pages/IdpManagerSetupPage'
 import { IdpManagerWorkspacePage } from './pages/IdpManagerWorkspacePage'
 import { M360AccountDetailsPage } from './pages/m360/M360AccountDetailsPage'
@@ -41,6 +42,7 @@ export default function App() {
       <ConceptualDesignSticker />
       <Routes>
         <Route path="/" element={<BmaasLandingPage />} />
+        <Route path="/model-authoring-flows" element={<VisionModelAuthoringFlowsPage />} />
         <Route path="/idp-manager/northstar/change-password" element={<RedirectNorthstarIdpManager />} />
         <Route path="/idp-manager/northstar/workspace" element={<RedirectNorthstarIdpManager />} />
         <Route path="/idp-manager/northstar" element={<RedirectNorthstarIdpManager />} />
