@@ -5476,3 +5476,16 @@
     animation: none;
   }
 }
+
+.vision-model-authoring-flows__alert {
+  margin-block: var(--pf-t--global--spacer--md);
+}
+
+.vision-model-flow-preview {
+  margin-block-start: var(--pf-t--global--spacer--md);
+  min-width: 0;
+}
+
+.vision-model-flow-preview__success {
+  margin-block-start: var(--pf-t--global--spacer--lg);
+}

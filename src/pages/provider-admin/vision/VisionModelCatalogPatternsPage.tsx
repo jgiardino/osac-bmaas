@@ -8,8 +8,14 @@ import { createModelCatalogDrafts } from '../../../vision/modelCatalogSeed'
 import { VisionGridObjectCardPatterns } from './VisionGridObjectCardPatterns'
 import { VisionModelInstancePatternsPage } from './VisionModelInstancePatternsPage'
 import { VisionModelListPatternsPage } from './VisionModelListPatternsPage'
+import { VisionModelAuthoringFlowsPage } from './VisionModelAuthoringFlowsPage'
 
-type PatternsTab = 'catalog' | 'ai-grid-cards' | 'instance-lists' | 'fleet-list'
+type PatternsTab =
+  | 'catalog'
+  | 'ai-grid-cards'
+  | 'instance-lists'
+  | 'fleet-list'
+  | 'deploy-model-flows'
 
 const PATTERN_ITEMS = createModelCatalogDrafts()
 
@@ -104,6 +110,13 @@ export const VisionModelCatalogPatternsPage = () => {
           id="vision-patterns-tab-fleet-list"
         >
           <VisionModelListPatternsPage embedded />
+        </Tab>
+        <Tab
+          eventKey="deploy-model-flows"
+          title={<TabTitleText>Deploy Model flows</TabTitleText>}
+          id="vision-patterns-tab-deploy-model-flows"
+        >
+          <VisionModelAuthoringFlowsPage />
         </Tab>
       </Tabs>
     </div>
