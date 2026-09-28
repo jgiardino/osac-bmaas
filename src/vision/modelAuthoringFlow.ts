@@ -1,16 +1,17 @@
 export type ModelChoicePolicy =
   | 'byom'
-  | 'fixed-model'
-  | 'limited-catalog'
+  | 'specified-models'
   | 'configured-catalog'
+
+export type ServiceWizardVariation = 'predictive' | 'llm-instruct' | 'llm-tool-calling'
+
+export type SpecifiedModelSource = 'catalog' | 'connection'
 
 export type DeployModelType =
   | 'Generative AI model (including LLMs and multimodal models)'
   | 'Predictive model'
 
 export type ModelSettingId =
-  | 'modelType'
-  | 'modelFormat'
   | 'servingMethod'
   | 'runtime'
   | 'cpu'
@@ -26,35 +27,57 @@ export type ModelSettingMode = 'locked' | 'editable'
 
 export type ModelSettingModes = Record<ModelSettingId, ModelSettingMode>
 
+export type ModelCatalogChoice = 'all' | 'specific'
+
+export type ModelTenantAccessOption = 'catalog' | 'connection'
+
+export type ModelCatalogSourceSettings = {
+  tenantAccessOptions: ModelTenantAccessOption[]
+  catalogChoices: Record<string, ModelCatalogChoice>
+  specificModels: Record<string, string>
+}
+
+export type ModelCatalogClusterAvailability = {
+  accessMode: ModelSettingMode
+  eligibleClusterIds: string[]
+}
+
 export const DEFAULT_MODEL_SETTING_MODES: ModelSettingModes = {
-  modelType: 'locked',
-  modelFormat: 'locked',
-  servingMethod: 'locked',
-  runtime: 'locked',
+  servingMethod: 'editable',
+  runtime: 'editable',
   cpu: 'editable',
   memory: 'editable',
   gpu: 'editable',
   capacity: 'editable',
-  topology: 'locked',
-  routing: 'locked',
-  runtimeCustomization: 'locked',
-  lifecycle: 'locked',
+  topology: 'editable',
+  routing: 'editable',
+  runtimeCustomization: 'editable',
+  lifecycle: 'editable',
+}
+
+export const DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS: ModelCatalogSourceSettings = {
+  tenantAccessOptions: ['catalog', 'connection'],
+  catalogChoices: {},
+  specificModels: {},
+}
+
+export const DEFAULT_MODEL_CLUSTER_AVAILABILITY: ModelCatalogClusterAvailability = {
+  accessMode: 'locked',
+  eligibleClusterIds: [],
 }
 
 export const DEMO_APPROVED_MODELS = [
-  'Small text-generation model A · 1.5B',
-  'Small text-generation model B · 3B',
-  'Small text-generation model C · 7B',
+  'Granite 3B instruct',
+  'Mistral 7B',
+  'Llama 4 Scout',
 ] as const
 
 export const getModelChoicePolicyLabel = (policy: ModelChoicePolicy) => {
   switch (policy) {
     case 'byom':
       return 'Bring your own model (BYOM)'
-    case 'fixed-model':
-      return 'One specific model (locked)'
-    case 'limited-catalog':
-      return 'A predefined set of models'
+    case 'specified-models':
+      return 'Choose one or more specified models'
     case 'configured-catalog':
       return 'Any model in the configured catalog'
   }

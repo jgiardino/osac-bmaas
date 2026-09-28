@@ -26,6 +26,14 @@ import {
 import type { RegisteredOrganization } from '../providerAdmin/organizations'
 import type { ProviderCatalogDraft } from '../providerSetup/storage'
 import {
+  DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS,
+  DEFAULT_MODEL_CLUSTER_AVAILABILITY,
+  DEFAULT_MODEL_SETTING_MODES,
+  type ModelCatalogSourceSettings,
+  type ModelSettingId,
+  type ModelSettingModes,
+} from '../vision/modelAuthoringFlow'
+import {
   getCatalogServiceOffering,
   type CatalogServiceId,
   type PublishCatalogScope,
@@ -52,9 +60,14 @@ export type CatalogEditSnapshot = {
   hostType: SnapshotValue
   clusterNodeTopologyMode: SnapshotValue
   fieldPolicies: SnapshotValue
+  modelClusterAvailability: SnapshotValue
+  modelSourceSettings: SnapshotValue
+  modelServingAccess: SnapshotValue
+  modelResourceAccess: SnapshotValue
   visibility: SnapshotValue
   isClusterService: boolean
   isBaremetalService: boolean
+  isModelService: boolean
 }
 
 export type CatalogEditChangeRow = {
@@ -94,6 +107,66 @@ function serializeFieldPolicies(policies: CatalogFieldPolicy[]): string {
         mode: policy.mode,
         defaultValue: policy.defaultValue ?? '',
       })),
+  )
+}
+
+const MODEL_SERVING_SETTING_IDS: readonly ModelSettingId[] = ['servingMethod', 'runtime']
+const MODEL_RESOURCE_SETTING_IDS: readonly ModelSettingId[] = [
+  'cpu',
+  'memory',
+  'gpu',
+  'capacity',
+  'topology',
+  'routing',
+  'runtimeCustomization',
+  'lifecycle',
+]
+
+function serializeModelSourceSettings(settings: ModelCatalogSourceSettings): string {
+  return JSON.stringify({
+    tenantAccessOptions: [...settings.tenantAccessOptions].sort(),
+    catalogChoices: Object.fromEntries(Object.entries(settings.catalogChoices).sort()),
+    specificModels: Object.fromEntries(Object.entries(settings.specificModels).sort()),
+  })
+}
+
+function formatModelSourceSettings(settings: ModelCatalogSourceSettings): string {
+  const sourceOptions = settings.tenantAccessOptions.map((option) =>
+    option === 'catalog' ? 'Models from the catalog' : 'Models from a connection',
+  )
+  const tenantChoices = Object.entries(settings.catalogChoices)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([tenantId, choice]) => {
+      if (choice === 'all') {
+        return tenantId + ': All models'
+      }
+      return tenantId + ': ' + (settings.specificModels[tenantId] || 'Specific models')
+    })
+
+  return [...sourceOptions, ...tenantChoices].join('; ') || 'No model source option selected'
+}
+
+function modelSettingModesSnapshot(
+  modes: ModelSettingModes,
+  settingIds: readonly ModelSettingId[],
+): SnapshotValue {
+  const settings = Object.fromEntries(settingIds.map((id) => [id, modes[id]]))
+  const lockedCount = settingIds.filter((id) => modes[id] === 'locked').length
+  const editableCount = settingIds.length - lockedCount
+  return snapshotValue(
+    JSON.stringify(settings),
+    lockedCount + ' locked · ' + editableCount + ' editable',
+  )
+}
+
+function modelClusterAvailabilitySnapshot(
+  availability: typeof DEFAULT_MODEL_CLUSTER_AVAILABILITY,
+): SnapshotValue {
+  const { accessMode, eligibleClusterIds } = availability
+  return snapshotValue(
+    JSON.stringify({ accessMode, eligibleClusterIds: [...eligibleClusterIds].sort() }),
+    (accessMode === 'locked' ? 'Locked' : 'Editable at provisioning') +
+      (eligibleClusterIds.length ? ' · ' + eligibleClusterIds.join(', ') : ''),
   )
 }
 
@@ -256,6 +329,11 @@ export function buildCatalogEditSnapshotFromCatalog(
   const serviceId = catalog.serviceId ?? 'baremetal'
   const isClusterService = serviceId === 'cluster'
   const isBaremetalService = serviceId === 'baremetal'
+  const isModelService = serviceId === 'models'
+  const modelSourceSettings = catalog.modelSourceSettings ?? DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS
+  const modelClusterAvailability =
+    catalog.modelClusterAvailability ?? DEFAULT_MODEL_CLUSTER_AVAILABILITY
+  const modelSettingModes = { ...DEFAULT_MODEL_SETTING_MODES, ...catalog.modelSettingModes }
   const enterpriseTenantIds = getCatalogEnterpriseTenantIds(catalog)
   const fieldPolicies = resolveHydratedFieldPolicies(catalog, serviceId, templates)
   const instanceTypeId = resolveHydratedInstanceTypeId(serviceId, catalog.instanceTypeId)
@@ -270,6 +348,7 @@ export function buildCatalogEditSnapshotFromCatalog(
   return {
     isClusterService,
     isBaremetalService,
+    isModelService,
     service: snapshotValue(
       serviceId,
       getCatalogServiceOffering(serviceId).title,
@@ -320,6 +399,13 @@ export function buildCatalogEditSnapshotFromCatalog(
       serializeFieldPolicies(fieldPolicies),
       formatFieldPoliciesSummary(fieldPolicies),
     ),
+    modelClusterAvailability: modelClusterAvailabilitySnapshot(modelClusterAvailability),
+    modelSourceSettings: snapshotValue(
+      serializeModelSourceSettings(modelSourceSettings),
+      formatModelSourceSettings(modelSourceSettings),
+    ),
+    modelServingAccess: modelSettingModesSnapshot(modelSettingModes, MODEL_SERVING_SETTING_IDS),
+    modelResourceAccess: modelSettingModesSnapshot(modelSettingModes, MODEL_RESOURCE_SETTING_IDS),
     visibility: snapshotValue(
       `${catalog.scope}|${[...enterpriseTenantIds].sort().join('|')}`,
       formatVisibilityLabel(catalog.scope, enterpriseTenantIds, organizations),
@@ -345,6 +431,9 @@ export type CatalogEditWizardState = {
   fieldPolicies: CatalogFieldPolicy[]
   publishScope: PublishCatalogScope
   enterpriseTenantIds: string[]
+  modelSourceSettings: ModelCatalogSourceSettings
+  modelClusterAvailability: typeof DEFAULT_MODEL_CLUSTER_AVAILABILITY
+  modelSettingModes: ModelSettingModes
 }
 
 export function buildCatalogEditSnapshotFromWizardState(
@@ -355,10 +444,12 @@ export function buildCatalogEditSnapshotFromWizardState(
   const serviceId = state.serviceId ?? 'baremetal'
   const isClusterService = serviceId === 'cluster'
   const isBaremetalService = serviceId === 'baremetal'
+  const isModelService = serviceId === 'models'
 
   return {
     isClusterService,
     isBaremetalService,
+    isModelService,
     service: snapshotValue(
       serviceId,
       getCatalogServiceOffering(serviceId).title,
@@ -406,6 +497,19 @@ export function buildCatalogEditSnapshotFromWizardState(
     fieldPolicies: snapshotValue(
       serializeFieldPolicies(state.fieldPolicies),
       formatFieldPoliciesSummary(state.fieldPolicies),
+    ),
+    modelClusterAvailability: modelClusterAvailabilitySnapshot(state.modelClusterAvailability),
+    modelSourceSettings: snapshotValue(
+      serializeModelSourceSettings(state.modelSourceSettings),
+      formatModelSourceSettings(state.modelSourceSettings),
+    ),
+    modelServingAccess: modelSettingModesSnapshot(
+      state.modelSettingModes,
+      MODEL_SERVING_SETTING_IDS,
+    ),
+    modelResourceAccess: modelSettingModesSnapshot(
+      state.modelSettingModes,
+      MODEL_RESOURCE_SETTING_IDS,
     ),
     visibility: snapshotValue(
       `${state.publishScope}|${[...state.enterpriseTenantIds].sort().join('|')}`,
@@ -472,6 +576,30 @@ const CHANGE_FIELD_CONFIG: ReadonlyArray<{
     isApplicable: (snapshot) => snapshot.isClusterService,
   },
   { id: 'fieldPolicies', stepId: 'field-policies', label: 'Lock fields' },
+  {
+    id: 'modelClusterAvailability',
+    stepId: 'cluster-availability',
+    label: 'Eligible clusters',
+    isApplicable: (snapshot) => snapshot.isModelService,
+  },
+  {
+    id: 'modelSourceSettings',
+    stepId: 'model-source',
+    label: 'Model source and selection',
+    isApplicable: (snapshot) => snapshot.isModelService,
+  },
+  {
+    id: 'modelServingAccess',
+    stepId: 'serving-configuration',
+    label: 'Serving method and runtime access',
+    isApplicable: (snapshot) => snapshot.isModelService,
+  },
+  {
+    id: 'modelResourceAccess',
+    stepId: 'resources',
+    label: 'Resource access',
+    isApplicable: (snapshot) => snapshot.isModelService,
+  },
   { id: 'visibility', stepId: 'publish-scope', label: 'Visibility' },
 ]
 
@@ -544,6 +672,7 @@ export function getEmptyCatalogEditSnapshot(): CatalogEditSnapshot {
   return {
     isClusterService: false,
     isBaremetalService: false,
+    isModelService: false,
     service: EMPTY_SNAPSHOT_VALUE,
     template: EMPTY_SNAPSHOT_VALUE,
     displayName: EMPTY_SNAPSHOT_VALUE,
@@ -557,6 +686,10 @@ export function getEmptyCatalogEditSnapshot(): CatalogEditSnapshot {
     hostType: EMPTY_SNAPSHOT_VALUE,
     clusterNodeTopologyMode: EMPTY_SNAPSHOT_VALUE,
     fieldPolicies: EMPTY_SNAPSHOT_VALUE,
+    modelClusterAvailability: EMPTY_SNAPSHOT_VALUE,
+    modelSourceSettings: EMPTY_SNAPSHOT_VALUE,
+    modelServingAccess: EMPTY_SNAPSHOT_VALUE,
+    modelResourceAccess: EMPTY_SNAPSHOT_VALUE,
     visibility: EMPTY_SNAPSHOT_VALUE,
   }
 }

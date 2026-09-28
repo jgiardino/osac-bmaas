@@ -92,6 +92,7 @@ import {
   type CatalogClusterVersionOption,
   type CatalogFieldPolicy,
   type CatalogHardwareOsMode,
+  type CatalogModelChoice,
   type CatalogOsImageMode,
   type CustomInstanceTypeConfig,
 } from '../../catalog/catalogPublishConfig'
@@ -105,6 +106,13 @@ import {
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../../providerAdmin/catalogNetworkPolicy'
 import { isValidKubernetesResourceName } from '../../shared/kubernetesResourceName'
+import {
+  DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS,
+  DEFAULT_MODEL_CLUSTER_AVAILABILITY,
+  DEFAULT_MODEL_SETTING_MODES,
+  type ModelSettingId,
+  type ModelSettingMode,
+} from '../../vision/modelAuthoringFlow'
 import {
   CATALOG_SERVICE_OFFERINGS,
   getCatalogServiceOffering,
@@ -139,12 +147,39 @@ import {
 } from '../../billing/m360RateLines'
 import type { ProviderCatalogDraft } from '../../providerSetup/storage'
 import { getCatalogItemStatus } from '../../providerSetup/storage'
+import { ModelCatalogClusterAvailabilityStep } from '../provider-admin/vision/ModelCatalogClusterAvailabilityStep'
+import { ModelCatalogResourcesStep } from '../provider-admin/vision/ModelCatalogResourcesStep'
+import { ModelCatalogServingConfigurationStep } from '../provider-admin/vision/ModelCatalogServingConfigurationStep'
+import {
+  ModelCatalogSourceOptions,
+  type ModelCatalogChoice,
+  type ModelTenantAccessOption,
+} from '../provider-admin/vision/ModelCatalogSourceOptions'
+import { getModelCatalogTenantClusters } from '../provider-admin/vision/modelCatalogClusters'
 
 type PublishClusterTopologyRow = {
   id: string
   nodeSetId: string
   hostTypeId: string
 }
+
+const MODEL_PUBLISH_STEP_IDS = new Set([
+  'service',
+  'template',
+  'display-name',
+  'publish-scope',
+  'cluster-availability',
+  'model-source',
+  'serving-configuration',
+  'resources',
+  'review',
+])
+const MODEL_ONLY_PUBLISH_STEP_IDS = new Set([
+  'cluster-availability',
+  'model-source',
+  'serving-configuration',
+  'resources',
+])
 
 function createPublishClusterTopologyRow(
   index: number,
@@ -427,6 +462,20 @@ export function ProviderSetupPublishCatalogWizard({
   const [description, setDescription] = useState('')
   const [publishScope, setPublishScope] = useState<PublishCatalogScope>('global-public')
   const [enterpriseTenantIds, setEnterpriseTenantIds] = useState<string[]>([])
+  const [modelClusterAccess, setModelClusterAccess] = useState<ModelSettingMode>(
+    DEFAULT_MODEL_CLUSTER_AVAILABILITY.accessMode,
+  )
+  const [modelEligibleClusterIds, setModelEligibleClusterIds] = useState<string[]>(
+    DEFAULT_MODEL_CLUSTER_AVAILABILITY.eligibleClusterIds,
+  )
+  const [modelTenantAccessOptions, setModelTenantAccessOptions] = useState<
+    readonly ModelTenantAccessOption[]
+  >(DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.tenantAccessOptions)
+  const [modelCatalogChoices, setModelCatalogChoices] = useState<
+    Record<string, ModelCatalogChoice>
+  >({})
+  const [modelSpecificModels, setModelSpecificModels] = useState<Record<string, string>>({})
+  const [modelSettingModes, setModelSettingModes] = useState(DEFAULT_MODEL_SETTING_MODES)
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
   const [editBaseline, setEditBaseline] = useState<CatalogEditSnapshot | null>(null)
 
@@ -438,6 +487,62 @@ export function ProviderSetupPublishCatalogWizard({
   )
   const isClusterService = selectedServiceId === 'cluster'
   const isBareMetalService = selectedServiceId === 'baremetal'
+  const isModelService = selectedServiceId === 'models'
+  const modelVisibleTenantIds =
+    publishScope === 'global-public'
+      ? organizations.map((organization) => organization.tenantId)
+      : enterpriseTenantIds
+  const visibleModelOrganizations = organizations.filter((organization) =>
+    modelVisibleTenantIds.includes(organization.tenantId),
+  )
+  const modelSourceSummary = [
+    ...(modelTenantAccessOptions.includes('catalog')
+      ? [
+          `Models from the catalog (${visibleModelOrganizations
+            .map((organization) => {
+              const choice = modelCatalogChoices[organization.tenantId] ?? 'all'
+              return `${organization.name}: ${
+                choice === 'all'
+                  ? 'All models'
+                  : modelSpecificModels[organization.tenantId] || 'Specific models'
+              }`
+            })
+            .join('; ')})`,
+        ]
+      : []),
+    ...(modelTenantAccessOptions.includes('connection') ? ['Models from a connection'] : []),
+  ].join('; ')
+  const selectedModelClusterNames = organizations
+    .filter((organization) => modelVisibleTenantIds.includes(organization.tenantId))
+    .flatMap((organization) => getModelCatalogTenantClusters(organization.tenantId))
+    .filter((cluster) => modelEligibleClusterIds.includes(cluster.id))
+    .map((cluster) => cluster.name)
+  const modelChoice: CatalogModelChoice | undefined = isModelService
+    ? {
+        mode: modelTenantAccessOptions.includes('catalog')
+          ? visibleModelOrganizations.some(
+              (organization) =>
+                (modelCatalogChoices[organization.tenantId] ?? 'all') === 'specific',
+            )
+            ? 'limited-catalog'
+            : 'configured-catalog'
+          : modelTenantAccessOptions.includes('connection')
+            ? 'byom'
+            : 'undecided',
+        summary: modelSourceSummary || 'No model source option selected',
+        ...(() => {
+          const selectedModels = [...new Set(
+            visibleModelOrganizations.flatMap((organization) =>
+              (modelSpecificModels[organization.tenantId] ?? '')
+                .split(',')
+                .map((model) => model.trim())
+                .filter(Boolean),
+            ),
+          )]
+          return selectedModels.length > 0 ? { selectedModels } : {}
+        })(),
+      }
+    : undefined
   const softwareImageOptions = useMemo(
     () =>
       isClusterService ? getCatalogClusterVersionOptions() : getCatalogDiskImageOptions(),
@@ -521,6 +626,16 @@ export function ProviderSetupPublishCatalogWizard({
         fieldPolicies,
         publishScope,
         enterpriseTenantIds,
+        modelSourceSettings: {
+          tenantAccessOptions: [...modelTenantAccessOptions],
+          catalogChoices: { ...modelCatalogChoices },
+          specificModels: { ...modelSpecificModels },
+        },
+        modelClusterAvailability: {
+          accessMode: modelClusterAccess,
+          eligibleClusterIds: [...modelEligibleClusterIds],
+        },
+        modelSettingModes: { ...modelSettingModes },
       },
       templates,
       organizations,
@@ -546,6 +661,12 @@ export function ProviderSetupPublishCatalogWizard({
     selectedServiceId,
     selectedTemplateRefId,
     templates,
+    modelClusterAccess,
+    modelEligibleClusterIds,
+    modelTenantAccessOptions,
+    modelCatalogChoices,
+    modelSpecificModels,
+    modelSettingModes,
   ])
   const editChanges = useMemo(() => {
     if (!isEditMode || !editBaseline || !currentEditSnapshot) {
@@ -691,8 +812,8 @@ export function ProviderSetupPublishCatalogWizard({
   const canCreateCatalogItem =
     Boolean(selectedServiceId) &&
     Boolean(selectedTemplate) &&
-    Boolean(selectedInstanceType) &&
-    Boolean(selectedDiskImage) &&
+    (isModelService || Boolean(selectedInstanceType)) &&
+    (isModelService || Boolean(selectedDiskImage)) &&
     (!isClusterService ||
       clusterTopologyRows.every(
         (row) => Boolean(row.nodeSetId.trim()) && Boolean(row.hostTypeId.trim()),
@@ -705,6 +826,12 @@ export function ProviderSetupPublishCatalogWizard({
   const publishSteps = useMemo(
     () =>
       PUBLISH_CATALOG_STEPS.filter((step) => {
+        if (isModelService && !MODEL_PUBLISH_STEP_IDS.has(step.id)) {
+          return false
+        }
+        if (!isModelService && MODEL_ONLY_PUBLISH_STEP_IDS.has(step.id)) {
+          return false
+        }
         if (step.id === 'publish-scope' && hidePublishScope) {
           return false
         }
@@ -726,7 +853,7 @@ export function ProviderSetupPublishCatalogWizard({
           ? { ...step, label: 'Cluster version' }
           : step,
       ),
-    [hasLockableParameters, hasSingleTemplate, hidePublishScope, isClusterService],
+    [hasLockableParameters, hasSingleTemplate, hidePublishScope, isClusterService, isModelService],
   )
 
   const selectVipEnterprise = () => {
@@ -759,6 +886,12 @@ export function ProviderSetupPublishCatalogWizard({
     setDescription('')
     setPublishScope('global-public')
     setEnterpriseTenantIds([])
+    setModelClusterAccess('locked')
+    setModelEligibleClusterIds([...DEFAULT_MODEL_CLUSTER_AVAILABILITY.eligibleClusterIds])
+    setModelTenantAccessOptions([...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.tenantAccessOptions])
+    setModelCatalogChoices({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.catalogChoices })
+    setModelSpecificModels({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.specificModels })
+    setModelSettingModes({ ...DEFAULT_MODEL_SETTING_MODES })
   }
 
   const handleClose = () => {
@@ -861,6 +994,31 @@ export function ProviderSetupPublishCatalogWizard({
     } else {
       setEnterpriseTenantIds([])
     }
+
+    setModelClusterAccess(
+      catalog.modelClusterAvailability?.accessMode ??
+        DEFAULT_MODEL_CLUSTER_AVAILABILITY.accessMode,
+    )
+    setModelEligibleClusterIds(
+      catalog.modelClusterAvailability?.eligibleClusterIds ??
+        [...DEFAULT_MODEL_CLUSTER_AVAILABILITY.eligibleClusterIds],
+    )
+    setModelTenantAccessOptions(
+      catalog.modelSourceSettings?.tenantAccessOptions ??
+        [...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.tenantAccessOptions],
+    )
+    setModelCatalogChoices({
+      ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.catalogChoices,
+      ...catalog.modelSourceSettings?.catalogChoices,
+    })
+    setModelSpecificModels({
+      ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.specificModels,
+      ...catalog.modelSourceSettings?.specificModels,
+    })
+    setModelSettingModes({
+      ...DEFAULT_MODEL_SETTING_MODES,
+      ...catalog.modelSettingModes,
+    })
 
     if (catalog.instanceTypeId) {
       setSelectedInstanceTypeId(catalog.instanceTypeId)
@@ -994,6 +1152,12 @@ export function ProviderSetupPublishCatalogWizard({
       setClusterTopologyRows([createPublishClusterTopologyRow(1)])
       setClusterNodeTopologyMode('locked')
       setFieldPolicies([])
+      setModelClusterAccess('locked')
+      setModelEligibleClusterIds([...DEFAULT_MODEL_CLUSTER_AVAILABILITY.eligibleClusterIds])
+      setModelTenantAccessOptions([...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.tenantAccessOptions])
+      setModelCatalogChoices({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.catalogChoices })
+      setModelSpecificModels({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.specificModels })
+      setModelSettingModes({ ...DEFAULT_MODEL_SETTING_MODES })
       return
     }
 
@@ -1024,6 +1188,12 @@ export function ProviderSetupPublishCatalogWizard({
     setOsImageMode('locked')
     setClusterTopologyRows([createPublishClusterTopologyRow(1)])
     setClusterNodeTopologyMode('locked')
+    setModelClusterAccess('locked')
+    setModelEligibleClusterIds([...DEFAULT_MODEL_CLUSTER_AVAILABILITY.eligibleClusterIds])
+    setModelTenantAccessOptions([...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.tenantAccessOptions])
+    setModelCatalogChoices({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.catalogChoices })
+    setModelSpecificModels({ ...DEFAULT_MODEL_CATALOG_SOURCE_SETTINGS.specificModels })
+    setModelSettingModes({ ...DEFAULT_MODEL_SETTING_MODES })
   }, [isEditMode, selectedServiceId])
 
   useEffect(() => {
@@ -1082,7 +1252,7 @@ export function ProviderSetupPublishCatalogWizard({
       if (!selectedDiskImageId || !selectedNodeSetId || !selectedHostTypeId) {
         return
       }
-    } else if (!selectedInstanceTypeId || !selectedDiskImageId) {
+    } else if (!isModelService && (!selectedInstanceTypeId || !selectedDiskImageId)) {
       return
     }
 
@@ -1114,6 +1284,7 @@ export function ProviderSetupPublishCatalogWizard({
     selectedServiceId,
     selectedTemplate,
     selectedTemplateRefId,
+    isModelService,
   ])
 
   const buildCatalogItemPayload = (): PublishedTemplatePayload | null => {
@@ -1121,8 +1292,7 @@ export function ProviderSetupPublishCatalogWizard({
       !canCreateCatalogItem ||
       !selectedServiceId ||
       !selectedTemplate ||
-      !selectedInstanceType ||
-      !selectedDiskImage
+      (!isModelService && (!selectedInstanceType || !selectedDiskImage))
     ) {
       return null
     }
@@ -1148,12 +1318,35 @@ export function ProviderSetupPublishCatalogWizard({
       description: description.trim(),
       scope: publishScope,
       rateCard: catalogRateCard,
-      instanceTypeId: selectedInstanceType.id,
-      instanceTypeLabel: selectedInstanceTypeLabel,
-      diskImageId: selectedDiskImage.id,
-      diskImageLabel: isClusterService
-        ? formatClusterPlatformLabel(selectedDiskImage.id)
-        : selectedDiskImage.label,
+      ...(modelChoice ? { modelChoice } : {}),
+      ...(isModelService
+        ? {
+            modelSourceSettings: {
+              tenantAccessOptions: [...modelTenantAccessOptions],
+              catalogChoices: { ...modelCatalogChoices },
+              specificModels: { ...modelSpecificModels },
+            },
+            modelClusterAvailability: {
+              accessMode: modelClusterAccess,
+              eligibleClusterIds: [...modelEligibleClusterIds],
+            },
+            modelSettingModes: { ...modelSettingModes },
+          }
+        : {}),
+      ...(!isModelService && selectedInstanceType
+        ? {
+            instanceTypeId: selectedInstanceType.id,
+            instanceTypeLabel: selectedInstanceTypeLabel,
+          }
+        : {}),
+      ...(!isModelService && selectedDiskImage
+        ? {
+            diskImageId: selectedDiskImage.id,
+            diskImageLabel: isClusterService
+              ? formatClusterPlatformLabel(selectedDiskImage.id)
+              : selectedDiskImage.label,
+          }
+        : {}),
       ...(isClusterService
         ? {
             clusterVersionMode: resolveCatalogClusterVersionMode(clusterVersionMode),
@@ -1470,6 +1663,65 @@ export function ProviderSetupPublishCatalogWizard({
               })}
             </div>
           </div>
+        )
+      case 'cluster-availability':
+        return (
+          <ModelCatalogClusterAvailabilityStep
+            organizations={organizations}
+            visibleTenantIds={modelVisibleTenantIds}
+            eligibleClusterIds={modelEligibleClusterIds}
+            onEligibleClusterIdsChange={(clusterIds) =>
+              setModelEligibleClusterIds([...clusterIds])
+            }
+            accessMode={modelClusterAccess}
+            onAccessModeChange={setModelClusterAccess}
+          />
+        )
+      case 'model-source':
+        return (
+          <ModelCatalogSourceOptions
+            tenants={visibleModelOrganizations}
+            tenantAccessOptions={modelTenantAccessOptions}
+            onTenantAccessOptionsChange={setModelTenantAccessOptions}
+            catalogChoices={modelCatalogChoices}
+            onCatalogChoiceChange={(tenantId, choice) =>
+              setModelCatalogChoices((current) => ({
+                ...current,
+                [tenantId]: choice,
+              }))
+            }
+            specificModels={modelSpecificModels}
+            onSpecificModelsChange={(tenantId, models) =>
+              setModelSpecificModels((current) => ({
+                ...current,
+                [tenantId]: models,
+              }))
+            }
+          />
+        )
+      case 'serving-configuration':
+        return (
+          <>
+            <Title headingLevel="h2" size="xl">
+              Serving method and runtime
+            </Title>
+            <ModelCatalogServingConfigurationStep
+              llmOnly={false}
+              settingModes={modelSettingModes}
+              onSettingModeChange={(id: ModelSettingId, mode: ModelSettingMode) =>
+                setModelSettingModes((current) => ({ ...current, [id]: mode }))
+              }
+            />
+          </>
+        )
+      case 'resources':
+        return (
+          <ModelCatalogResourcesStep
+            settingModes={modelSettingModes}
+            onSettingModeChange={(id: ModelSettingId, mode: ModelSettingMode) =>
+              setModelSettingModes((current) => ({ ...current, [id]: mode }))
+            }
+          />
         )
       case 'hardware':
         return (
@@ -2628,7 +2880,7 @@ export function ProviderSetupPublishCatalogWizard({
                   {description.trim() || '—'}
                 </DescriptionListDescription>
               </DescriptionListGroup>
-              {!isClusterService ? (
+              {!isClusterService && !isModelService ? (
                 <DescriptionListGroup>
                   <DescriptionListTerm>
                     {isBareMetalService && hardwareOsMode === 'editable'
@@ -2654,14 +2906,15 @@ export function ProviderSetupPublishCatalogWizard({
                   </DescriptionListDescription>
                 </DescriptionListGroup>
               ) : null}
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {isBareMetalService && osImageMode === 'editable'
-                    ? 'Default OS image'
-                    : softwareImageStepLabel}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {selectedDiskImage ? (
+              {!isModelService ? (
+                <DescriptionListGroup>
+                  <DescriptionListTerm>
+                    {isBareMetalService && osImageMode === 'editable'
+                      ? 'Default OS image'
+                      : softwareImageStepLabel}
+                  </DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {selectedDiskImage ? (
                     <span className="provider-setup-template__publish-review-version">
                       {selectedDiskImage.label}
                       {isClusterService && selectedDiskImage.id === latestClusterVersionId ? (
@@ -2693,11 +2946,31 @@ export function ProviderSetupPublishCatalogWizard({
                         </Label>
                       ) : null}
                     </span>
-                  ) : (
-                    '—'
-                  )}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
+                    ) : (
+                      '—'
+                    )}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+              ) : null}
+              {includesPublishStep('cluster-availability') ? (
+                <DescriptionListGroup>
+                  <DescriptionListTerm>Eligible clusters</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {modelClusterAccess === 'locked' ? 'Locked' : 'Editable at provisioning'}
+                    {selectedModelClusterNames.length > 0
+                      ? ` · ${selectedModelClusterNames.join(', ')}`
+                      : ''}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+              ) : null}
+              {includesPublishStep('model-source') ? (
+                <DescriptionListGroup>
+                  <DescriptionListTerm>Model source</DescriptionListTerm>
+                  <DescriptionListDescription>
+                    {modelSourceSummary || 'No model source option selected'}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+              ) : null}
               {includesPublishStep('node-topology') ? (
                 <>
                   {clusterTopologyRows.map((row, index) => (

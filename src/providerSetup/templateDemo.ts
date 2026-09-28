@@ -1,9 +1,15 @@
-import type { CatalogFieldPolicy } from '../catalog/catalogPublishConfig'
+import type { CatalogFieldPolicy, CatalogModelChoice } from '../catalog/catalogPublishConfig'
 import { CATALOG_ITEM_DESCRIPTIONS_BY_SERVICE } from '../catalog/catalogItemDescriptions'
 import type { CatalogNetworkPolicy } from '../providerAdmin/catalogNetworkPolicy'
+import type {
+  ModelCatalogClusterAvailability,
+  ModelCatalogSourceSettings,
+  ModelSettingModes,
+} from '../vision/modelAuthoringFlow'
 
 export type { CatalogNetworkPolicy }
 export type { CatalogFieldPolicy }
+export type { CatalogModelChoice }
 
 export type HardwareProfileCategory = 'compute' | 'gpu-ai'
 
@@ -353,6 +359,10 @@ export const PUBLISH_CATALOG_STEPS = [
   { id: 'node-topology', label: 'Node topology' },
   { id: 'field-policies', label: 'Lock fields' },
   { id: 'publish-scope', label: 'Visibility' },
+  { id: 'cluster-availability', label: 'Cluster availability' },
+  { id: 'model-source', label: 'Model source' },
+  { id: 'serving-configuration', label: 'Serving configuration' },
+  { id: 'resources', label: 'Resources' },
   { id: 'review', label: 'Review' },
 ] as const
 
@@ -405,4 +415,12 @@ export type PublishedTemplatePayload = {
   clusterNodeTopologyMode?: 'locked' | 'editable'
   /** Locked vs exposed field policies for launch. */
   fieldPolicies?: CatalogFieldPolicy[]
+  /** Models only: the source and selection policy shown at launch. */
+  modelChoice?: CatalogModelChoice
+  /** Models only: authoring policy for catalog/connection sources and per-tenant catalog choices. */
+  modelSourceSettings?: ModelCatalogSourceSettings
+  /** Models only: tenant cluster eligibility and whether tenants can change it at launch. */
+  modelClusterAvailability?: ModelCatalogClusterAvailability
+  /** Models only: lock/edit policies for serving and resource settings. */
+  modelSettingModes?: ModelSettingModes
 }

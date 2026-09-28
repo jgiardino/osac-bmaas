@@ -6,3 +6,16 @@
 .vision-model-flow-preview__cluster-cards {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
+
+.vision-model-flow-preview__environment-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: var(--pf-t--global--spacer--md);
+  align-items: end;
+}
+
+@media (max-width: 40rem) {
+  .vision-model-flow-preview__environment-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

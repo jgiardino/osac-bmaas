@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { Content, Tab, TabTitleText, Tabs } from '@patternfly/react-core'
+import { Tab, TabTitleText, Tabs } from '@patternfly/react-core'
 import '../../../model-authoring-flows.css'
 import {
   DEMO_APPROVED_MODELS,
   DEFAULT_MODEL_SETTING_MODES,
-  type DeployModelType,
-  type ModelChoicePolicy,
   type ModelSettingId,
   type ModelSettingMode,
   type ModelSettingModes,
@@ -14,20 +12,15 @@ import { ModelCatalogItemWizardPreview } from './ModelCatalogItemWizardPreview'
 import { ModelServiceLaunchWizardPreview } from './ModelServiceLaunchWizardPreview'
 
 export function VisionModelAuthoringFlowsPage() {
-  const [activeFlow, setActiveFlow] = useState<'catalog-item' | 'service-instance'>(
-    'catalog-item',
-  )
-  const [modelChoicePolicy, setModelChoicePolicy] =
-    useState<ModelChoicePolicy>('limited-catalog')
-  const [modelType, setModelType] = useState<DeployModelType>(
-    'Generative AI model (including LLMs and multimodal models)',
-  )
+  const [activeFlow, setActiveFlow] = useState<
+    'catalog-item' | 'predictive' | 'llm-instruct' | 'llm-tool-calling'
+  >('catalog-item')
   const [selectedModels, setSelectedModels] = useState<readonly string[]>(() =>
-    DEMO_APPROVED_MODELS.slice(0, 2),
+    [...DEMO_APPROVED_MODELS],
   )
   const [eligibleClusterIds, setEligibleClusterIds] = useState<readonly string[]>([
-    'east-gpu',
-    'west-gpu',
+    'ocp-us-east-1',
+    'ocp-eu-west-1',
   ])
   const [settingModes, setSettingModes] = useState<ModelSettingModes>(() => ({
     ...DEFAULT_MODEL_SETTING_MODES,
@@ -39,12 +32,11 @@ export function VisionModelAuthoringFlowsPage() {
 
   return (
     <div className="vision-model-authoring-flows">
-      <Content component="p">
-        Explore the provider-admin catalog item flow and tenant launch flow. Model-choice and lock policies carry from the catalog preview into the launch preview.
-      </Content>
       <Tabs
         activeKey={activeFlow}
-        onSelect={(_event, key) => setActiveFlow(key as 'catalog-item' | 'service-instance')}
+        onSelect={(_event, key) =>
+          setActiveFlow(key as 'catalog-item' | 'predictive' | 'llm-instruct' | 'llm-tool-calling')
+        }
         aria-label="Deploy Model prototype flows"
         id="vision-model-authoring-flow-tabs"
         mountOnEnter
@@ -56,11 +48,6 @@ export function VisionModelAuthoringFlowsPage() {
           id="vision-model-authoring-flow-tab-catalog"
         >
           <ModelCatalogItemWizardPreview
-            modelChoicePolicy={modelChoicePolicy}
-            onModelChoicePolicyChange={setModelChoicePolicy}
-            modelType={modelType}
-            onModelTypeChange={setModelType}
-            selectedModels={selectedModels}
             onSelectedModelsChange={setSelectedModels}
             eligibleClusterIds={eligibleClusterIds}
             onEligibleClusterIdsChange={setEligibleClusterIds}
@@ -69,14 +56,37 @@ export function VisionModelAuthoringFlowsPage() {
           />
         </Tab>
         <Tab
-          eventKey="service-instance"
-          title={<TabTitleText>Launch instance for model</TabTitleText>}
-          id="vision-model-authoring-flow-tab-instance"
+          eventKey="predictive"
+          title={<TabTitleText>Launch instance: predictive</TabTitleText>}
+          id="vision-model-authoring-flow-tab-predictive"
         >
           <ModelServiceLaunchWizardPreview
-            modelChoicePolicy={modelChoicePolicy}
+            variation="predictive"
             settingModes={settingModes}
-            modelType={modelType}
+            selectedModels={selectedModels}
+            eligibleClusterIds={eligibleClusterIds}
+          />
+        </Tab>
+        <Tab
+          eventKey="llm-instruct"
+          title={<TabTitleText>Launch instance: llm-instruct</TabTitleText>}
+          id="vision-model-authoring-flow-tab-llm-instruct"
+        >
+          <ModelServiceLaunchWizardPreview
+            variation="llm-instruct"
+            settingModes={settingModes}
+            selectedModels={selectedModels}
+            eligibleClusterIds={eligibleClusterIds}
+          />
+        </Tab>
+        <Tab
+          eventKey="llm-tool-calling"
+          title={<TabTitleText>Launch instance: llm-tool-calling</TabTitleText>}
+          id="vision-model-authoring-flow-tab-llm-tool-calling"
+        >
+          <ModelServiceLaunchWizardPreview
+            variation="llm-tool-calling"
+            settingModes={settingModes}
             selectedModels={selectedModels}
             eligibleClusterIds={eligibleClusterIds}
           />

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import {
+  Alert,
   Card,
   CardBody,
-  Checkbox,
   Content,
   DescriptionList,
   DescriptionListDescription,
@@ -10,44 +10,39 @@ import {
   DescriptionListTerm,
   Form,
   FormGroup,
-  FormSelect,
-  FormSelectOption,
   Icon,
   Label,
-  Radio,
-  Stack,
-  StackItem,
   TextArea,
-  TextInput,
   Title,
   Wizard,
   WizardStep,
 } from '@patternfly/react-core'
-import { CatalogIcon } from '@patternfly/react-icons/dist/esm/icons/catalog-icon'
+import { getCatalogServiceIcon } from '../../../catalog/serviceIcons'
 import { CatalogPublishScopeIcon } from '../../../components/provider-admin/CatalogPublishScopeIcon'
+import { VipEnterpriseOrganizationField } from '../../../components/provider-admin/VipEnterpriseOrganizationField'
 import { KubernetesResourceNameField } from '../../../components/shared/KubernetesResourceNameHelper'
+import type { RegisteredOrganization } from '../../../providerAdmin/organizations'
+import { ensureProviderDemoOrganizations } from '../../../providerSetup/storage'
 import {
-  DEMO_APPROVED_MODELS,
-  getModelChoicePolicyLabel,
-  type DeployModelType,
-  type ModelChoicePolicy,
-  type ModelSettingId,
-  type ModelSettingMode,
-  type ModelSettingModes,
+  CATALOG_SERVICE_OFFERINGS,
+  getPublishCatalogSuggestedDisplayName,
+} from '../../../providerSetup/templateDemo'
+import type {
+  ModelSettingId,
+  ModelSettingMode,
+  ModelSettingModes,
 } from '../../../vision/modelAuthoringFlow'
-import { ModelSettingPolicyField } from './ModelSettingPolicyField'
-
-const getClusterCardClassName = (isSelected: boolean) =>
-  `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
-    isSelected ? ' provider-setup-template__select-card--selected' : ''
-  }`
+import { getModelCatalogTenantClusters } from './modelCatalogClusters'
+import { ModelCatalogClusterAvailabilityStep } from './ModelCatalogClusterAvailabilityStep'
+import { ModelCatalogResourcesStep } from './ModelCatalogResourcesStep'
+import { ModelCatalogServingConfigurationStep } from './ModelCatalogServingConfigurationStep'
+import {
+  ModelCatalogSourceOptions,
+  type ModelCatalogChoice,
+  type ModelTenantAccessOption,
+} from './ModelCatalogSourceOptions'
 
 type ModelCatalogItemWizardPreviewProps = {
-  modelChoicePolicy: ModelChoicePolicy
-  onModelChoicePolicyChange: (policy: ModelChoicePolicy) => void
-  modelType: DeployModelType
-  onModelTypeChange: (modelType: DeployModelType) => void
-  selectedModels: readonly string[]
   onSelectedModelsChange: (models: readonly string[]) => void
   eligibleClusterIds: readonly string[]
   onEligibleClusterIdsChange: (clusterIds: readonly string[]) => void
@@ -55,73 +50,81 @@ type ModelCatalogItemWizardPreviewProps = {
   onSettingModeChange: (id: ModelSettingId, mode: ModelSettingMode) => void
 }
 
+type CatalogVisibility = 'global-public' | 'vip-enterprise'
+
+const formatSelectedTenants = (
+  organizations: readonly RegisteredOrganization[],
+  selectedTenantIds: readonly string[],
+) => {
+  if (selectedTenantIds.length === 0) {
+    return 'No tenants selected'
+  }
+  return selectedTenantIds
+    .map(
+      (tenantId) =>
+        organizations.find((organization) => organization.tenantId === tenantId)?.name ?? tenantId,
+    )
+    .join(', ')
+}
+
 export function ModelCatalogItemWizardPreview({
-  modelChoicePolicy,
-  onModelChoicePolicyChange,
-  modelType,
-  onModelTypeChange,
-  selectedModels,
   onSelectedModelsChange,
   eligibleClusterIds,
   onEligibleClusterIdsChange,
   settingModes,
   onSettingModeChange,
 }: ModelCatalogItemWizardPreviewProps) {
-  const [visibility, setVisibility] = useState<'global' | 'tenant'>('tenant')
-  const [displayName, setDisplayName] = useState('llm-instruct')
-  const [description, setDescription] = useState(
-    'Instruction-tuned models for data pipelines and backend workflows.',
+  const [organizations] = useState<RegisteredOrganization[]>(() =>
+    ensureProviderDemoOrganizations(),
   )
+  const [visibility, setVisibility] = useState<CatalogVisibility>('global-public')
+  const [selectedServiceId, setSelectedServiceId] = useState('models')
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([])
+  const [displayName, setDisplayName] = useState('')
+  const [description, setDescription] = useState('')
+  const [clusterAccess, setClusterAccess] = useState<ModelSettingMode>('locked')
+  const [tenantAccessOptions, setTenantAccessOptions] = useState<
+    readonly ModelTenantAccessOption[]
+  >(['catalog', 'connection'])
+  const [catalogChoices, setCatalogChoices] = useState<Record<string, ModelCatalogChoice>>({})
+  const [specificModels, setSpecificModels] = useState<Record<string, string>>({})
 
-  const toggleModel = (model: string, isChecked: boolean) => {
-    if (modelChoicePolicy === 'fixed-model') {
-      if (isChecked) {
-        onSelectedModelsChange([model])
-      }
-      return
-    }
+  const modelService = CATALOG_SERVICE_OFFERINGS.find(
+    (service) => service.id === selectedServiceId,
+  )!
+  const visibleTenantIds =
+    visibility === 'global-public'
+      ? organizations.map((organization) => organization.tenantId)
+      : selectedTenantIds
+  const visibleOrganizations = organizations.filter((organization) =>
+    visibleTenantIds.includes(organization.tenantId),
+  )
+  const allClusters = organizations.flatMap((organization) =>
+    getModelCatalogTenantClusters(organization.tenantId),
+  )
+  const selectedClusterNames = allClusters
+    .filter((cluster) => eligibleClusterIds.includes(cluster.id))
+    .map((cluster) => cluster.name)
+  const selectedModelAccessLabels = [
+    ...(tenantAccessOptions.includes('catalog') ? ['Models from the catalog'] : []),
+    ...(tenantAccessOptions.includes('connection') ? ['Models from a connection'] : []),
+  ]
 
-    if (!isChecked && selectedModels.length === 1) {
-      return
+  const selectVipEnterprise = () => {
+    setVisibility('vip-enterprise')
+    if (selectedTenantIds.length === 0 && organizations[0]) {
+      setSelectedTenantIds([organizations[0].tenantId])
     }
-
-    const next = new Set(selectedModels)
-    if (isChecked) {
-      next.add(model)
-    } else {
-      next.delete(model)
-    }
-    onSelectedModelsChange(Array.from(next))
   }
 
-  const toggleCluster = (clusterId: string, isChecked: boolean) => {
-    if (!isChecked && eligibleClusterIds.length === 1) {
-      return
-    }
-
-    const next = new Set(eligibleClusterIds)
-    if (isChecked) {
-      next.add(clusterId)
-    } else {
-      next.delete(clusterId)
-    }
-    onEligibleClusterIdsChange(Array.from(next))
+  const updateSpecificModels = (tenantId: string, value: string) => {
+    setSpecificModels((current) => ({ ...current, [tenantId]: value }))
+    const models = value
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean)
+    onSelectedModelsChange(models)
   }
-
-  const settingPolicyField = (
-    id: ModelSettingId,
-    label: string,
-    value: string,
-  ) => (
-    <ModelSettingPolicyField
-      key={id}
-      id={id}
-      label={label}
-      value={value}
-      mode={settingModes[id]}
-      onModeChange={(mode) => onSettingModeChange(id, mode)}
-    />
-  )
 
   return (
     <div className="vision-model-flow-preview">
@@ -131,77 +134,104 @@ export function ModelCatalogItemWizardPreview({
         navAriaLabel="Create model catalog item steps"
       >
         <WizardStep name="Service" id="model-catalog-service">
-          <Content component="p" className="provider-setup-template__publish-step-lede">
-            The model service is selected for this catalog item.
-          </Content>
-          <Card
-            isSelectable
-            isSelected
-            className="provider-setup-template__service-card"
-            aria-labelledby="model-catalog-service-title"
-          >
-            <CardBody className="provider-setup-template__service-card-body">
-              <Label
-                color="grey"
-                isCompact
-                className="provider-setup-template__service-card-badge"
-              >
-                Selected
-              </Label>
-              <div className="provider-setup-template__service-card-icon-wrap">
-                <Icon size="lg"><CatalogIcon /></Icon>
-              </div>
-              <Title
-                id="model-catalog-service-title"
-                headingLevel="h3"
-                size="md"
-                className="provider-setup-template__service-card-title"
-              >
-                Models as a Service
-              </Title>
-              <Content
-                component="p"
-                className="provider-setup-template__service-card-description"
-              >
-                Create a catalog item for a curated model endpoint.
-              </Content>
-            </CardBody>
-          </Card>
+          <div className="provider-setup-template__publish-service-step">
+            <Content component="p" className="provider-setup-template__publish-step-lede">
+              Choose the service this catalog item belongs to.
+            </Content>
+            <div
+              className="provider-setup-template__service-cards"
+              role="radiogroup"
+              aria-label="Catalog service"
+            >
+              {CATALOG_SERVICE_OFFERINGS.map((service) => {
+                const isSelected = selectedServiceId === service.id
+                const titleId = `model-catalog-service-${service.id}-title`
+
+                return (
+                  <Card
+                    key={service.id}
+                    isSelectable
+                    isSelected={isSelected}
+                    className="provider-setup-template__service-card"
+                    aria-labelledby={titleId}
+                    onClick={() => setSelectedServiceId(service.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedServiceId(service.id)
+                      }
+                    }}
+                  >
+                    <CardBody className="provider-setup-template__service-card-body">
+                      {isSelected ? (
+                        <Label
+                          color="grey"
+                          isCompact
+                          className="provider-setup-template__service-card-badge"
+                        >
+                          Selected
+                        </Label>
+                      ) : null}
+                      <div className="provider-setup-template__service-card-icon-wrap">
+                        <Icon size="lg">{getCatalogServiceIcon(service.id)}</Icon>
+                      </div>
+                      <Title
+                        id={titleId}
+                        headingLevel="h3"
+                        size="md"
+                        className="provider-setup-template__service-card-title"
+                      >
+                        {service.title}
+                      </Title>
+                      <Content
+                        component="p"
+                        className="provider-setup-template__service-card-description"
+                      >
+                        {service.description}
+                      </Content>
+                    </CardBody>
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
         </WizardStep>
 
         <WizardStep name="General" id="model-catalog-general">
-          <Content component="p" className="provider-setup-template__publish-step-lede">
-            Set the name and description tenants see in the catalog.
-          </Content>
-          <Form className="provider-setup-template__publish-display-form">
-            <FormGroup label="Name" fieldId="model-catalog-name" isRequired>
-              <KubernetesResourceNameField
-                id="model-catalog-name"
-                value={displayName}
-                onChange={setDisplayName}
-                aria-label="Name"
-                isRequired
-              />
-            </FormGroup>
-            <FormGroup label="Description" fieldId="model-catalog-description">
-              <TextArea
-                id="model-catalog-description"
-                value={description}
-                onChange={(_event, value) => setDescription(value)}
-                resizeOrientation="vertical"
-              />
-            </FormGroup>
-          </Form>
+          <div className="provider-setup-template__publish-display-step">
+            <Content component="p" className="provider-setup-template__publish-step-lede">
+              Set the name and description tenants see in the catalog.
+            </Content>
+            <Form autoComplete="off" className="provider-setup-template__publish-display-form">
+              <FormGroup label="Name" fieldId="model-catalog-name" isRequired>
+                <KubernetesResourceNameField
+                  id="model-catalog-name"
+                  value={displayName}
+                  onChange={setDisplayName}
+                  aria-label="Name"
+                  placeholder={`e.g. ${getPublishCatalogSuggestedDisplayName('models')}`}
+                  isRequired
+                />
+              </FormGroup>
+              <FormGroup label="Description" fieldId="model-catalog-description">
+                <TextArea
+                  id="model-catalog-description"
+                  value={description}
+                  onChange={(_event, value) => setDescription(value)}
+                  aria-label="Description"
+                  rows={3}
+                  resizeOrientation="vertical"
+                />
+              </FormGroup>
+            </Form>
+          </div>
         </WizardStep>
 
         <WizardStep name="Visibility" id="model-catalog-visibility">
-          <Title headingLevel="h2" size="xl">
-            Who should access it?
-          </Title>
-          <Content component="p">
-            Choose the Tenant before restricting which clusters can serve this catalog item.
-          </Content>
-          <Form>
+          <div className="provider-setup-template__publish-scope-step">
+            <Content component="p" className="provider-setup-template__publish-step-lede">
+              Control which tenants can discover and order this catalog item.
+            </Content>
             <div
               className="provider-admin-catalog__scope-options"
               role="radiogroup"
@@ -210,13 +240,18 @@ export function ModelCatalogItemWizardPreview({
               <button
                 type="button"
                 className={`provider-admin-catalog__scope-card${
-                  visibility === 'global' ? ' provider-admin-catalog__scope-card--selected' : ''
+                  visibility === 'global-public'
+                    ? ' provider-admin-catalog__scope-card--selected'
+                    : ''
                 }`}
-                onClick={() => setVisibility('global')}
+                onClick={() => {
+                  setVisibility('global-public')
+                  setSelectedTenantIds([])
+                }}
                 role="radio"
-                aria-checked={visibility === 'global'}
+                aria-checked={visibility === 'global-public'}
               >
-                {visibility === 'global' ? (
+                {visibility === 'global-public' ? (
                   <Label
                     color="grey"
                     isCompact
@@ -240,13 +275,15 @@ export function ModelCatalogItemWizardPreview({
                 <button
                   type="button"
                   className={`provider-admin-catalog__scope-card${
-                    visibility === 'tenant' ? ' provider-admin-catalog__scope-card--selected' : ''
+                    visibility === 'vip-enterprise'
+                      ? ' provider-admin-catalog__scope-card--selected'
+                      : ''
                   }`}
-                  onClick={() => setVisibility('tenant')}
+                  onClick={selectVipEnterprise}
                   role="radio"
-                  aria-checked={visibility === 'tenant'}
+                  aria-checked={visibility === 'vip-enterprise'}
                 >
-                  {visibility === 'tenant' ? (
+                  {visibility === 'vip-enterprise' ? (
                     <Label
                       color="grey"
                       isCompact
@@ -260,367 +297,143 @@ export function ModelCatalogItemWizardPreview({
                     className="provider-admin-catalog__scope-icon"
                   />
                   <span className="provider-admin-catalog__scope-copy">
-                    <span className="provider-admin-catalog__scope-title">Selected tenants</span>
+                    <span className="provider-admin-catalog__scope-title">VIP enterprise</span>
                     <span className="provider-admin-catalog__scope-detail">
-                      Visible only to selected tenants.
+                      Visible only to selected enterprise tenants.
                     </span>
                   </span>
                 </button>
-                {visibility === 'tenant' ? (
+                {visibility === 'vip-enterprise' ? (
                   <div className="provider-admin-catalog__scope-vip-nested">
-                    <FormGroup label="Tenant" fieldId="model-catalog-tenant" isRequired>
-                      <FormSelect id="model-catalog-tenant" value="northsummit">
-                        <FormSelectOption value="northsummit" label="North Summit Bank" />
-                        <FormSelectOption value="all-tenants" label="All tenants" />
-                      </FormSelect>
-                    </FormGroup>
+                    <VipEnterpriseOrganizationField
+                      organizations={[...organizations]}
+                      selectedTenantIds={selectedTenantIds}
+                      onSelectedTenantIdsChange={setSelectedTenantIds}
+                      fieldIdPrefix="model-catalog"
+                    />
                   </div>
                 ) : null}
               </div>
             </div>
-          </Form>
+          </div>
         </WizardStep>
 
         <WizardStep name="Cluster availability" id="model-catalog-clusters">
-          <Title headingLevel="h2" size="xl">
-            Where do you want to run it?
-          </Title>
-          <Content component="p">
-            Restrict this offering to clusters available to the selected Tenant.
-          </Content>
-          <Form>
-            <FormGroup label="Eligible clusters" fieldId="model-catalog-clusters">
-              <div
-                className={[
-                  'provider-setup-template__card-group',
-                  'provider-setup-template__card-group--instance-types',
-                  'vision-model-flow-preview__cluster-cards',
-                ].join(' ')}
-                role="group"
-                aria-label="Eligible clusters"
-              >
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={eligibleClusterIds.includes('east-gpu')}
-                  className={getClusterCardClassName(eligibleClusterIds.includes('east-gpu'))}
-                  onClick={() => toggleCluster('east-gpu', !eligibleClusterIds.includes('east-gpu'))}
-                >
-                  {eligibleClusterIds.includes('east-gpu') ? (
-                    <Label
-                      color="grey"
-                      isCompact
-                      className="provider-setup-template__select-card-selected-badge"
-                    >
-                      Selected
-                    </Label>
-                  ) : null}
-                  <Title
-                    headingLevel="h3"
-                    size="md"
-                    className="provider-setup-template__select-card-title"
-                  >
-                    East GPU cluster
-                  </Title>
-                  <Content component="p" className="provider-setup-template__select-card-detail">
-                    us-east-1 · 4 worker nodes
-                  </Content>
-                  <Content
-                    component="p"
-                    className="provider-setup-template__select-card-accelerator"
-                  >
-                    NVIDIA L4 · 24 GiB
-                  </Content>
-                </button>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={eligibleClusterIds.includes('west-gpu')}
-                  className={getClusterCardClassName(eligibleClusterIds.includes('west-gpu'))}
-                  onClick={() => toggleCluster('west-gpu', !eligibleClusterIds.includes('west-gpu'))}
-                >
-                  {eligibleClusterIds.includes('west-gpu') ? (
-                    <Label
-                      color="grey"
-                      isCompact
-                      className="provider-setup-template__select-card-selected-badge"
-                    >
-                      Selected
-                    </Label>
-                  ) : null}
-                  <Title
-                    headingLevel="h3"
-                    size="md"
-                    className="provider-setup-template__select-card-title"
-                  >
-                    West general-purpose cluster
-                  </Title>
-                  <Content component="p" className="provider-setup-template__select-card-detail">
-                    us-west-2 · CPU and accelerator worker pools
-                  </Content>
-                  <Content
-                    component="p"
-                    className="provider-setup-template__select-card-accelerator"
-                  >
-                    NVIDIA A10G · 24 GiB
-                  </Content>
-                </button>
-              </div>
-            </FormGroup>
-          </Form>
-          <Label color="blue" isCompact>
-            Tenant cluster choices are limited to this set
-          </Label>
+          <ModelCatalogClusterAvailabilityStep
+            organizations={organizations}
+            visibleTenantIds={visibleTenantIds}
+            eligibleClusterIds={eligibleClusterIds}
+            onEligibleClusterIdsChange={onEligibleClusterIdsChange}
+            accessMode={clusterAccess}
+            onAccessModeChange={setClusterAccess}
+          />
         </WizardStep>
 
         <WizardStep name="Model source" id="model-catalog-source">
-          <Title headingLevel="h2" size="xl">
-            What do you want to run?
-          </Title>
-          <Content component="p">
-            Set how much model choice the person launching this offering will have.
-          </Content>
-          <Form>
-            <FormGroup label="Model choice" fieldId="model-catalog-model-choice">
-              <Stack hasGutter>
-                <StackItem>
-                  <Radio
-                    id="model-policy-fixed"
-                    name="model-policy"
-                    label="One specific model"
-                    isChecked={modelChoicePolicy === 'fixed-model'}
-                    onChange={() => onModelChoicePolicyChange('fixed-model')}
-                  />
-                  <Content component="small">
-                    Lock the catalog item to a model. The admin supplies its source location and credentials.
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  <Radio
-                    id="model-policy-limited"
-                    name="model-policy"
-                    label="A predefined set of models"
-                    isChecked={modelChoicePolicy === 'limited-catalog'}
-                    onChange={() => onModelChoicePolicyChange('limited-catalog')}
-                  />
-                  <Content component="small">
-                    Let the person launching choose from models selected by the admin.
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  <Radio
-                    id="model-policy-catalog"
-                    name="model-policy"
-                    label="Any model in the configured catalog"
-                    isChecked={modelChoicePolicy === 'configured-catalog'}
-                    onChange={() => onModelChoicePolicyChange('configured-catalog')}
-                  />
-                  <Content component="small">
-                    The person launching can choose any model from the configured catalog.
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  <Radio
-                    id="model-policy-byom"
-                    name="model-policy"
-                    label="Bring your own model (BYOM)"
-                    isChecked={modelChoicePolicy === 'byom'}
-                    onChange={() => onModelChoicePolicyChange('byom')}
-                  />
-                  <Content component="small">
-                    The person launching supplies the model source location and credentials.
-                  </Content>
-                </StackItem>
-              </Stack>
-            </FormGroup>
-
-            {modelChoicePolicy === 'fixed-model' ? (
-              <FormGroup label="Model" fieldId="model-catalog-fixed-model" isRequired>
-                <FormSelect
-                  id="model-catalog-fixed-model"
-                  value={selectedModels[0] ?? ''}
-                  onChange={(_event, model) => onSelectedModelsChange([model])}
-                >
-                  {DEMO_APPROVED_MODELS.map((model) => (
-                    <FormSelectOption key={model} value={model} label={model} />
-                  ))}
-                </FormSelect>
-              </FormGroup>
-            ) : null}
-
-            {modelChoicePolicy === 'limited-catalog' ? (
-              <FormGroup label="Available model choices" fieldId="model-catalog-approved-models">
-                <Stack hasGutter>
-                  {DEMO_APPROVED_MODELS.map((model) => (
-                    <StackItem key={model}>
-                      <Checkbox
-                        id={`approved-${model.replaceAll(/[^a-z0-9]+/gi, '-')}`}
-                        label={model}
-                        isChecked={selectedModels.includes(model)}
-                        onChange={(_event, checked) => toggleModel(model, checked)}
-                      />
-                    </StackItem>
-                  ))}
-                </Stack>
-              </FormGroup>
-            ) : null}
-
-            {modelChoicePolicy !== 'byom' ? (
-              <FormGroup label="Model source catalog" fieldId="model-catalog-source-list">
-                <FormSelect id="model-catalog-source-list" value="rhoai-catalog">
-                  <FormSelectOption value="rhoai-catalog" label="RHOAI model catalog · Small LLMs" />
-                  <FormSelectOption value="team-models" label="North Summit approved models" />
-                </FormSelect>
-              </FormGroup>
-            ) : null}
-
-            {modelChoicePolicy === 'fixed-model' ? (
-              <FormGroup label="Model source location" fieldId="model-catalog-model-location" isRequired>
-                <TextInput
-                  id="model-catalog-model-location"
-                  defaultValue="s3://northsummit-models/approved-small-models/"
-                />
-                <Content component="small">
-                    The admin supplies the location for this fixed model.
-                </Content>
-              </FormGroup>
-            ) : null}
-
-            {modelChoicePolicy === 'limited-catalog' ||
-            modelChoicePolicy === 'configured-catalog' ? (
-              <Content component="small">
-                The person launching chooses the model and supplies its source location and credentials.
-              </Content>
-            ) : null}
-
-            {modelChoicePolicy === 'fixed-model' ? (
-              <FormGroup label="Source credentials" fieldId="model-catalog-secret">
-                <FormSelect id="model-catalog-secret" value="small-model-source-secret">
-                  <FormSelectOption
-                    value="small-model-source-secret"
-                    label="model-source-credentials · Secret reference"
-                  />
-                </FormSelect>
-              </FormGroup>
-            ) : null}
-          </Form>
+          <ModelCatalogSourceOptions
+            tenants={visibleOrganizations}
+            tenantAccessOptions={tenantAccessOptions}
+            onTenantAccessOptionsChange={setTenantAccessOptions}
+            catalogChoices={catalogChoices}
+            onCatalogChoiceChange={(tenantId, choice) =>
+              setCatalogChoices((current) => ({
+                ...current,
+                [tenantId]: choice,
+              }))
+            }
+            specificModels={specificModels}
+            onSpecificModelsChange={updateSpecificModels}
+          />
         </WizardStep>
 
         <WizardStep name="Serving configuration" id="model-catalog-serving">
           <Title headingLevel="h2" size="xl">
             Serving method and runtime
           </Title>
-          <Content component="p">
-            Choose the values and decide whether tenants can change them at launch.
-          </Content>
-          <Stack hasGutter>
-            <FormGroup label="Model type default" fieldId="model-catalog-model-type" isRequired>
-              <FormSelect
-                id="model-catalog-model-type"
-                value={modelType}
-                onChange={(_event, value) => onModelTypeChange(value as DeployModelType)}
-              >
-                <FormSelectOption
-                  value="Generative AI model (including LLMs and multimodal models)"
-                  label="Generative AI model (including LLMs and multimodal models)"
-                />
-                <FormSelectOption value="Predictive model" label="Predictive model" />
-              </FormSelect>
-            </FormGroup>
-            {settingPolicyField('modelType', 'Model type choice', modelType)}
-            {modelType === 'Predictive model'
-              ? settingPolicyField('modelFormat', 'Model format', 'ONNX')
-              : null}
-            {settingPolicyField('servingMethod', 'Serving method', 'LLMInferenceService')}
-            {settingPolicyField('runtime', 'Serving runtime', 'vLLM')}
-          </Stack>
+          <ModelCatalogServingConfigurationStep
+            llmOnly={false}
+            settingModes={settingModes}
+            onSettingModeChange={onSettingModeChange}
+          />
         </WizardStep>
 
         <WizardStep name="Resources" id="model-catalog-resources">
-          <Content component="p" className="provider-setup-template__publish-step-lede">
-            Set resource defaults and whether tenants can adjust them at launch.
-          </Content>
-          <Stack hasGutter>
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Compute</Title>
-              {settingPolicyField('cpu', 'CPU', '8 vCPU')}
-              {settingPolicyField('memory', 'Memory', '32 GiB')}
-              {settingPolicyField('gpu', 'GPU', '1 × NVIDIA L4 · 24 GiB')}
-              {settingPolicyField('capacity', 'Replica capacity', '1–3 replicas')}
-            </StackItem>
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Node topology</Title>
-              <Content component="p">Configure for offerings that use llm-d.</Content>
-              {settingPolicyField('topology', 'llm-d topology', 'Aggregated serving')}
-              {settingPolicyField('routing', 'Routing configuration', 'Gateway-managed routing')}
-            </StackItem>
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Runtime customization</Title>
-              {settingPolicyField(
-                'runtimeCustomization',
-                'Runtime arguments and environment',
-                'Catalog defaults',
-              )}
-            </StackItem>
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Lifecycle</Title>
-              {settingPolicyField('lifecycle', 'Deployment strategy', 'Rolling update')}
-            </StackItem>
-          </Stack>
+          <ModelCatalogResourcesStep
+            settingModes={settingModes}
+            onSettingModeChange={onSettingModeChange}
+          />
         </WizardStep>
 
         <WizardStep name="Review" id="model-catalog-review">
-          <Title headingLevel="h2" size="xl">
-            Review catalog item
-          </Title>
-          <DescriptionList isCompact>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Service</DescriptionListTerm>
-              <DescriptionListDescription>Model</DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Tenant visibility</DescriptionListTerm>
-              <DescriptionListDescription>
-                {visibility === 'tenant' ? 'North Summit Bank' : 'Global public'}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Cluster availability</DescriptionListTerm>
-              <DescriptionListDescription>
-                {eligibleClusterIds
-                  .map((id) =>
-                    id === 'east-gpu' ? 'East GPU cluster' : 'West general-purpose cluster',
-                  )
-                  .join('; ')}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Model type</DescriptionListTerm>
-              <DescriptionListDescription>{modelType}</DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Model choice</DescriptionListTerm>
-              <DescriptionListDescription>
-                {getModelChoicePolicyLabel(modelChoicePolicy)}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Model choices</DescriptionListTerm>
-              <DescriptionListDescription>
-                {modelChoicePolicy === 'fixed-model'
-                  ? selectedModels[0] ?? 'Select one model'
-                  : modelChoicePolicy === 'limited-catalog'
-                    ? selectedModels.join(', ') || 'Select at least one model'
-                    : modelChoicePolicy === 'byom'
-                      ? 'Person launching supplies the model source'
-                      : 'Any model in the configured catalog'}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Tenant model access</DescriptionListTerm>
-              <DescriptionListDescription>Through MaaS subscriptions</DescriptionListDescription>
-            </DescriptionListGroup>
-          </DescriptionList>
+          <div className="provider-setup-template__publish-review-step">
+            <Content component="p" className="provider-setup-template__publish-step-lede">
+              Confirm the catalog item details before creating.
+            </Content>
+            <DescriptionList
+              isCompact
+              className="provider-setup-template__publish-review-list"
+              aria-label="Catalog item review"
+            >
+              <DescriptionListGroup>
+                <DescriptionListTerm>Service</DescriptionListTerm>
+                <DescriptionListDescription>{modelService.title}</DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Name</DescriptionListTerm>
+                <DescriptionListDescription>{displayName || '—'}</DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Description</DescriptionListTerm>
+                <DescriptionListDescription>{description || '—'}</DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Visibility</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {visibility === 'global-public'
+                    ? 'Global public'
+                    : `VIP enterprise · ${formatSelectedTenants(organizations, selectedTenantIds)}`}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Eligible clusters</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {selectedClusterNames.length > 0 ? selectedClusterNames.join(', ') : '—'}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Model access</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {selectedModelAccessLabels.join(', ') || '—'}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Model choices</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {visibleOrganizations
+                    .map((tenant) => {
+                      const choice = catalogChoices[tenant.tenantId] ?? 'all'
+                      return `${tenant.name}: ${
+                        choice === 'all'
+                          ? 'All models'
+                          : specificModels[tenant.tenantId] || 'Specific models'
+                      }`
+                    })
+                    .join('; ') || '—'}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            </DescriptionList>
+            <Alert
+              variant="info"
+              isInline
+              title="Starts as unpublished"
+              className="provider-setup-template__publish-review-alert"
+            >
+              <Content component="p">
+                New catalog items are saved as unpublished. Publish from the catalog when you are
+                ready for tenants to use this offering.
+              </Content>
+            </Alert>
+          </div>
         </WizardStep>
       </Wizard>
     </div>

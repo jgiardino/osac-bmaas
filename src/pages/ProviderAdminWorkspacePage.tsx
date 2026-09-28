@@ -166,6 +166,14 @@ export function ProviderAdminWorkspacePage() {
         ? { clusterNodeTopologyMode: payload.clusterNodeTopologyMode }
         : {}),
       ...(payload.fieldPolicies?.length ? { fieldPolicies: payload.fieldPolicies } : {}),
+      ...(payload.modelChoice ? { modelChoice: payload.modelChoice } : {}),
+      ...(payload.modelSourceSettings
+        ? { modelSourceSettings: payload.modelSourceSettings }
+        : {}),
+      ...(payload.modelClusterAvailability
+        ? { modelClusterAvailability: payload.modelClusterAvailability }
+        : {}),
+      ...(payload.modelSettingModes ? { modelSettingModes: payload.modelSettingModes } : {}),
       status,
       createdAt: new Date().toISOString(),
     }

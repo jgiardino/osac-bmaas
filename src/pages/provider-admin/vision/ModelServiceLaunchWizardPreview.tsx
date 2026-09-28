@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
-  Alert,
+  Button,
   Content,
   DescriptionList,
   DescriptionListDescription,
@@ -11,6 +11,7 @@ import {
   Label,
   FormSelect,
   FormSelectOption,
+  Radio,
   Stack,
   StackItem,
   TextArea,
@@ -20,30 +21,26 @@ import {
   WizardStep,
 } from '@patternfly/react-core'
 import {
-  DEMO_APPROVED_MODELS,
-  getModelChoicePolicyLabel,
   type DeployModelType,
-  type ModelChoicePolicy,
   type ModelSettingId,
   type ModelSettingModes,
+  type ServiceWizardVariation,
 } from '../../../vision/modelAuthoringFlow'
 import { ModelLaunchSettingField } from './ModelLaunchSettingField'
 
 type ModelServiceLaunchWizardPreviewProps = {
-  modelChoicePolicy: ModelChoicePolicy
+  variation: ServiceWizardVariation
   settingModes: ModelSettingModes
-  modelType: DeployModelType
   selectedModels: readonly string[]
   eligibleClusterIds: readonly string[]
 }
 
-type LaunchSettingValues = Record<ModelSettingId, string>
+type LaunchSettingValues = Record<ModelSettingId, string> & { modelFormat: string }
 
 const DEFAULT_LAUNCH_SETTING_VALUES: LaunchSettingValues = {
-  modelType: 'Generative AI model (including LLMs and multimodal models)',
   modelFormat: 'sklearn',
-  servingMethod: 'LLMInferenceService',
-  runtime: 'vLLM',
+  servingMethod: 'LLM inference service',
+  runtime: 'vLLM NVIDIA GPU config',
   cpu: '8 vCPU',
   memory: '32 GiB',
   gpu: '1 × NVIDIA L4 · 24 GiB',
@@ -55,13 +52,15 @@ const DEFAULT_LAUNCH_SETTING_VALUES: LaunchSettingValues = {
 }
 
 const LAUNCH_SETTING_OPTIONS: Record<ModelSettingId, readonly string[]> = {
-  modelType: [
-    'Generative AI model (including LLMs and multimodal models)',
-    'Predictive model',
+  servingMethod: ['LLM inference service', 'LLM inference service with llm-d'],
+  runtime: [
+    'vLLM NVIDIA GPU config',
+    'vLLM (function engine)',
+    'vLLM NVIDIA GPU ServingRuntime for KServe',
+    'Caikit Standalone ServingRuntime',
+    'TGIS Standalone ServingRuntime',
+    'OpenVINO Model Server',
   ],
-  modelFormat: ['sklearn', 'ONNX', 'openvino'],
-  servingMethod: ['LLMInferenceService', 'LLMInferenceService with llm-d'],
-  runtime: ['vLLM', 'TGI', 'OpenVINO'],
   cpu: ['4 vCPU', '8 vCPU', '16 vCPU'],
   memory: ['16 GiB', '32 GiB', '64 GiB'],
   gpu: ['None', '1 × NVIDIA L4 · 24 GiB', '1 × NVIDIA A10G · 24 GiB'],
@@ -72,62 +71,99 @@ const LAUNCH_SETTING_OPTIONS: Record<ModelSettingId, readonly string[]> = {
   lifecycle: ['Rolling update', 'Recreate'],
 }
 
+const MODEL_FORMAT_OPTIONS = ['onnx - 1', 'pytorch', 'tensorflow', 'sklearn', 'openvino', 'caikit']
+
 const getClusterCardClassName = (isSelected: boolean) =>
   `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
     isSelected ? ' provider-setup-template__select-card--selected' : ''
   }`
 
 export function ModelServiceLaunchWizardPreview({
-  modelChoicePolicy,
+  variation,
   settingModes,
-  modelType,
   selectedModels,
   eligibleClusterIds,
 }: ModelServiceLaunchWizardPreviewProps) {
-  const [settings, setSettings] = useState<LaunchSettingValues>(DEFAULT_LAUNCH_SETTING_VALUES)
-  const [clusterId, setClusterId] = useState('east-gpu')
-  const [modelChoice, setModelChoice] = useState<string>(DEMO_APPROVED_MODELS[0])
-  const [userModelType, setUserModelType] = useState<DeployModelType | null>(null)
+  const [settings, setSettings] = useState<LaunchSettingValues>(() => ({
+    ...DEFAULT_LAUNCH_SETTING_VALUES,
+    runtime: variation === 'llm-tool-calling' ? 'vLLM (function engine)' : 'vLLM NVIDIA GPU config',
+  }))
+  const [clusterId, setClusterId] = useState('ocp-us-east-1')
+  const [modelChoice, setModelChoice] = useState<string>(selectedModels[0] ?? '')
+  const [userModelType, setUserModelType] = useState<DeployModelType>('Predictive model')
+  const [showAllModels, setShowAllModels] = useState(false)
+  const [project, setProject] = useState('ml-project')
+  const [deploymentName, setDeploymentName] = useState('')
+  const [description, setDescription] = useState('')
+  const [connectionType, setConnectionType] = useState('S3')
+  const [modelPath, setModelPath] = useState('')
+  const [secretId, setSecretId] = useState('')
 
   const changeSetting = (id: ModelSettingId, value: string) => {
     setSettings((current) => ({ ...current, [id]: value }))
   }
 
-  const settingField = (id: ModelSettingId, label: string) => (
+  const settingField = (
+    id: ModelSettingId,
+    label: string,
+    options: readonly string[] = LAUNCH_SETTING_OPTIONS[id],
+    mode = settingModes[id],
+  ) => (
     <ModelLaunchSettingField
       key={id}
       id={`launch-${id}`}
       label={label}
       value={settings[id]}
-      options={LAUNCH_SETTING_OPTIONS[id]}
-      mode={settingModes[id]}
+      options={options}
+      mode={mode}
       onChange={(value) => changeSetting(id, value)}
     />
   )
 
-  const isByom = modelChoicePolicy === 'byom'
-  const modelOptions = useMemo(
-    () =>
-      modelChoicePolicy === 'fixed-model'
-        ? selectedModels.slice(0, 1)
-        : modelChoicePolicy === 'limited-catalog'
-          ? selectedModels
-          : DEMO_APPROVED_MODELS,
-    [modelChoicePolicy, selectedModels],
-  )
+  const isByom = variation === 'predictive'
+  const isFixedModel = variation === 'llm-tool-calling'
+  const requiresModelType = isByom
+  const modelOptions = selectedModels
   const selectedClusterId = eligibleClusterIds.includes(clusterId)
     ? clusterId
     : (eligibleClusterIds[0] ?? '')
   const selectedModelChoice = modelOptions.includes(modelChoice)
     ? modelChoice
     : (modelOptions[0] ?? '')
-  const selectedModelType =
-    settingModes.modelType === 'editable' && userModelType ? userModelType : modelType
+  const selectedModelType = requiresModelType
+    ? userModelType
+    : 'Generative AI model (including LLMs and multimodal models)'
+  const isPredictive = selectedModelType === 'Predictive model'
+  const modelSummary = isByom
+    ? 'BYOM'
+    : isFixedModel
+      ? 'Specified model'
+      : selectedModelChoice
+  const servingSummary = [
+    selectedModelType,
+    isPredictive ? settings.modelFormat : undefined,
+    !isPredictive && variation !== 'predictive' ? settings.servingMethod : undefined,
+    settings.runtime,
+    settings.gpu,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const modelOptionsToShow = showAllModels ? modelOptions : modelOptions.slice(0, 3)
+  const clusterResources =
+    selectedClusterId === 'ocp-us-east-1'
+      ? {
+          cpu: ['8 vCPU', '16 vCPU', '32 vCPU', '64 vCPU'],
+          memory: ['16 GiB', '32 GiB', '64 GiB', '128 GiB'],
+          gpu: ['None', '1 × NVIDIA L4 · 24 GiB', '1 × NVIDIA A10G · 24 GiB'],
+        }
+      : {
+          cpu: ['8 vCPU', '16 vCPU', '32 vCPU'],
+          memory: ['16 GiB', '32 GiB', '64 GiB'],
+          gpu: ['None', '1 × NVIDIA A10G · 24 GiB'],
+        }
 
   const clusterLabel = (id: string) =>
-    id === 'east-gpu'
-      ? 'East GPU cluster · us-east-1'
-      : 'West general-purpose cluster · us-west-2'
+    id === 'ocp-us-east-1' ? 'ocp-us-east-1 · US East' : 'ocp-eu-west-1 · EU West'
 
   return (
     <div className="vision-model-flow-preview">
@@ -140,38 +176,41 @@ export function ModelServiceLaunchWizardPreview({
           <Title headingLevel="h2" size="xl">
             General
           </Title>
-          <Content component="p">
-            Set the project and identity for this deployed model instance.
-          </Content>
           <Form>
             <FormGroup label="Project or namespace" fieldId="launch-model-project" isRequired>
-              <FormSelect id="launch-model-project" value="data-science">
-                <FormSelectOption value="data-science" label="data-science" />
+              <FormSelect
+                id="launch-model-project"
+                value={project}
+                onChange={(_event, value) => setProject(value)}
+              >
+                <FormSelectOption value="ml-project" label="ml-project" />
                 <FormSelectOption value="ml-platform" label="ml-platform" />
               </FormSelect>
             </FormGroup>
             <FormGroup label="Deployment name" fieldId="launch-model-name" isRequired>
-              <TextInput id="launch-model-name" defaultValue="small-model-demo" />
+              <TextInput
+                id="launch-model-name"
+                value={deploymentName}
+                onChange={(_event, value) => setDeploymentName(value)}
+              />
             </FormGroup>
             <FormGroup label="Description" fieldId="launch-model-description">
               <TextArea
                 id="launch-model-description"
-                defaultValue="Model endpoint for the data science team."
+                value={description}
+                onChange={(_event, value) => setDescription(value)}
                 resizeOrientation="vertical"
               />
             </FormGroup>
           </Form>
         </WizardStep>
 
-        <WizardStep name="Cluster availability" id="model-launch-cluster">
+        <WizardStep name="Cluster" id="model-launch-cluster">
           <Title headingLevel="h2" size="xl">
-            Where do you want to run it?
+            Cluster
           </Title>
-          <Content component="p">
-            Choose an eligible cluster first. Its available resources determine the options in Configure.
-          </Content>
           <Form>
-            <FormGroup label="Available clusters" fieldId="launch-model-cluster" isRequired>
+            <FormGroup label="Cluster" fieldId="launch-model-cluster" isRequired>
               <div
                 id="launch-model-cluster"
                 className={[
@@ -180,11 +219,11 @@ export function ModelServiceLaunchWizardPreview({
                   'vision-model-flow-preview__cluster-cards',
                 ].join(' ')}
                 role="radiogroup"
-                aria-label="Available clusters"
+                aria-label="Cluster"
               >
                 {eligibleClusterIds.map((id) => {
                   const isSelected = id === selectedClusterId
-                  const isEast = id === 'east-gpu'
+                  const isUsEast = id === 'ocp-us-east-1'
                   return (
                     <button
                       key={id}
@@ -208,21 +247,21 @@ export function ModelServiceLaunchWizardPreview({
                         size="md"
                         className="provider-setup-template__select-card-title"
                       >
-                        {isEast ? 'East GPU cluster' : 'West general-purpose cluster'}
+                        {id}
                       </Title>
                       <Content
                         component="p"
                         className="provider-setup-template__select-card-detail"
                       >
-                        {isEast
-                          ? 'us-east-1 · 4 worker nodes'
-                          : 'us-west-2 · CPU and accelerator worker pools'}
+                        {isUsEast
+                          ? 'US East · AWS us-east-1 · 3 worker nodes'
+                          : 'EU West · Azure westeurope · 3 worker nodes'}
                       </Content>
                       <Content
                         component="p"
                         className="provider-setup-template__select-card-accelerator"
                       >
-                        {isEast ? 'NVIDIA L4 · 24 GiB' : 'NVIDIA A10G · 24 GiB'}
+                        {isUsEast ? '4 GPUs available' : '2 GPUs available'}
                       </Content>
                     </button>
                   )
@@ -230,86 +269,73 @@ export function ModelServiceLaunchWizardPreview({
               </div>
             </FormGroup>
           </Form>
-          <Alert isInline variant="success" title="Resources available on this cluster">
-            {selectedClusterId === 'east-gpu'
-              ? 'NVIDIA L4 (24 GiB), 8–64 vCPU, 16–256 GiB memory'
-              : 'NVIDIA A10G (24 GiB), 8–48 vCPU, 32–192 GiB memory'}
-          </Alert>
         </WizardStep>
 
         <WizardStep name="Configure" id="model-launch-configure">
-          <Title headingLevel="h2" size="xl">
-            Configure model instance
-          </Title>
           <Stack hasGutter>
             <StackItem>
               <Title headingLevel="h3" size="lg">
-                What do you want to run?
+                Model
               </Title>
-              <Content component="p">
-                Catalog policy: <strong>{getModelChoicePolicyLabel(modelChoicePolicy)}</strong>
-              </Content>
               {isByom ? (
                 <Form>
-                  <FormGroup label="Model source location" fieldId="launch-model-source" isRequired>
+                  <FormGroup label="Connection type" fieldId="launch-model-connection-type" isRequired>
+                    <FormSelect
+                      id="launch-model-connection-type"
+                      value={connectionType}
+                      onChange={(_event, value) => setConnectionType(value)}
+                    >
+                      <FormSelectOption value="S3" label="S3-compatible storage" />
+                      <FormSelectOption value="OCI" label="OCI registry" />
+                      <FormSelectOption value="Cluster storage" label="Cluster storage" />
+                    </FormSelect>
+                  </FormGroup>
+                  <FormGroup label="Model path" fieldId="launch-model-path" isRequired>
                     <TextInput
-                      id="launch-model-source"
-                      placeholder="s3://bucket/path or OCI model reference"
+                      id="launch-model-path"
+                      value={modelPath}
+                      onChange={(_event, value) => setModelPath(value)}
                     />
                   </FormGroup>
-                  <FormGroup label="Connection / Secret" fieldId="launch-model-connection" isRequired>
-                    <FormSelect id="launch-model-connection" value="new-connection">
-                      <FormSelectOption value="new-connection" label="Select or create a connection" />
-                      <FormSelectOption value="team-model-source" label="team-model-source · Secret reference" />
+                  <FormGroup label="Secret" fieldId="launch-model-secret" isRequired>
+                    <FormSelect
+                      id="launch-model-secret"
+                      value={secretId}
+                      onChange={(_event, value) => setSecretId(value)}
+                    >
+                      <FormSelectOption value="" label="Select a Secret" />
                     </FormSelect>
                   </FormGroup>
                 </Form>
-              ) : modelChoicePolicy === 'fixed-model' ? (
-                <Form>
-                  <FormGroup label="Model" fieldId="launch-model-choice">
-                    <TextInput id="launch-model-choice" value={selectedModelChoice} readOnly />
-                  </FormGroup>
-                  <Content component="small">
-                    This catalog item fixes the model and its runtime configuration.
-                  </Content>
-                </Form>
-              ) : (
+              ) : isFixedModel ? null : (
                 <Form>
                   <FormGroup label="Model" fieldId="launch-model-choice" isRequired>
-                    <FormSelect
-                      id="launch-model-choice"
-                      value={selectedModelChoice}
-                      onChange={(_event, nextValue) => setModelChoice(nextValue)}
-                    >
-                      {modelOptions.length > 0 ? modelOptions.map((model) => (
-                        <FormSelectOption key={model} value={model} label={model} />
-                      )) : <FormSelectOption value="" label="No approved models selected" />}
-                    </FormSelect>
-                  </FormGroup>
-                  <Content component="small">
-                    {modelChoicePolicy === 'limited-catalog'
-                      ? 'Choose from the model set allowed by this catalog item.'
-                      : 'Choose any model in the configured catalog.'}
-                  </Content>
-                  <FormGroup
-                    label="Model source location"
-                    fieldId="launch-model-source-location"
-                    isRequired
-                  >
-                    <TextInput
-                      id="launch-model-source-location"
-                      placeholder="s3://bucket/path or OCI model reference"
-                    />
-                  </FormGroup>
-                  <FormGroup
-                    label="Source credentials"
-                    fieldId="launch-model-source-credentials"
-                    isRequired
-                  >
-                    <FormSelect id="launch-model-source-credentials" value="new-secret">
-                      <FormSelectOption value="new-secret" label="Select or create a Secret" />
-                      <FormSelectOption value="team-model-secret" label="team-model-source · Secret" />
-                    </FormSelect>
+                    <Stack hasGutter>
+                      {modelOptionsToShow.length > 0
+                        ? modelOptionsToShow.map((model) => (
+                            <StackItem key={model}>
+                              <Radio
+                                id={`launch-model-${model.replaceAll(/[^a-z0-9]+/gi, '-')}`}
+                                name="launch-model-choice"
+                                label={model}
+                                isChecked={selectedModelChoice === model}
+                                onChange={() => setModelChoice(model)}
+                              />
+                            </StackItem>
+                          ))
+                        : null}
+                    </Stack>
+                    {modelOptions.length > 3 ? (
+                      <Button
+                        variant="link"
+                        isInline
+                        onClick={() => setShowAllModels((current) => !current)}
+                      >
+                        {showAllModels
+                          ? 'Show fewer options'
+                          : `View options (${modelOptions.length - 3} more)`}
+                      </Button>
+                    ) : null}
                   </FormGroup>
                 </Form>
               )}
@@ -319,39 +345,63 @@ export function ModelServiceLaunchWizardPreview({
               <Title headingLevel="h3" size="lg">
                 Serving method and runtime
               </Title>
-              <ModelLaunchSettingField
-                id="launch-model-type"
-                label="Model type"
-                value={selectedModelType}
-                options={[
-                  'Generative AI model (including LLMs and multimodal models)',
-                  'Predictive model',
-                ]}
-                mode={settingModes.modelType}
-                onChange={(value) => {
-                  setUserModelType(value as DeployModelType)
-                  changeSetting('modelType', value)
-                }}
-              />
-              {selectedModelType === 'Predictive model'
-                ? settingField('modelFormat', 'Model format')
+              {requiresModelType ? (
+                <FormGroup label="Model type" fieldId="launch-model-type" isRequired>
+                  <FormSelect
+                    id="launch-model-type"
+                    value={selectedModelType}
+                    onChange={(_event, value) => setUserModelType(value as DeployModelType)}
+                  >
+                    <FormSelectOption
+                      value="Generative AI model (including LLMs and multimodal models)"
+                      label="Generative AI model (including LLMs and multimodal models)"
+                    />
+                    <FormSelectOption value="Predictive model" label="Predictive model" />
+                  </FormSelect>
+                </FormGroup>
+              ) : null}
+              {isPredictive ? (
+                <FormGroup label="Model format" fieldId="launch-model-format" isRequired>
+                  <FormSelect
+                    id="launch-model-format"
+                    value={settings.modelFormat}
+                    onChange={(_event, value) =>
+                      setSettings((current) => ({ ...current, modelFormat: value }))
+                    }
+                  >
+                    {MODEL_FORMAT_OPTIONS.map((format) => (
+                      <FormSelectOption key={format} value={format} label={format} />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+              ) : null}
+              {variation !== 'predictive'
+                ? settingField('servingMethod', 'Deployment method')
                 : null}
-              {settingField('servingMethod', 'Serving method')}
-              {settingField('runtime', 'Runtime')}
+              {settingField(
+                'runtime',
+                'Serving runtime',
+                LAUNCH_SETTING_OPTIONS.runtime,
+                isFixedModel ? 'locked' : settingModes.runtime,
+              )}
             </StackItem>
 
             <StackItem>
               <Title headingLevel="h3" size="lg">Compute</Title>
-              {settingField('cpu', 'CPU')}
-              {settingField('memory', 'Memory')}
-              {settingField('gpu', 'GPU')}
-              {settingField('capacity', 'Replica capacity')}
+              {settingField('cpu', 'CPU', clusterResources.cpu)}
+              {settingField('memory', 'Memory', clusterResources.memory)}
+              {settingField('gpu', 'GPU', clusterResources.gpu)}
+              {settingField('capacity', 'Number of replicas to deploy')}
             </StackItem>
 
             <StackItem>
               <Title headingLevel="h3" size="lg">Node topology</Title>
-              {settingField('topology', 'llm-d topology')}
-              {settingField('routing', 'Routing configuration')}
+              {settings.servingMethod === 'LLM inference service with llm-d' ? (
+                <>
+                  {settingField('topology', 'llm-d topology')}
+                  {settingField('routing', 'Routing configuration')}
+                </>
+              ) : null}
             </StackItem>
 
             <StackItem>
@@ -373,12 +423,24 @@ export function ModelServiceLaunchWizardPreview({
           <DescriptionList isCompact>
             <DescriptionListGroup>
               <DescriptionListTerm>Project</DescriptionListTerm>
-              <DescriptionListDescription>data-science</DescriptionListDescription>
+              <DescriptionListDescription>{project}</DescriptionListDescription>
             </DescriptionListGroup>
+            {deploymentName ? (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Deployment name</DescriptionListTerm>
+                <DescriptionListDescription>{deploymentName}</DescriptionListDescription>
+              </DescriptionListGroup>
+            ) : null}
+            {description ? (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Description</DescriptionListTerm>
+                <DescriptionListDescription>{description}</DescriptionListDescription>
+              </DescriptionListGroup>
+            ) : null}
             <DescriptionListGroup>
               <DescriptionListTerm>Model choice</DescriptionListTerm>
               <DescriptionListDescription>
-                {isByom ? 'Source supplied by the person launching' : selectedModelChoice}
+                {modelSummary}
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>
@@ -390,15 +452,8 @@ export function ModelServiceLaunchWizardPreview({
             <DescriptionListGroup>
               <DescriptionListTerm>Serving</DescriptionListTerm>
               <DescriptionListDescription>
-                {selectedModelType}
-                {selectedModelType === 'Predictive model' ? ` · ${settings.modelFormat}` : ''}
-                {' · '}
-                {settings.servingMethod} · {settings.runtime} · {settings.gpu}
+                {servingSummary}
               </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>Service access</DescriptionListTerm>
-              <DescriptionListDescription>MaaS subscription</DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
         </WizardStep>

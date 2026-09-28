@@ -76,6 +76,11 @@ import type {
   CatalogModelProperty,
 } from '../catalog/catalogPublishConfig'
 import type {
+  ModelCatalogClusterAvailability,
+  ModelCatalogSourceSettings,
+  ModelSettingModes,
+} from '../vision/modelAuthoringFlow'
+import type {
   CatalogServiceId,
   PublishCatalogScope,
   PublishedTemplatePayload,
@@ -307,6 +312,9 @@ export type ProviderCatalogDraft = {
   modelChoice?: CatalogModelChoice
   /** Models only: serving and resource properties displayed on Catalog cards. */
   modelProperties?: CatalogModelProperty[]
+  modelSourceSettings?: ModelCatalogSourceSettings
+  modelClusterAvailability?: ModelCatalogClusterAvailability
+  modelSettingModes?: ModelSettingModes
 }
 
 export function getCatalogItemNetworkPolicy(
@@ -692,6 +700,37 @@ export function duplicateProviderCatalogItem(catalogItemId: string): ProviderCat
     ...(source.fieldPolicies?.length
       ? { fieldPolicies: source.fieldPolicies.map((policy) => ({ ...policy })) }
       : {}),
+    ...(source.modelChoice
+      ? {
+          modelChoice: {
+            ...source.modelChoice,
+            ...(source.modelChoice.selectedModels
+              ? { selectedModels: [...source.modelChoice.selectedModels] }
+              : {}),
+          },
+        }
+      : {}),
+    ...(source.modelSourceSettings
+      ? {
+          modelSourceSettings: {
+            ...source.modelSourceSettings,
+            tenantAccessOptions: [...source.modelSourceSettings.tenantAccessOptions],
+            catalogChoices: { ...source.modelSourceSettings.catalogChoices },
+            specificModels: { ...source.modelSourceSettings.specificModels },
+          },
+        }
+      : {}),
+    ...(source.modelClusterAvailability
+      ? {
+          modelClusterAvailability: {
+            ...source.modelClusterAvailability,
+            eligibleClusterIds: [...source.modelClusterAvailability.eligibleClusterIds],
+          },
+        }
+      : {}),
+    ...(source.modelSettingModes
+      ? { modelSettingModes: { ...source.modelSettingModes } }
+      : {}),
   }
 
   addProviderCatalogItem(duplicate)
@@ -846,6 +885,14 @@ export function updateProviderCatalogItemFromPayload(
       ? { clusterNodeTopologyMode: payload.clusterNodeTopologyMode }
       : {}),
     ...(payload.fieldPolicies?.length ? { fieldPolicies: payload.fieldPolicies } : {}),
+    ...(payload.modelChoice ? { modelChoice: payload.modelChoice } : {}),
+    ...(payload.modelSourceSettings
+      ? { modelSourceSettings: payload.modelSourceSettings }
+      : {}),
+    ...(payload.modelClusterAvailability
+      ? { modelClusterAvailability: payload.modelClusterAvailability }
+      : {}),
+    ...(payload.modelSettingModes ? { modelSettingModes: payload.modelSettingModes } : {}),
   }
 
   if (payload.scope === 'vip-enterprise' && enterpriseTenantIds.length > 0) {
