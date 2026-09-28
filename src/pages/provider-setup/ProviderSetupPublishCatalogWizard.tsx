@@ -1701,18 +1701,13 @@ export function ProviderSetupPublishCatalogWizard({
         )
       case 'serving-configuration':
         return (
-          <>
-            <Title headingLevel="h2" size="xl">
-              Serving method and runtime
-            </Title>
-            <ModelCatalogServingConfigurationStep
-              llmOnly={false}
-              settingModes={modelSettingModes}
-              onSettingModeChange={(id: ModelSettingId, mode: ModelSettingMode) =>
-                setModelSettingModes((current) => ({ ...current, [id]: mode }))
-              }
-            />
-          </>
+          <ModelCatalogServingConfigurationStep
+            llmOnly={false}
+            settingModes={modelSettingModes}
+            onSettingModeChange={(id: ModelSettingId, mode: ModelSettingMode) =>
+              setModelSettingModes((current) => ({ ...current, [id]: mode }))
+            }
+          />
         )
       case 'resources':
         return (

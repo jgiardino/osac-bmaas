@@ -1,4 +1,7 @@
-import { FormGroup, FormSelect, FormSelectOption } from '@patternfly/react-core'
+import type { ReactNode } from 'react'
+import { Content, FormGroup, Label, Title } from '@patternfly/react-core'
+import { LockIcon } from '@patternfly/react-icons/dist/esm/icons/lock-icon'
+import { UnlockIcon } from '@patternfly/react-icons/dist/esm/icons/unlock-icon'
 import type { ModelSettingId, ModelSettingMode } from '../../../vision/modelAuthoringFlow'
 
 type ModelSettingPolicyFieldProps = {
@@ -7,6 +10,7 @@ type ModelSettingPolicyFieldProps = {
   value: string
   mode: ModelSettingMode
   onModeChange: (mode: ModelSettingMode) => void
+  children?: ReactNode
 }
 
 export function ModelSettingPolicyField({
@@ -15,20 +19,90 @@ export function ModelSettingPolicyField({
   value,
   mode,
   onModeChange,
+  children,
 }: ModelSettingPolicyFieldProps) {
-  const inputId = `catalog-policy-${id}`
+  const fieldId = `catalog-policy-${id}`
 
   return (
-    <FormGroup label={label} fieldId={inputId}>
-      <FormSelect
-        id={inputId}
-        value={mode}
-        onChange={(_event, nextValue) => onModeChange(nextValue as ModelSettingMode)}
-        aria-label={`${label} tenant choice policy`}
+    <FormGroup label={label} fieldId={fieldId}>
+      {children}
+      <div
+        id={fieldId}
+        className="provider-setup-template__cluster-version-mode-options"
+        role="radiogroup"
+        aria-label={`${label} lock policy`}
       >
-        <FormSelectOption value="locked" label={`Locked — ${value}`} />
-        <FormSelectOption value="editable" label={`Editable at launch — default: ${value}`} />
-      </FormSelect>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={mode === 'locked'}
+          className={`provider-setup-template__cluster-version-mode-card${
+            mode === 'locked' ? ' provider-setup-template__cluster-version-mode-card--selected' : ''
+          }`}
+          onClick={() => onModeChange('locked')}
+        >
+          {mode === 'locked' ? (
+            <Label
+              color="grey"
+              isCompact
+              className="provider-setup-template__select-card-selected-badge"
+            >
+              Selected
+            </Label>
+          ) : null}
+          <span className="provider-setup-template__cluster-version-mode-icon" aria-hidden>
+            <LockIcon />
+          </span>
+          <span className="provider-setup-template__cluster-version-mode-copy">
+            <Title
+              headingLevel="h3"
+              size="md"
+              className="provider-setup-template__select-card-title"
+            >
+              Locked
+            </Title>
+            <Content component="p" className="provider-setup-template__select-card-detail">
+              Tenants cannot change it. Value: {value}
+            </Content>
+          </span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={mode === 'editable'}
+          className={`provider-setup-template__cluster-version-mode-card${
+            mode === 'editable'
+              ? ' provider-setup-template__cluster-version-mode-card--selected'
+              : ''
+          }`}
+          onClick={() => onModeChange('editable')}
+        >
+          {mode === 'editable' ? (
+            <Label
+              color="grey"
+              isCompact
+              className="provider-setup-template__select-card-selected-badge"
+            >
+              Selected
+            </Label>
+          ) : null}
+          <span className="provider-setup-template__cluster-version-mode-icon" aria-hidden>
+            <UnlockIcon />
+          </span>
+          <span className="provider-setup-template__cluster-version-mode-copy">
+            <Title
+              headingLevel="h3"
+              size="md"
+              className="provider-setup-template__select-card-title"
+            >
+              Editable at provisioning
+            </Title>
+            <Content component="p" className="provider-setup-template__select-card-detail">
+              Tenants can change it at launch. Default: {value}
+            </Content>
+          </span>
+        </button>
+      </div>
     </FormGroup>
   )
 }

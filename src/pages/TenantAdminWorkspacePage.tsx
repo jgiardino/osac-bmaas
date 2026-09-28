@@ -11,6 +11,7 @@ import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminAdministratorsPage } from './tenant-admin/TenantAdminAdministratorsPage'
 import { TenantAdminBillingPage } from './tenant-admin/TenantAdminBillingPage'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
+import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import {
@@ -39,7 +40,9 @@ import {
   activateProviderRegisteredOrganizationBySlug,
   ensureProviderDemoOrganizations,
   getProviderCatalogDraft,
+  getProviderCatalogItems,
 } from '../providerSetup/storage'
+import { ensureProviderCatalogDemoItems } from '../providerSetup/prototypeEntry'
 import {
   shouldHideDemoServicesInstances,
   syncNorthSummitBillingInactiveScenarioFromSearch,
@@ -59,11 +62,28 @@ import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROV
 
 const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
   Record<TenantAdminNavId, { title: string; description: string }>
-> = {}
+> = {
+  'ai-asset-endpoints': {
+    title: 'AI asset endpoints',
+    description: 'View and manage AI asset endpoints available to this tenant.',
+  },
+  playground: {
+    title: 'Playground',
+    description: 'Explore tenant model endpoints in the GenAI studio playground.',
+  },
+  'api-keys': {
+    title: 'API keys',
+    description: 'Manage API keys used to access tenant model endpoints.',
+  },
+}
 
 function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
   return (
     value === 'overview' ||
+    value === 'ai-grid' ||
+    value === 'ai-asset-endpoints' ||
+    value === 'playground' ||
+    value === 'api-keys' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
@@ -166,6 +186,9 @@ export function TenantAdminWorkspacePage() {
   const [activeNavId, setActiveNavId] = useState<TenantAdminNavId>(() =>
     isValidTenant ? readInitialTenantAdminNav(tenant, searchParams) : 'overview',
   )
+  const [visionCatalogItems, setVisionCatalogItems] = useState(() =>
+    activeNavId === 'ai-grid' ? ensureProviderCatalogDemoItems() : getProviderCatalogItems(),
+  )
   const [projects, setProjects] = useState<TenantProject[]>(() => ensureTenantDemoProjects(tenant))
   const [projectScopeId, setProjectScopeIdState] = useState<ProjectScopeId>(() =>
     getProjectScopeId(tenant),
@@ -200,6 +223,7 @@ export function TenantAdminWorkspacePage() {
     syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
     const workspaceOrganization = getWorkspaceOrganization(tenant)
     setOrganization(workspaceOrganization)
+    const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
     setInstances(
       shouldHideDemoServicesInstances(tenant)
         ? []
@@ -208,7 +232,6 @@ export function TenantAdminWorkspacePage() {
     setProjects(ensureTenantDemoProjects(tenant))
     setProjectScopeIdState(getProjectScopeId(tenant))
 
-    const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
     if (requestedNav) {
       ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav, searchParams)
       setActiveNavId(requestedNav)
@@ -234,6 +257,9 @@ export function TenantAdminWorkspacePage() {
 
   const handleNavChange = (navId: string) => {
     const nextNavId = navId as TenantAdminNavId
+    if (nextNavId === 'ai-grid') {
+      setVisionCatalogItems(ensureProviderCatalogDemoItems())
+    }
     setActiveNavId(nextNavId)
     setTenantActiveNav(tenant, nextNavId)
     setNavContentKey((current) => current + 1)
@@ -311,6 +337,17 @@ export function TenantAdminWorkspacePage() {
     }
 
     switch (activeNavId) {
+      case 'ai-grid':
+        return (
+          <VisionModelFleetPage
+            catalogItems={visionCatalogItems}
+            lockedOrgId="nsb"
+            onOpenCatalogPreset={(catalogItemId) => {
+              setOpenCatalogItemKey(catalogItemId)
+              handleNavChange('catalog')
+            }}
+          />
+        )
       case 'services-baremetal':
       case 'services-clusters':
       case 'services-models':
@@ -438,6 +475,7 @@ export function TenantAdminWorkspacePage() {
       companyLogoSrc={resolveOrganizationCompanyLogo(organization)}
       companyLogoAlt={organization.name}
       organizationSlug={organization.slug}
+      isContentFilled={activeNavId === 'ai-grid'}
     >
       <div key={navContentKey}>{renderWorkspaceContent()}</div>
     </TenantShell>

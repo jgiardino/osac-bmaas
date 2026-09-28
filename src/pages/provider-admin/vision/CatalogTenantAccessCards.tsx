@@ -1,4 +1,4 @@
-import { Content, FormGroup, Label, Title } from '@patternfly/react-core'
+import { FormGroup, Label, Title } from '@patternfly/react-core'
 import { LockIcon } from '@patternfly/react-icons/dist/esm/icons/lock-icon'
 import { UnlockIcon } from '@patternfly/react-icons/dist/esm/icons/unlock-icon'
 import type { ModelSettingMode } from '../../../vision/modelAuthoringFlow'
@@ -48,9 +48,9 @@ export function CatalogTenantAccessCards({
             >
               Locked
             </Title>
-            <Content component="p" className="provider-setup-template__select-card-detail">
+            <p className="provider-setup-template__select-card-detail">
               Tenants cannot change it.
-            </Content>
+            </p>
           </span>
         </button>
         <button
@@ -84,9 +84,9 @@ export function CatalogTenantAccessCards({
             >
               Editable at provisioning
             </Title>
-            <Content component="p" className="provider-setup-template__select-card-detail">
+            <p className="provider-setup-template__select-card-detail">
               Tenants can change at launch.
-            </Content>
+            </p>
           </span>
         </button>
       </div>

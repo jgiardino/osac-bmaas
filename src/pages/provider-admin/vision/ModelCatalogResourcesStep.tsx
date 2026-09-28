@@ -4,6 +4,7 @@ import {
   Content,
   Form,
   FormGroup,
+  FormSection,
   FormSelect,
   FormSelectOption,
   Grid,
@@ -130,7 +131,7 @@ export function ModelCatalogResourcesStep({
 
   return (
     <Form autoComplete="off" className="provider-setup-template__publish-hardware-step">
-      <p>Choose the resources available for this catalog item.</p>
+      <FormSection><p>Choose the resources available for this catalog item.</p></FormSection>
       <ModelCatalogResourceSection
         title="Compute"
         accessLabel="Tenant access to compute"

@@ -1,5 +1,4 @@
 import {
-  Content,
   Form,
   FormGroup,
   FormSection,
@@ -10,12 +9,9 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { RegisteredOrganization } from '../../../providerAdmin/organizations'
-import type {
-  ModelCatalogChoice,
-  ModelTenantAccessOption,
-} from '../../../vision/modelAuthoringFlow'
 
-export type { ModelCatalogChoice, ModelTenantAccessOption }
+export type ModelCatalogChoice = 'all' | 'specific'
+export type ModelTenantAccessOption = 'catalog' | 'connection'
 
 type ModelCatalogSourceOptionsProps = {
   tenants: readonly RegisteredOrganization[]
@@ -88,7 +84,7 @@ export function ModelCatalogSourceOptions({
 
   return (
     <Form autoComplete="off" className="provider-setup-template__publish-source-step">
-      <FormSection title="Model source" titleElement="h3">
+      <FormSection>
         <p>Choose the model available to deploy.</p>
         <FormGroup
           label="Tenant access to model selection"
@@ -123,9 +119,9 @@ export function ModelCatalogSourceOptions({
                     >
                       {label}
                     </Title>
-                    <Content component="p" className="provider-setup-template__select-card-detail">
+                    <p className="provider-setup-template__select-card-detail">
                       {description}
-                    </Content>
+                    </p>
                   </button>
                 </GridItem>
               )
@@ -171,12 +167,9 @@ export function ModelCatalogSourceOptions({
                             >
                               {label}
                             </Title>
-                            <Content
-                              component="p"
-                              className="provider-setup-template__select-card-detail"
-                            >
+                            <p className="provider-setup-template__select-card-detail">
                               {description}
-                            </Content>
+                            </p>
                           </button>
                         </GridItem>
                       )

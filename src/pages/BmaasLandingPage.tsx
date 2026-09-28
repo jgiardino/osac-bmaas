@@ -209,7 +209,7 @@ export function BmaasLandingPage() {
         },
         {
           label: 'AI Grid (future vision)',
-          to: '/ai-grid',
+          to: '/tenant-admin/northsummit/workspace?nav=ai-grid',
         },
       ],
     },

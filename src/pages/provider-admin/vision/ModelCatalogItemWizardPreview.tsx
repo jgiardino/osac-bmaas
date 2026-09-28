@@ -347,9 +347,6 @@ export function ModelCatalogItemWizardPreview({
         </WizardStep>
 
         <WizardStep name="Serving configuration" id="model-catalog-serving">
-          <Title headingLevel="h2" size="xl">
-            Serving method and runtime
-          </Title>
           <ModelCatalogServingConfigurationStep
             llmOnly={false}
             settingModes={settingModes}

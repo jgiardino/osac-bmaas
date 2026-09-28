@@ -287,15 +287,13 @@ export function ProviderAdminWorkspacePage() {
         )
       case 'ai-grid':
         return (
-          <div className="ai-grid-future-vision">
-            <VisionModelFleetPage
-              catalogItems={catalogItems}
-              onOpenCatalogPreset={(catalogItemId) => {
-                setOpenCatalogItemKey(catalogItemId)
-                handleNavChange('catalog')
-              }}
-            />
-          </div>
+          <VisionModelFleetPage
+            catalogItems={catalogItems}
+            onOpenCatalogPreset={(catalogItemId) => {
+              setOpenCatalogItemKey(catalogItemId)
+              handleNavChange('catalog')
+            }}
+          />
         )
       case 'infrastructure-data-centers':
         return <ProviderAdminDataCentersPage />

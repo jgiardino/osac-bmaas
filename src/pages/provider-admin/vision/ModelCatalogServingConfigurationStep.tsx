@@ -1,5 +1,17 @@
 import { useState } from 'react'
-import { Content, FormGroup, Label, Title } from '@patternfly/react-core'
+import {
+  Form,
+  FormGroup,
+  FormSection,
+  Label,
+  MenuToggle,
+  Radio,
+  Select,
+  SelectList,
+  SelectOption,
+  TextInput,
+  Title,
+} from '@patternfly/react-core'
 import type { ModelSettingId, ModelSettingMode, ModelSettingModes } from '../../../vision/modelAuthoringFlow'
 import { CatalogTenantAccessCards } from './CatalogTenantAccessCards'
 
@@ -24,13 +36,25 @@ const DEPLOYMENT_METHODS = [
 ] as const
 
 const SERVING_RUNTIMES = [
-  'vLLM NVIDIA GPU config',
-  'vLLM Intel Gaudi Accelerator config',
-  'vLLM Spyre on x86 config',
-  'vLLM AMD GPU config',
-  'vLLM CPU (ppc64le/s390x) config',
-  'vLLM CPU (amd 64-EXPERIMENTAL) config',
-  'vLLM Spyre s390x config',
+  { id: 'config-vllm-nvidia', value: 'vLLM NVIDIA GPU config', version: 'v0.8.5' },
+  {
+    id: 'config-vllm-intel-gaudi',
+    value: 'vLLM Intel Gaudi Accelerator config',
+    version: 'v0.7.3',
+  },
+  { id: 'config-vllm-spyre-x86', value: 'vLLM Spyre on x86 config', version: 'v0.8.5' },
+  { id: 'config-vllm-amd', value: 'vLLM AMD GPU config', version: 'v0.8.5' },
+  {
+    id: 'config-vllm-cpu-ppc',
+    value: 'vLLM CPU (ppc64le/s390x) config',
+    version: 'v0.6.6',
+  },
+  {
+    id: 'config-vllm-cpu-amd64',
+    value: 'vLLM CPU (amd 64-EXPERIMENTAL) config',
+    version: 'v0.6.6',
+  },
+  { id: 'config-vllm-spyre-s390x', value: 'vLLM Spyre s390x config', version: 'v0.7.3' },
 ] as const
 
 const getOptionClassName = (selected: boolean) =>
@@ -44,29 +68,32 @@ export function ModelCatalogServingConfigurationStep({
   onSettingModeChange,
 }: ModelCatalogServingConfigurationStepProps) {
   const [deploymentMethod, setDeploymentMethod] = useState('standard')
-  const [servingRuntime, setServingRuntime] = useState<string>(SERVING_RUNTIMES[0])
+  const [servingRuntime, setServingRuntime] = useState('')
+  const [servingRuntimeSelection, setServingRuntimeSelection] = useState<'auto' | 'manual'>('auto')
+  const [isServingRuntimeOpen, setIsServingRuntimeOpen] = useState(false)
 
   return (
-    <div className="provider-setup-template__publish-hardware-step">
-      <Content component="p" className="provider-setup-template__publish-step-lede">
-        Choose the default deployment method and serving runtime.
-      </Content>
-      <CatalogTenantAccessCards
-        fieldId="model-catalog-serving-configuration-access"
-        label="Tenant access to serving method and runtime"
-        mode={
-          settingModes.servingMethod === 'locked' && settingModes.runtime === 'locked'
-            ? 'locked'
-            : 'editable'
-        }
-        onChange={(mode) => {
-          onSettingModeChange('servingMethod', mode)
-          onSettingModeChange('runtime', mode)
-        }}
-      />
+    <Form autoComplete="off" className="provider-setup-template__publish-hardware-step">
+      <FormSection>
+        <p>Choose the default deployment method and serving runtime.</p>
+        <CatalogTenantAccessCards
+          fieldId="model-catalog-serving-configuration-access"
+          label="Tenant access to serving method and runtime"
+          mode={
+            settingModes.servingMethod === 'locked' && settingModes.runtime === 'locked'
+              ? 'locked'
+              : 'editable'
+          }
+          onChange={(mode) => {
+            onSettingModeChange('servingMethod', mode)
+            onSettingModeChange('runtime', mode)
+          }}
+        />
+      </FormSection>
 
       {llmOnly ? (
-        <FormGroup label="Deployment method" fieldId="model-catalog-deployment-method">
+        <FormSection>
+          <FormGroup label="Deployment method" fieldId="model-catalog-deployment-method">
             <div
               id="model-catalog-deployment-method"
               className="provider-setup-template__card-group provider-setup-template__card-group--instance-types provider-setup-template__card-group--instance-types-fill"
@@ -93,62 +120,101 @@ export function ModelCatalogServingConfigurationStep({
                         Selected
                       </Label>
                     ) : null}
-                    <Title
-                      headingLevel="h3"
-                      size="md"
-                      className="provider-setup-template__select-card-title"
-                    >
+                    <Title headingLevel="h3" size="md">
                       {label}
                     </Title>
-                    <Content component="p" className="provider-setup-template__select-card-detail">
-                      {description}
-                    </Content>
+                    <p className="provider-setup-template__select-card-detail">{description}</p>
                   </button>
                 )
               })}
             </div>
-        </FormGroup>
+          </FormGroup>
+        </FormSection>
       ) : null}
 
-      <FormGroup label="Serving runtime" fieldId="model-catalog-serving-runtime">
-        <div
-          id="model-catalog-serving-runtime"
-          className="provider-setup-template__card-group provider-setup-template__card-group--instance-types provider-setup-template__card-group--instance-types-fill"
-          role="radiogroup"
-          aria-label="Serving runtime"
+      <FormSection>
+        <FormGroup
+          label="Accelerator configuration"
+          fieldId="model-catalog-serving-runtime"
+          isRequired
         >
-          {SERVING_RUNTIMES.map((runtime) => {
-            const selected = servingRuntime === runtime
-            return (
-              <button
-                key={runtime}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                className={getOptionClassName(selected)}
-                onClick={() => setServingRuntime(runtime)}
-              >
-                {selected ? (
-                  <Label
-                    color="grey"
-                    isCompact
-                    className="provider-setup-template__select-card-selected-badge"
+          <div className="pf-v6-u-mb-md">
+            <Radio
+              id="model-catalog-auto-accelerator"
+              name="model-catalog-accelerator-selection"
+              label={
+                <>
+                  <strong>Automatic selection:</strong> Automatically select the best accelerator
+                  configuration for my model based on the selected hardware profile.
+                </>
+              }
+              isChecked={servingRuntimeSelection === 'auto'}
+              onChange={() => setServingRuntimeSelection('auto')}
+            />
+            {servingRuntimeSelection === 'auto' ? (
+              <div className="pf-v6-u-ml-lg pf-v6-u-mt-sm">
+                <TextInput
+                  value="vLLM NVIDIA GPU config"
+                  isDisabled
+                  aria-label="Automatically selected accelerator configuration"
+                />
+              </div>
+            ) : null}
+          </div>
+          <Radio
+            id="model-catalog-manual-accelerator"
+            name="model-catalog-accelerator-selection"
+            label={
+              <>
+                <strong>Manual selection:</strong> Manually select an accelerator configuration
+                from a list of preconfigured and custom accelerator configurations.
+              </>
+            }
+            isChecked={servingRuntimeSelection === 'manual'}
+            onChange={() => setServingRuntimeSelection('manual')}
+          />
+          {servingRuntimeSelection === 'manual' ? (
+            <div className="pf-v6-u-ml-lg pf-v6-u-mt-sm">
+              <Select
+                id="model-catalog-serving-runtime-select"
+                isOpen={isServingRuntimeOpen}
+                selected={servingRuntime}
+                onSelect={(_event, value) => {
+                  setServingRuntime(value as string)
+                  setIsServingRuntimeOpen(false)
+                }}
+                onOpenChange={setIsServingRuntimeOpen}
+                toggle={(toggleRef) => (
+                  <MenuToggle
+                    ref={toggleRef}
+                    isInForm
+                    isFullWidth
+                    onClick={() => setIsServingRuntimeOpen((isOpen) => !isOpen)}
+                    isExpanded={isServingRuntimeOpen}
+                    id="model-catalog-serving-runtime-toggle"
                   >
-                    Selected
-                  </Label>
-                ) : null}
-                <Title
-                  headingLevel="h3"
-                  size="md"
-                  className="provider-setup-template__select-card-title"
-                >
-                  {runtime}
-                </Title>
-              </button>
-            )
-          })}
-        </div>
-      </FormGroup>
-    </div>
+                    {servingRuntime || 'Select an accelerator configuration'}
+                  </MenuToggle>
+                )}
+                shouldFocusToggleOnSelect
+              >
+                <SelectList>
+                  {SERVING_RUNTIMES.map(({ id, value, version }) => (
+                    <SelectOption key={id} id={id} value={value}>
+                      <span className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                        {value}
+                        <Label color="blue" isCompact className="pf-v6-u-ml-sm">
+                          {version}
+                        </Label>
+                      </span>
+                    </SelectOption>
+                  ))}
+                </SelectList>
+              </Select>
+            </div>
+          ) : null}
+        </FormGroup>
+      </FormSection>
+    </Form>
   )
 }
