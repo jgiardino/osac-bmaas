@@ -943,50 +943,48 @@ const ModelServiceLaunchWizardPreview = ({
                 label="Configuration parameters"
                 fieldId={inputId('configuration-parameters')}
               >
-                <FormGroup fieldId={inputId('runtime-arguments')}>
-                  <div className={fieldActionRowClassName}>
-                    <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
-                      <label
-                        className="pf-v6-c-form__label pf-v6-u-mb-0"
-                        htmlFor={inputId('runtime-arguments')}
-                      >
-                        <span className="pf-v6-c-form__label-text">
-                          Additional runtime arguments
-                        </span>
-                      </label>
-                      <Popover
-                        headerContent="Runtime arguments"
-                        bodyContent="Serving runtime arguments define how the deployed model behaves. Overwriting predefined arguments only affects this model deployment."
-                      >
-                        <FormGroupLabelHelp
-                          aria-label="More info about runtime arguments"
-                          className="pf-v6-u-ml-sm"
-                          id={inputId('runtime-arguments-help')}
-                        />
-                      </Popover>
-                    </div>
-                    <Button variant="link" isInline isDisabled>
-                      View predefined arguments
-                    </Button>
+                <div className={fieldActionRowClassName}>
+                  <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                    <label
+                      className="pf-v6-c-form__label pf-v6-u-mb-0"
+                      htmlFor={inputId('runtime-arguments')}
+                    >
+                      <span className="pf-v6-c-form__label-text">
+                        Additional runtime arguments
+                      </span>
+                    </label>
+                    <Popover
+                      headerContent="Runtime arguments"
+                      bodyContent="Serving runtime arguments define how the deployed model behaves. Overwriting predefined arguments only affects this model deployment."
+                    >
+                      <FormGroupLabelHelp
+                        aria-label="More info about runtime arguments"
+                        className="pf-v6-u-ml-sm"
+                        id={inputId('runtime-arguments-help')}
+                      />
+                    </Popover>
                   </div>
-                  <TextArea
-                    id={inputId('runtime-arguments')}
-                    value={runtimeArguments}
-                    placeholder={'--arg\n--arg2=value2\n--arg3 value3'}
-                    isDisabled={runtimeCustomizationLocked}
-                    onChange={(_event, value) => setRuntimeArguments(value)}
-                    resizeOrientation="vertical"
-                    rows={3}
-                  />
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem>
-                        Overwriting the runtime&apos;s predefined listening port or model location
-                        will likely result in a failed deployment.
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                </FormGroup>
+                  <Button variant="link" isInline isDisabled>
+                    View predefined arguments
+                  </Button>
+                </div>
+                <TextArea
+                  id={inputId('runtime-arguments')}
+                  value={runtimeArguments}
+                  placeholder={'--arg\n--arg2=value2\n--arg3 value3'}
+                  isDisabled={runtimeCustomizationLocked}
+                  onChange={(_event, value) => setRuntimeArguments(value)}
+                  resizeOrientation="vertical"
+                  rows={3}
+                />
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>
+                      Overwriting the runtime&apos;s predefined listening port or model location will
+                      likely result in a failed deployment.
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
                 <div className={fieldActionRowClassName}>
                   <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
                     <Checkbox
