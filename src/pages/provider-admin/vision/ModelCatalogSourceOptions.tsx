@@ -1,11 +1,12 @@
+import { Fragment } from 'react'
 import {
+  Button,
   Form,
   FormGroup,
   FormSection,
   Grid,
   GridItem,
   Label,
-  TextInput,
   Title,
 } from '@patternfly/react-core'
 import type { RegisteredOrganization } from '../../../providerAdmin/organizations'
@@ -19,8 +20,6 @@ type ModelCatalogSourceOptionsProps = {
   onTenantAccessOptionsChange: (options: readonly ModelTenantAccessOption[]) => void
   catalogChoices: Readonly<Record<string, ModelCatalogChoice>>
   onCatalogChoiceChange: (tenantId: string, choice: ModelCatalogChoice) => void
-  specificModels: Readonly<Record<string, string>>
-  onSpecificModelsChange: (tenantId: string, models: string) => void
 }
 
 const MODEL_ACCESS_OPTIONS: readonly {
@@ -69,8 +68,6 @@ export function ModelCatalogSourceOptions({
   onTenantAccessOptionsChange,
   catalogChoices,
   onCatalogChoiceChange,
-  specificModels,
-  onSpecificModelsChange,
 }: ModelCatalogSourceOptionsProps) {
   const toggleTenantAccess = (option: ModelTenantAccessOption) => {
     const next = new Set(tenantAccessOptions)
@@ -137,7 +134,7 @@ export function ModelCatalogSourceOptions({
             const selectedChoice = catalogChoices[tenant.tenantId] ?? 'all'
             const fieldId = `model-catalog-policy-${tenant.tenantId}`
             return (
-              <div key={tenant.tenantId}>
+              <Fragment key={tenant.tenantId}>
                 <FormGroup label={tenant.name} fieldId={fieldId} role="radiogroup">
                   <Grid hasGutter>
                     {MODEL_CATALOG_CHOICES.map(({ id, label, description }) => {
@@ -177,16 +174,13 @@ export function ModelCatalogSourceOptions({
                   </Grid>
                 </FormGroup>
                 {selectedChoice === 'specific' ? (
-                  <FormGroup label="Specific models" fieldId={`${fieldId}-specific-models`}>
-                    <TextInput
-                      id={`${fieldId}-specific-models`}
-                      value={specificModels[tenant.tenantId] ?? ''}
-                      onChange={(_event, value) => onSpecificModelsChange(tenant.tenantId, value)}
-                      aria-label={`Specific models for ${tenant.name}`}
-                    />
-                  </FormGroup>
+                  <div>
+                    <Button variant="secondary" id={`${fieldId}-select-models`}>
+                      Select models
+                    </Button>
+                  </div>
                 ) : null}
-              </div>
+              </Fragment>
             )
           })}
         </FormSection>

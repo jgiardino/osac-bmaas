@@ -15,9 +15,7 @@ export function VisionModelAuthoringFlowsPage() {
   const [activeFlow, setActiveFlow] = useState<
     'catalog-item' | 'predictive' | 'llm-instruct' | 'llm-tool-calling'
   >('catalog-item')
-  const [selectedModels, setSelectedModels] = useState<readonly string[]>(() =>
-    [...DEMO_APPROVED_MODELS],
-  )
+  const selectedModels = DEMO_APPROVED_MODELS
   const [eligibleClusterIds, setEligibleClusterIds] = useState<readonly string[]>([
     'ocp-us-east-1',
     'ocp-eu-west-1',
@@ -48,7 +46,6 @@ export function VisionModelAuthoringFlowsPage() {
           id="vision-model-authoring-flow-tab-catalog"
         >
           <ModelCatalogItemWizardPreview
-            onSelectedModelsChange={setSelectedModels}
             eligibleClusterIds={eligibleClusterIds}
             onEligibleClusterIdsChange={setEligibleClusterIds}
             settingModes={settingModes}

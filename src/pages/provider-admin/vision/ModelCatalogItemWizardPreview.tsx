@@ -43,7 +43,6 @@ import {
 } from './ModelCatalogSourceOptions'
 
 type ModelCatalogItemWizardPreviewProps = {
-  onSelectedModelsChange: (models: readonly string[]) => void
   eligibleClusterIds: readonly string[]
   onEligibleClusterIdsChange: (clusterIds: readonly string[]) => void
   settingModes: ModelSettingModes
@@ -68,7 +67,6 @@ const formatSelectedTenants = (
 }
 
 export function ModelCatalogItemWizardPreview({
-  onSelectedModelsChange,
   eligibleClusterIds,
   onEligibleClusterIdsChange,
   settingModes,
@@ -87,7 +85,6 @@ export function ModelCatalogItemWizardPreview({
     readonly ModelTenantAccessOption[]
   >(['catalog', 'connection'])
   const [catalogChoices, setCatalogChoices] = useState<Record<string, ModelCatalogChoice>>({})
-  const [specificModels, setSpecificModels] = useState<Record<string, string>>({})
 
   const modelService = CATALOG_SERVICE_OFFERINGS.find(
     (service) => service.id === selectedServiceId,
@@ -115,15 +112,6 @@ export function ModelCatalogItemWizardPreview({
     if (selectedTenantIds.length === 0 && organizations[0]) {
       setSelectedTenantIds([organizations[0].tenantId])
     }
-  }
-
-  const updateSpecificModels = (tenantId: string, value: string) => {
-    setSpecificModels((current) => ({ ...current, [tenantId]: value }))
-    const models = value
-      .split(',')
-      .map((model) => model.trim())
-      .filter(Boolean)
-    onSelectedModelsChange(models)
   }
 
   return (
@@ -341,8 +329,6 @@ export function ModelCatalogItemWizardPreview({
                 [tenantId]: choice,
               }))
             }
-            specificModels={specificModels}
-            onSpecificModelsChange={updateSpecificModels}
           />
         </WizardStep>
 
@@ -410,9 +396,7 @@ export function ModelCatalogItemWizardPreview({
                     .map((tenant) => {
                       const choice = catalogChoices[tenant.tenantId] ?? 'all'
                       return `${tenant.name}: ${
-                        choice === 'all'
-                          ? 'All models'
-                          : specificModels[tenant.tenantId] || 'Specific models'
+                        choice === 'all' ? 'All models' : 'Specific models'
                       }`
                     })
                     .join('; ') || '—'}

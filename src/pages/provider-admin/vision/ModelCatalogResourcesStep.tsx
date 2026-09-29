@@ -1,3 +1,5 @@
+import { MinusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/minus-circle-icon'
+import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import { useState } from 'react'
 import {
   Button,
@@ -271,22 +273,25 @@ export function ModelCatalogResourcesStep({
                     }
                   />
                   <Button
-                    variant="link"
-                    isDanger
-                    isInline
+                    variant="plain"
+                    icon={<MinusCircleIcon />}
+                    aria-label={`Remove environment variable ${index + 1}`}
                     onClick={() =>
                       setEnvironmentVariables((current) =>
                         current.filter((variable) => variable.id !== entry.id),
                       )
                     }
-                  >
-                    Remove
-                  </Button>
+                  />
                 </div>
               </StackItem>
             ))}
           </Stack>
-          <Button variant="link" isInline onClick={addEnvironmentVariable}>
+          <Button
+            variant="link"
+            icon={<PlusCircleIcon />}
+            isInline
+            onClick={addEnvironmentVariable}
+          >
             Add variable
           </Button>
         </FormGroup>

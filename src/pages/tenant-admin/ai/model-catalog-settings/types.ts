@@ -1,4 +1,4 @@
-export type CatalogSourceType = 'yaml' | 'hf';
+export type CatalogSourceType = 'YAML file' | 'Hugging Face repository';
 
 export type CatalogSourceValidationStatus = 'ready' | 'starting' | 'failed' | 'unknown' | 'none';
 
@@ -7,10 +7,9 @@ export interface CatalogSourceConfigRow {
   name: string;
   type: CatalogSourceType;
   enabled: boolean;
-  isDefault?: boolean;
-  allowedOrganization?: string;
-  includedModels?: string[];
-  excludedModels?: string[];
+  isDefault: boolean;
+  organization: string;
+  visibility: 'All models' | 'Filtered';
   validationStatus: CatalogSourceValidationStatus;
   validationError?: string;
 }

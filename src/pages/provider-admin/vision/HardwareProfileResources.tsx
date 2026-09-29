@@ -68,7 +68,7 @@ const getUnitScale = (unit: ResourceUnit) =>
   unit === 'Millicores' ? 1000 : unit === 'MiB' ? 1024 : 1
 
 const HardwareProfileResources = () => {
-  const [isCustomizeExpanded, setIsCustomizeExpanded] = useState(true)
+  const [isCustomizeExpanded, setIsCustomizeExpanded] = useState(false)
   const [resources, setResources] = useState<Record<ResourceKey, number>>({
     cpuRequests: 2,
     cpuLimits: 2,

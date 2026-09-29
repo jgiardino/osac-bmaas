@@ -1690,13 +1690,6 @@ export function ProviderSetupPublishCatalogWizard({
                 [tenantId]: choice,
               }))
             }
-            specificModels={modelSpecificModels}
-            onSpecificModelsChange={(tenantId, models) =>
-              setModelSpecificModels((current) => ({
-                ...current,
-                [tenantId]: models,
-              }))
-            }
           />
         )
       case 'serving-configuration':
