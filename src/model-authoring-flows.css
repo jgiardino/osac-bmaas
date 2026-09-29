@@ -21,12 +21,46 @@
   align-items: center;
 }
 
+.vision-model-flow-preview__hardware-profile-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--pf-t--global--spacer--md);
+  align-items: center;
+}
+
+.vision-model-flow-preview__hardware-profile-summary {
+  margin-block: var(--pf-t--global--spacer--sm) 0;
+}
+
+.vision-model-flow-preview__resource-grid {
+  margin-block-start: var(--pf-t--global--spacer--md);
+}
+
+.vision-model-flow-preview__resource-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem;
+  gap: var(--pf-t--global--spacer--md);
+  max-width: 20rem;
+}
+
+.vision-model-flow-preview__resource-range {
+  margin-block-start: var(--pf-t--global--spacer--xs);
+}
+
+.vision-model-flow-preview__resource-learn-more {
+  margin-block-start: var(--pf-t--global--spacer--md);
+}
+
 @media (max-width: 40rem) {
   .vision-model-flow-preview__environment-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .vision-model-flow-preview__runtime-environment-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vision-model-flow-preview__hardware-profile-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

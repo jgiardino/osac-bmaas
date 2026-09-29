@@ -115,7 +115,7 @@ export function TenantShell({
               to="#"
               preventDefault
               onClick={() => {
-                if (disabledNavIds.includes(child.id) || activeNavId !== child.id) {
+                if (disabledNavIds.includes(child.id)) {
                   return
                 }
                 if (onNavChange) {
@@ -141,7 +141,7 @@ export function TenantShell({
         to="#"
         preventDefault
         onClick={() => {
-          if (disabledNavIds.includes(item.id) || activeNavId !== item.id) {
+          if (disabledNavIds.includes(item.id)) {
             return
           }
           if (onNavChange) {

@@ -42,6 +42,7 @@ import type {
   ModelSettingModes,
   ServiceWizardVariation,
 } from '../../../vision/modelAuthoringFlow'
+import { getCatalogServiceIcon } from '../../../catalog/serviceIcons'
 import { DEMO_TENANT_PROJECT_NAME, DEMO_TENANT_PROJECT_NAME_02 } from '../../../tenantAdmin/projects'
 import { createInitialClusters } from '../../../vision/fleetWorld'
 import {
@@ -86,8 +87,22 @@ const MODEL_SOURCE_SECRETS = [
 
 const NEW_SECRET_OPTION = 'Specify new secret'
 
+const INSTRUCT_MODEL_DESCRIPTIONS: Record<string, string> = {
+  'gemma-4-31B-it':
+    'Instruction-tuned Gemma 4 31B multimodal model by Google DeepMind.',
+  'Qwen3-VL-30B-A3B-Instruct':
+    'Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date.',
+  'Devstral-Small-2-24B-Instruct-2512':
+    'Devstral is an agentic LLM for software engineering tasks.',
+}
+
 const getOptionClassName = (isSelected: boolean) =>
   `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
+    isSelected ? ' provider-setup-template__select-card--selected' : ''
+  }`
+
+const getModelOptionClassName = (isSelected: boolean) =>
+  `provider-setup-template__select-card${
     isSelected ? ' provider-setup-template__select-card--selected' : ''
   }`
 
@@ -105,6 +120,7 @@ const isLockedForVariation = (
 ) =>
   (variation === 'llm-tool-calling' &&
     (settingId === 'runtime' || settingId === 'runtimeCustomization')) ||
+  (variation === 'llm-instruct' && settingId === 'runtimeCustomization') ||
   settingModes[settingId] === 'locked'
 
 const ModelServiceLaunchWizardPreview = ({
@@ -154,7 +170,8 @@ const ModelServiceLaunchWizardPreview = ({
 
   const isByom = variation === 'predictive'
   const isFixedModel = variation === 'llm-tool-calling'
-  const selectedModel = selectedModels.includes(modelChoice) ? modelChoice : selectedModels[0] ?? ''
+  const modelOptions = selectedModels
+  const selectedModel = modelOptions.includes(modelChoice) ? modelChoice : modelOptions[0] ?? ''
   const selectedClusterId = eligibleClusterIds.includes(clusterId)
     ? clusterId
     : (eligibleClusterIds[0] ?? '')
@@ -177,7 +194,7 @@ const ModelServiceLaunchWizardPreview = ({
   const topologyLocked = settingModes.topology === 'locked'
   const lifecycleLocked = settingModes.lifecycle === 'locked'
   const deploymentMethodLocked = settingModes.servingMethod === 'locked'
-  const shownModels = showAllModels ? selectedModels : selectedModels.slice(0, 3)
+  const shownModels = showAllModels ? modelOptions : modelOptions.slice(0, 3)
   const chosenServingRuntime =
     servingRuntime ||
     (variation === 'llm-tool-calling' ? 'vLLM (function engine)' : 'vLLM NVIDIA GPU config')
@@ -420,6 +437,57 @@ const ModelServiceLaunchWizardPreview = ({
                     aria-label="Model fixed in catalog item"
                   />
                 </FormGroup>
+              ) : variation === 'llm-instruct' ? (
+                <FormGroup label="Model" fieldId={inputId('model-choice')} isRequired>
+                  <Grid
+                    id={inputId('model-choice')}
+                    hasGutter
+                    role="radiogroup"
+                    aria-label="Model"
+                  >
+                    {shownModels.map((model) => {
+                      const isSelected = selectedModel === model
+                      return (
+                        <GridItem key={model} span={12} md={6}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            className={getModelOptionClassName(isSelected)}
+                            onClick={() => setModelChoice(model)}
+                          >
+                            <div
+                              className="provider-setup-template__service-card-icon-wrap"
+                              aria-hidden
+                            >
+                              {getCatalogServiceIcon('models')}
+                            </div>
+                            <Title
+                              headingLevel="h4"
+                              size="md"
+                              className="provider-setup-template__select-card-title"
+                            >
+                              {model}
+                            </Title>
+                            <p className="provider-setup-template__select-card-detail">
+                              {INSTRUCT_MODEL_DESCRIPTIONS[model] ??
+                                'Instruction-tuned model available from the catalog.'}
+                            </p>
+                          </button>
+                        </GridItem>
+                      )
+                    })}
+                  </Grid>
+                  {modelOptions.length > 3 ? (
+                    <Button
+                      variant="link"
+                      isInline
+                      onClick={() => setShowAllModels((current) => !current)}
+                    >
+                      {showAllModels ? 'Show fewer options' : 'View options'}
+                    </Button>
+                  ) : null}
+                </FormGroup>
               ) : (
                 <FormGroup label="Model" fieldId={inputId('model-choice')} isRequired>
                   <Stack
@@ -459,6 +527,7 @@ const ModelServiceLaunchWizardPreview = ({
                   <FormSelect
                     id={inputId('model-type')}
                     value={modelType}
+                    isDisabled={variation === 'predictive'}
                     onChange={(_event, value) => setModelType(value as DeployModelType)}
                   >
                     {MODEL_TYPES.map((type) => (
@@ -825,138 +894,147 @@ const ModelServiceLaunchWizardPreview = ({
               </FormSection>
             ) : null}
 
-            {!runtimeCustomizationLocked ? (
-              <FormSection title="Runtime customization" titleElement="h3">
-                <FormGroup
-                  role="group"
-                  isStack
-                  label="Configuration parameters"
-                  fieldId={inputId('configuration-parameters')}
-                >
-                  <FormGroup fieldId={inputId('runtime-arguments')}>
-                    <div className={fieldActionRowClassName}>
-                      <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
-                        <label
-                          className="pf-v6-c-form__label pf-v6-u-mb-0"
-                          htmlFor={inputId('runtime-arguments')}
-                        >
-                          <span className="pf-v6-c-form__label-text">
-                            Additional runtime arguments
-                          </span>
-                        </label>
-                        <Popover
-                          headerContent="Runtime arguments"
-                          bodyContent="Serving runtime arguments define how the deployed model behaves. Overwriting predefined arguments only affects this model deployment."
-                        >
-                          <FormGroupLabelHelp
-                            aria-label="More info about runtime arguments"
-                            className="pf-v6-u-ml-sm"
-                            id={inputId('runtime-arguments-help')}
-                          />
-                        </Popover>
-                      </div>
-                      <Button variant="link" isInline isDisabled>
-                        View predefined arguments
-                      </Button>
-                    </div>
-                    <TextArea
-                      id={inputId('runtime-arguments')}
-                      value={runtimeArguments}
-                      placeholder={'--arg\n--arg2=value2\n--arg3 value3'}
-                      onChange={(_event, value) => setRuntimeArguments(value)}
-                      resizeOrientation="vertical"
-                      rows={3}
-                    />
-                    <FormHelperText>
-                      <HelperText>
-                        <HelperTextItem>
-                          Overwriting the runtime&apos;s predefined listening port or model location
-                          will likely result in a failed deployment.
-                        </HelperTextItem>
-                      </HelperText>
-                    </FormHelperText>
-                  </FormGroup>
+            <FormSection title="Runtime customization" titleElement="h3">
+              {runtimeCustomizationLocked ? (
+                <p className="provider-setup-template__publish-step-lede">
+                  Runtime customization is locked for this model.
+                </p>
+              ) : null}
+              <FormGroup
+                role="group"
+                isStack
+                label="Configuration parameters"
+                fieldId={inputId('configuration-parameters')}
+              >
+                <FormGroup fieldId={inputId('runtime-arguments')}>
                   <div className={fieldActionRowClassName}>
                     <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
-                      <Checkbox
-                        id={inputId('custom-environment-variables')}
-                        label="Add custom runtime environment variables"
-                        isChecked={addCustomRuntimeEnvironmentVariables}
-                        onChange={(_event, checked) =>
-                          setAddCustomRuntimeEnvironmentVariables(checked)
-                        }
-                      />
+                      <label
+                        className="pf-v6-c-form__label pf-v6-u-mb-0"
+                        htmlFor={inputId('runtime-arguments')}
+                      >
+                        <span className="pf-v6-c-form__label-text">
+                          Additional runtime arguments
+                        </span>
+                      </label>
                       <Popover
-                        headerContent="Environment variables"
-                        bodyContent="Environment variables can be predefined by the selected serving runtime. Overwriting predefined variables only affects this model deployment."
+                        headerContent="Runtime arguments"
+                        bodyContent="Serving runtime arguments define how the deployed model behaves. Overwriting predefined arguments only affects this model deployment."
                       >
                         <FormGroupLabelHelp
-                          aria-label="More info about environment variables"
+                          aria-label="More info about runtime arguments"
                           className="pf-v6-u-ml-sm"
-                          id={inputId('environment-variables-help')}
+                          id={inputId('runtime-arguments-help')}
                         />
                       </Popover>
                     </div>
                     <Button variant="link" isInline isDisabled>
-                      View predefined variables
+                      View predefined arguments
                     </Button>
                   </div>
-                  {addCustomRuntimeEnvironmentVariables ? (
-                    <Stack hasGutter>
-                      {environmentVariables.map((variable, index) => (
-                        <StackItem key={variable.id}>
-                          <div className="vision-model-flow-preview__runtime-environment-row">
-                            <TextInput
-                              aria-label={`Environment variable ${index + 1} key`}
-                              value={variable.key}
-                              onChange={(_event, value) =>
-                                updateEnvironmentVariable(variable.id, 'key', value)
-                              }
-                            />
-                            <TextInput
-                              aria-label={`Environment variable ${index + 1} value`}
-                              value={variable.value}
-                              onChange={(_event, value) =>
-                                updateEnvironmentVariable(variable.id, 'value', value)
-                              }
-                            />
-                            <Button
-                              variant="plain"
-                              icon={<MinusCircleIcon />}
-                              aria-label={`Remove environment variable ${index + 1}`}
-                              onClick={() =>
-                                setEnvironmentVariables((current) =>
-                                  current.filter((entry) => entry.id !== variable.id),
-                                )
-                              }
-                            />
-                          </div>
-                        </StackItem>
-                      ))}
-                      <StackItem>
-                        <Button
-                          variant="link"
-                          icon={<PlusCircleIcon />}
-                          isInline
-                          onClick={() =>
-                            setEnvironmentVariables((current) => [
-                              ...current,
-                              {
-                                id: Math.max(0, ...current.map((variable) => variable.id)) + 1,
-                                key: '',
-                                value: '',
-                              },
-                            ])
-                          }
-                        >
-                          Add variable
-                        </Button>
-                      </StackItem>
-                    </Stack>
-                  ) : null}
+                  <TextArea
+                    id={inputId('runtime-arguments')}
+                    value={runtimeArguments}
+                    placeholder={'--arg\n--arg2=value2\n--arg3 value3'}
+                    isDisabled={runtimeCustomizationLocked}
+                    onChange={(_event, value) => setRuntimeArguments(value)}
+                    resizeOrientation="vertical"
+                    rows={3}
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem>
+                        Overwriting the runtime&apos;s predefined listening port or model location
+                        will likely result in a failed deployment.
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
                 </FormGroup>
-              </FormSection>
-            ) : null}
+                <div className={fieldActionRowClassName}>
+                  <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                    <Checkbox
+                      id={inputId('custom-environment-variables')}
+                      label="Add custom runtime environment variables"
+                      isChecked={addCustomRuntimeEnvironmentVariables}
+                      isDisabled={runtimeCustomizationLocked}
+                      onChange={(_event, checked) =>
+                        setAddCustomRuntimeEnvironmentVariables(checked)
+                      }
+                    />
+                    <Popover
+                      headerContent="Environment variables"
+                      bodyContent="Environment variables can be predefined by the selected serving runtime. Overwriting predefined variables only affects this model deployment."
+                    >
+                      <FormGroupLabelHelp
+                        aria-label="More info about environment variables"
+                        className="pf-v6-u-ml-sm"
+                        id={inputId('environment-variables-help')}
+                      />
+                    </Popover>
+                  </div>
+                  <Button variant="link" isInline isDisabled>
+                    View predefined variables
+                  </Button>
+                </div>
+                {addCustomRuntimeEnvironmentVariables ? (
+                  <Stack hasGutter>
+                    {environmentVariables.map((variable, index) => (
+                      <StackItem key={variable.id}>
+                        <div className="vision-model-flow-preview__runtime-environment-row">
+                          <TextInput
+                            aria-label={`Environment variable ${index + 1} key`}
+                            value={variable.key}
+                            isDisabled={runtimeCustomizationLocked}
+                            onChange={(_event, value) =>
+                              updateEnvironmentVariable(variable.id, 'key', value)
+                            }
+                          />
+                          <TextInput
+                            aria-label={`Environment variable ${index + 1} value`}
+                            value={variable.value}
+                            isDisabled={runtimeCustomizationLocked}
+                            onChange={(_event, value) =>
+                              updateEnvironmentVariable(variable.id, 'value', value)
+                            }
+                          />
+                          <Button
+                            variant="plain"
+                            icon={<MinusCircleIcon />}
+                            aria-label={`Remove environment variable ${index + 1}`}
+                            isDisabled={runtimeCustomizationLocked}
+                            onClick={() =>
+                              setEnvironmentVariables((current) =>
+                                current.filter((entry) => entry.id !== variable.id),
+                              )
+                            }
+                          />
+                        </div>
+                      </StackItem>
+                    ))}
+                    <StackItem>
+                      <Button
+                        variant="link"
+                        icon={<PlusCircleIcon />}
+                        isInline
+                        isDisabled={runtimeCustomizationLocked}
+                        onClick={() =>
+                          setEnvironmentVariables((current) => [
+                            ...current,
+                            {
+                              id: Math.max(0, ...current.map((variable) => variable.id)) + 1,
+                              key: '',
+                              value: '',
+                            },
+                          ])
+                        }
+                      >
+                        Add variable
+                      </Button>
+                    </StackItem>
+                  </Stack>
+                ) : null}
+              </FormGroup>
+            </FormSection>
 
             {!isByom ? (
               <FormSection title="Lifecycle" titleElement="h3">

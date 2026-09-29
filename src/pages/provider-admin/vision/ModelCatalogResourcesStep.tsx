@@ -24,11 +24,11 @@ import type {
 } from '../../../vision/modelAuthoringFlow'
 import {
   ACCELERATOR_CONFIGURATIONS,
-  HARDWARE_PROFILES,
   ROUTING_OPTIONS,
   TOPOLOGIES,
   TOPOLOGY_CONFIGURATIONS,
 } from './modelWizardOptions'
+import HardwareProfileResources from './HardwareProfileResources'
 import ModelCatalogResourceSection from './ModelCatalogResourceSection'
 
 type ModelCatalogResourcesStepProps = {
@@ -47,7 +47,6 @@ export function ModelCatalogResourcesStep({
   settingModes,
   onSettingModeChange,
 }: ModelCatalogResourcesStepProps) {
-  const [hardwareProfile, setHardwareProfile] = useState('default')
   const [replicas, setReplicas] = useState(1)
   const [topology, setTopology] = useState<(typeof TOPOLOGIES)[number]['id']>('single-node')
   const [topologyConfig, setTopologyConfig] = useState('Single node (default)')
@@ -80,17 +79,7 @@ export function ModelCatalogResourcesStep({
         mode={settingModes.cpu}
         onModeChange={onSettingModeChange}
       >
-        <FormGroup label="Hardware profile" fieldId="model-catalog-hardware-profile" isRequired>
-          <FormSelect
-            id="model-catalog-hardware-profile"
-            value={hardwareProfile}
-            onChange={(_event, value) => setHardwareProfile(value)}
-          >
-            {HARDWARE_PROFILES.map((profile) => (
-              <FormSelectOption key={profile} value={profile} label={profile} />
-            ))}
-          </FormSelect>
-        </FormGroup>
+        <HardwareProfileResources />
         <FormGroup label="Number of replicas to deploy" fieldId="model-catalog-replicas">
           <NumberInput
             id="model-catalog-replicas"

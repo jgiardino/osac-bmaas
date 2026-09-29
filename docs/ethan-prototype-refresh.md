@@ -7,9 +7,8 @@ Files changed by both the OSAC model-fleet branch and Ethan's update use Ethan's
 main app. This keeps the provider and tenant routes current while preserving the prior complete
 prototype at `public/legacy-prototype/`.
 
-The landing page links to **Previous prototype (TO BE REMOVED)**. The archive is a built,
-interactive snapshot with a persistent banner on every route. Its source remains available in Git
-history before the baseline refresh.
+The pre-refresh archive is a built, interactive snapshot with a persistent banner on every route.
+Its source remains available in Git history before the baseline refresh.
 
 ## Ethan's pages now used by the main app
 

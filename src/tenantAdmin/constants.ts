@@ -4,6 +4,10 @@ export type TenantAdminNavId =
   | 'ai-asset-endpoints'
   | 'playground'
   | 'api-keys'
+  | 'admin-maas-governance'
+  | 'admin-model-catalog-settings'
+  | 'admin-api-keys'
+  | 'admin-ai-usage'
   | 'catalog'
   | 'services-baremetal'
   | 'services-clusters'
@@ -70,6 +74,16 @@ export const TENANT_ADMIN_GENAI_STUDIO_NAV_ITEMS: ReadonlyArray<{
   { id: 'api-keys', label: 'API keys' },
 ]
 
+export const TENANT_ADMIN_AI_NAV_ITEMS: ReadonlyArray<{
+  id: TenantAdminNavId
+  label: string
+}> = [
+  { id: 'admin-maas-governance', label: 'MaaS governance' },
+  { id: 'admin-model-catalog-settings', label: 'Model catalog settings' },
+  { id: 'admin-api-keys', label: 'API keys' },
+  { id: 'admin-ai-usage', label: 'Usage' },
+]
+
 export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'ai-grid', label: 'AI Grid' },
@@ -83,6 +97,11 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
     id: 'genai-studio',
     label: 'GenAI studio',
     children: TENANT_ADMIN_GENAI_STUDIO_NAV_ITEMS,
+  },
+  {
+    id: 'ai-administration',
+    label: 'AI',
+    children: TENANT_ADMIN_AI_NAV_ITEMS,
   },
   { id: 'projects-teams', label: 'Projects' },
   {

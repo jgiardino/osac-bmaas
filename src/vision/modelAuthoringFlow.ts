@@ -67,9 +67,9 @@ export const DEFAULT_MODEL_CLUSTER_AVAILABILITY: ModelCatalogClusterAvailability
 }
 
 export const DEMO_APPROVED_MODELS = [
-  'Granite 3B instruct',
-  'Mistral 7B',
-  'Llama 4 Scout',
+  'gemma-4-31B-it',
+  'Qwen3-VL-30B-A3B-Instruct',
+  'Devstral-Small-2-24B-Instruct-2512',
 ] as const
 
 export const getModelChoicePolicyLabel = (policy: ModelChoicePolicy) => {

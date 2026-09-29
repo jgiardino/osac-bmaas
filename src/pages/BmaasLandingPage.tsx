@@ -314,14 +314,6 @@ export function BmaasLandingPage() {
             >
               OSAC Delivery Overview
             </Button>
-            <Button
-              variant="link"
-              component="a"
-              isInline
-              href={`${import.meta.env.BASE_URL}legacy-prototype/`}
-            >
-              Previous prototype (TO BE REMOVED)
-            </Button>
             <div className="bmaas-role-landing__credits">
               <Content component="p">
                 AI Grid (future vision) by{' '}

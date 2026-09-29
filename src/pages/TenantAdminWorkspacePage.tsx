@@ -7,6 +7,8 @@ import { PlaceholderTenantAdminPage } from './PlaceholderTenantAdminPage'
 import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdminExternalNetworksPage'
 import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdminVirtualNetworksPage'
 import { TenantAdminCatalogPage } from './tenant-admin/TenantAdminCatalogPage'
+import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
+import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminAdministratorsPage } from './tenant-admin/TenantAdminAdministratorsPage'
 import { TenantAdminBillingPage } from './tenant-admin/TenantAdminBillingPage'
@@ -14,6 +16,7 @@ import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjects
 import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
+import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   isServicesNavId,
@@ -71,9 +74,9 @@ const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
     title: 'Playground',
     description: 'Explore tenant model endpoints in the GenAI studio playground.',
   },
-  'api-keys': {
-    title: 'API keys',
-    description: 'Manage API keys used to access tenant model endpoints.',
+  'admin-ai-usage': {
+    title: 'AI usage',
+    description: 'Review AI model usage across the tenant.',
   },
 }
 
@@ -84,6 +87,10 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'ai-asset-endpoints' ||
     value === 'playground' ||
     value === 'api-keys' ||
+    value === 'admin-maas-governance' ||
+    value === 'admin-model-catalog-settings' ||
+    value === 'admin-api-keys' ||
+    value === 'admin-ai-usage' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
@@ -337,6 +344,14 @@ export function TenantAdminWorkspacePage() {
     }
 
     switch (activeNavId) {
+      case 'api-keys':
+        return <GenaiApiKeysPage />
+      case 'admin-api-keys':
+        return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
+      case 'admin-maas-governance':
+        return <MaaSGovernancePage />
+      case 'admin-model-catalog-settings':
+        return <ModelCatalogSettingsPage />
       case 'ai-grid':
         return (
           <VisionModelFleetPage
