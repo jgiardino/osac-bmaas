@@ -3,6 +3,8 @@ import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circ
 import { useState } from 'react'
 import {
   Button,
+  Card,
+  CardBody,
   Checkbox,
   DescriptionList,
   DescriptionListDescription,
@@ -87,13 +89,25 @@ const MODEL_SOURCE_SECRETS = [
 
 const NEW_SECRET_OPTION = 'Specify new secret'
 
-const INSTRUCT_MODEL_DESCRIPTIONS: Record<string, string> = {
-  'gemma-4-31B-it':
-    'Instruction-tuned Gemma 4 31B multimodal model by Google DeepMind.',
-  'Qwen3-VL-30B-A3B-Instruct':
-    'Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date.',
-  'Devstral-Small-2-24B-Instruct-2512':
-    'Devstral is an agentic LLM for software engineering tasks.',
+const INSTRUCT_MODEL_CARDS = [
+  {
+    name: 'gemma-4-31B-it',
+    description: 'Instruction-tuned Gemma 4 31B multimodal model by Google DeepMind.',
+  },
+  {
+    name: 'Qwen3-VL-30B-A3B-Instruct',
+    description: 'Meet Qwen3-VL — the most powerful vision-language model in the Qwen series to date.',
+  },
+  {
+    name: 'Devstral-Small-2-24B-Instruct-2512',
+    description: 'Devstral is an agentic LLM for software engineering tasks.',
+  },
+] as const
+
+const TOOL_CALLING_MODEL = {
+  name: 'gemma-4-26B-A4B-it',
+  description:
+    'Gemma 4 is well-suited for tasks like text generation, tool calling, coding, and reasoning.',
 }
 
 const getOptionClassName = (isSelected: boolean) =>
@@ -170,7 +184,10 @@ const ModelServiceLaunchWizardPreview = ({
 
   const isByom = variation === 'predictive'
   const isFixedModel = variation === 'llm-tool-calling'
-  const modelOptions = selectedModels
+  const modelOptions =
+    variation === 'llm-instruct'
+      ? INSTRUCT_MODEL_CARDS.map(({ name }) => name)
+      : selectedModels
   const selectedModel = modelOptions.includes(modelChoice) ? modelChoice : modelOptions[0] ?? ''
   const selectedClusterId = eligibleClusterIds.includes(clusterId)
     ? clusterId
@@ -429,13 +446,34 @@ const ModelServiceLaunchWizardPreview = ({
                   </FormGroup>
                 </>
               ) : isFixedModel ? (
-                <FormGroup label="Model" fieldId={inputId('model-fixed')}>
-                  <TextInput
-                    id={inputId('model-fixed')}
-                    value="Fixed in catalog item"
-                    isDisabled
-                    aria-label="Model fixed in catalog item"
-                  />
+                <FormGroup label="Model" fieldId={inputId('model-fixed')} isRequired>
+                  <Grid id={inputId('model-fixed')} hasGutter aria-label="Model">
+                    <GridItem span={12} md={3}>
+                      <Card
+                        isCompact
+                        className="provider-setup-template__select-card provider-setup-template__select-card--static"
+                      >
+                        <CardBody className="pf-v6-u-p-0">
+                          <div
+                            className="provider-setup-template__service-card-icon-wrap"
+                            aria-hidden
+                          >
+                            {getCatalogServiceIcon('models')}
+                          </div>
+                          <Title
+                            headingLevel="h4"
+                            size="md"
+                            className="provider-setup-template__select-card-title"
+                          >
+                            {TOOL_CALLING_MODEL.name}
+                          </Title>
+                          <p className="provider-setup-template__select-card-detail">
+                            {TOOL_CALLING_MODEL.description}
+                          </p>
+                        </CardBody>
+                      </Card>
+                    </GridItem>
+                  </Grid>
                 </FormGroup>
               ) : variation === 'llm-instruct' ? (
                 <FormGroup label="Model" fieldId={inputId('model-choice')} isRequired>
@@ -445,16 +483,16 @@ const ModelServiceLaunchWizardPreview = ({
                     role="radiogroup"
                     aria-label="Model"
                   >
-                    {shownModels.map((model) => {
-                      const isSelected = selectedModel === model
+                    {INSTRUCT_MODEL_CARDS.map((model) => {
+                      const isSelected = selectedModel === model.name
                       return (
-                        <GridItem key={model} span={12} md={6}>
+                        <GridItem key={model.name} span={12} md={3}>
                           <button
                             type="button"
                             role="radio"
                             aria-checked={isSelected}
                             className={getModelOptionClassName(isSelected)}
-                            onClick={() => setModelChoice(model)}
+                            onClick={() => setModelChoice(model.name)}
                           >
                             <div
                               className="provider-setup-template__service-card-icon-wrap"
@@ -467,11 +505,10 @@ const ModelServiceLaunchWizardPreview = ({
                               size="md"
                               className="provider-setup-template__select-card-title"
                             >
-                              {model}
+                              {model.name}
                             </Title>
                             <p className="provider-setup-template__select-card-detail">
-                              {INSTRUCT_MODEL_DESCRIPTIONS[model] ??
-                                'Instruction-tuned model available from the catalog.'}
+                              {model.description}
                             </p>
                           </button>
                         </GridItem>
