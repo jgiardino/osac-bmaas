@@ -1,17 +1,33 @@
+import { MinusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/minus-circle-icon'
+import { PlusCircleIcon } from '@patternfly/react-icons/dist/esm/icons/plus-circle-icon'
 import { useState } from 'react'
 import {
   Button,
-  Content,
+  Checkbox,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
   Form,
   FormGroup,
-  Label,
+  FormGroupLabelHelp,
+  FormHelperText,
+  FormSection,
   FormSelect,
   FormSelectOption,
+  Grid,
+  GridItem,
+  HelperText,
+  HelperTextItem,
+  Label,
+  MenuToggle,
+  NumberInput,
+  Popover,
+  Progress,
   Radio,
+  Select,
+  SelectList,
+  SelectOption,
   Stack,
   StackItem,
   TextArea,
@@ -20,13 +36,23 @@ import {
   Wizard,
   WizardStep,
 } from '@patternfly/react-core'
-import {
-  type DeployModelType,
-  type ModelSettingId,
-  type ModelSettingModes,
-  type ServiceWizardVariation,
+import type {
+  DeployModelType,
+  ModelSettingId,
+  ModelSettingModes,
+  ServiceWizardVariation,
 } from '../../../vision/modelAuthoringFlow'
-import { ModelLaunchSettingField } from './ModelLaunchSettingField'
+import { DEMO_TENANT_PROJECT_NAME, DEMO_TENANT_PROJECT_NAME_02 } from '../../../tenantAdmin/projects'
+import { createInitialClusters } from '../../../vision/fleetWorld'
+import {
+  ACCELERATOR_CONFIGURATIONS,
+  DEPLOYMENT_METHODS,
+  HARDWARE_PROFILES,
+  ROUTING_OPTIONS,
+  SERVING_RUNTIMES,
+  TOPOLOGIES,
+  TOPOLOGY_CONFIGURATIONS,
+} from './modelWizardOptions'
 
 type ModelServiceLaunchWizardPreviewProps = {
   variation: ServiceWizardVariation
@@ -35,135 +61,154 @@ type ModelServiceLaunchWizardPreviewProps = {
   eligibleClusterIds: readonly string[]
 }
 
-type LaunchSettingValues = Record<ModelSettingId, string> & { modelFormat: string }
+type EnvironmentVariable = { id: number; key: string; value: string }
+type RuntimeSelection = 'auto' | 'manual'
 
-const DEFAULT_LAUNCH_SETTING_VALUES: LaunchSettingValues = {
-  modelFormat: 'sklearn',
-  servingMethod: 'LLM inference service',
-  runtime: 'vLLM NVIDIA GPU config',
-  cpu: '8 vCPU',
-  memory: '32 GiB',
-  gpu: '1 × NVIDIA L4 · 24 GiB',
-  capacity: '1 replica',
-  topology: 'Aggregated serving',
-  routing: 'Gateway-managed routing',
-  runtimeCustomization: 'Catalog defaults',
-  lifecycle: 'Rolling update',
-}
+const MODEL_TYPES: readonly DeployModelType[] = [
+  'Predictive model',
+  'Generative AI model (including LLMs and multimodal models)',
+]
 
-const LAUNCH_SETTING_OPTIONS: Record<ModelSettingId, readonly string[]> = {
-  servingMethod: ['LLM inference service', 'LLM inference service with llm-d'],
-  runtime: [
-    'vLLM NVIDIA GPU config',
-    'vLLM (function engine)',
-    'vLLM NVIDIA GPU ServingRuntime for KServe',
-    'Caikit Standalone ServingRuntime',
-    'TGIS Standalone ServingRuntime',
-    'OpenVINO Model Server',
-  ],
-  cpu: ['4 vCPU', '8 vCPU', '16 vCPU'],
-  memory: ['16 GiB', '32 GiB', '64 GiB'],
-  gpu: ['None', '1 × NVIDIA L4 · 24 GiB', '1 × NVIDIA A10G · 24 GiB'],
-  capacity: ['1 replica', '2 replicas', '3 replicas'],
-  topology: ['Aggregated serving', 'Disaggregated serving'],
-  routing: ['Gateway-managed routing', 'Default routing'],
-  runtimeCustomization: ['Catalog defaults', 'Customize arguments'],
-  lifecycle: ['Rolling update', 'Recreate'],
-}
+const MODEL_FORMATS = ['onnx - 1', 'pytorch', 'tensorflow', 'sklearn', 'openvino', 'caikit']
 
-const MODEL_FORMAT_OPTIONS = ['onnx - 1', 'pytorch', 'tensorflow', 'sklearn', 'openvino', 'caikit']
+const MODEL_LOCATIONS = [
+  'Existing connection',
+  'S3 object storage',
+  'OCI compliant registry',
+  'URI',
+]
 
-const getClusterCardClassName = (isSelected: boolean) =>
+const MODEL_SOURCE_SECRETS = [
+  'model-source-credentials',
+  's3-model-storage',
+  'oci-registry-access',
+]
+
+const NEW_SECRET_OPTION = 'Specify new secret'
+
+const getOptionClassName = (isSelected: boolean) =>
   `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
     isSelected ? ' provider-setup-template__select-card--selected' : ''
   }`
 
-export function ModelServiceLaunchWizardPreview({
+const fieldActionRowClassName = [
+  'pf-v6-u-display-flex',
+  'pf-v6-u-align-items-center',
+  'pf-v6-u-justify-content-space-between',
+  'pf-v6-u-mb-sm',
+].join(' ')
+
+const isLockedForVariation = (
+  variation: ServiceWizardVariation,
+  settingId: ModelSettingId,
+  settingModes: ModelSettingModes,
+) =>
+  (variation === 'llm-tool-calling' &&
+    (settingId === 'runtime' || settingId === 'runtimeCustomization')) ||
+  settingModes[settingId] === 'locked'
+
+const ModelServiceLaunchWizardPreview = ({
   variation,
   settingModes,
   selectedModels,
   eligibleClusterIds,
-}: ModelServiceLaunchWizardPreviewProps) {
-  const [settings, setSettings] = useState<LaunchSettingValues>(() => ({
-    ...DEFAULT_LAUNCH_SETTING_VALUES,
-    runtime: variation === 'llm-tool-calling' ? 'vLLM (function engine)' : 'vLLM NVIDIA GPU config',
-  }))
-  const [clusterId, setClusterId] = useState('ocp-us-east-1')
-  const [modelChoice, setModelChoice] = useState<string>(selectedModels[0] ?? '')
-  const [userModelType, setUserModelType] = useState<DeployModelType>('Predictive model')
+}: ModelServiceLaunchWizardPreviewProps) => {
+  const [settings, setSettings] = useState({
+    deploymentMethod: 'LLM inference service',
+    modelFormat: 'sklearn',
+    hardwareProfile: 'default',
+    replicas: 1,
+    topology: 'single-node',
+    topologyConfiguration: 'Single node (default)',
+    acceleratorConfiguration: 'default',
+    routing: 'Default optimized routing',
+    decodeReplicas: 1,
+    prefillReplicas: 1,
+    deploymentStrategy: 'Rolling update',
+  })
+  const [clusterId, setClusterId] = useState(eligibleClusterIds[0] ?? '')
+  const [modelChoice, setModelChoice] = useState(selectedModels[0] ?? '')
+  const [modelType, setModelType] = useState<DeployModelType>('Predictive model')
   const [showAllModels, setShowAllModels] = useState(false)
+  const [isModelLocationOpen, setIsModelLocationOpen] = useState(false)
   const [project, setProject] = useState('ml-project')
   const [deploymentName, setDeploymentName] = useState('')
   const [description, setDescription] = useState('')
-  const [connectionType, setConnectionType] = useState('S3')
-  const [modelPath, setModelPath] = useState('')
-  const [secretId, setSecretId] = useState('')
-
-  const changeSetting = (id: ModelSettingId, value: string) => {
-    setSettings((current) => ({ ...current, [id]: value }))
-  }
-
-  const settingField = (
-    id: ModelSettingId,
-    label: string,
-    options: readonly string[] = LAUNCH_SETTING_OPTIONS[id],
-    mode = settingModes[id],
-  ) => (
-    <ModelLaunchSettingField
-      key={id}
-      id={`launch-${id}`}
-      label={label}
-      value={settings[id]}
-      options={options}
-      mode={mode}
-      onChange={(value) => changeSetting(id, value)}
-    />
-  )
+  const [modelLocation, setModelLocation] = useState('')
+  const [secretName, setSecretName] = useState('')
+  const [secretSelection, setSecretSelection] = useState('')
+  const [isSecretSelectionOpen, setIsSecretSelectionOpen] = useState(false)
+  const [isNewSecret, setIsNewSecret] = useState(false)
+  const [runtimeSelection, setRuntimeSelection] = useState<RuntimeSelection>('auto')
+  const [servingRuntime, setServingRuntime] = useState('')
+  const [isServingRuntimeOpen, setIsServingRuntimeOpen] = useState(false)
+  const [runtimeArguments, setRuntimeArguments] = useState('')
+  const [addCustomRuntimeEnvironmentVariables, setAddCustomRuntimeEnvironmentVariables] =
+    useState(true)
+  const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariable[]>([
+    { id: 1, key: 'POD_NAME', value: '' },
+    { id: 2, key: 'POD_NAMESPACE', value: '' },
+    { id: 3, key: 'POD_IP', value: '' },
+  ])
+  const inputId = (name: string) => `launch-${variation}-${name}`
 
   const isByom = variation === 'predictive'
   const isFixedModel = variation === 'llm-tool-calling'
-  const requiresModelType = isByom
-  const modelOptions = selectedModels
+  const selectedModel = selectedModels.includes(modelChoice) ? modelChoice : selectedModels[0] ?? ''
   const selectedClusterId = eligibleClusterIds.includes(clusterId)
     ? clusterId
     : (eligibleClusterIds[0] ?? '')
-  const selectedModelChoice = modelOptions.includes(modelChoice)
-    ? modelChoice
-    : (modelOptions[0] ?? '')
-  const selectedModelType = requiresModelType
-    ? userModelType
-    : 'Generative AI model (including LLMs and multimodal models)'
-  const isPredictive = selectedModelType === 'Predictive model'
+  const clusters = createInitialClusters().filter(
+    (cluster) =>
+      cluster.health === 'available' && eligibleClusterIds.includes(cluster.id),
+  )
+  const selectedCluster = clusters.find((cluster) => cluster.id === selectedClusterId)
+  const isPredictive = isByom && modelType === 'Predictive model'
+  const canConfigureLlm = !isByom || modelType === MODEL_TYPES[1]
+  const showTopology =
+    canConfigureLlm && settings.deploymentMethod === 'LLM inference service with llm-d'
+  const modelRuntimeLocked = isLockedForVariation(variation, 'runtime', settingModes)
+  const runtimeCustomizationLocked = isLockedForVariation(
+    variation,
+    'runtimeCustomization',
+    settingModes,
+  )
+  const replicasLocked = settingModes.capacity === 'locked'
+  const topologyLocked = settingModes.topology === 'locked'
+  const lifecycleLocked = settingModes.lifecycle === 'locked'
+  const deploymentMethodLocked = settingModes.servingMethod === 'locked'
+  const shownModels = showAllModels ? selectedModels : selectedModels.slice(0, 3)
+  const chosenServingRuntime =
+    servingRuntime ||
+    (variation === 'llm-tool-calling' ? 'vLLM (function engine)' : 'vLLM NVIDIA GPU config')
+
+  const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) =>
+    setSettings((current) => ({ ...current, [key]: value }))
+
+  const updateEnvironmentVariable = (
+    id: number,
+    key: 'key' | 'value',
+    value: string,
+  ) => {
+    setEnvironmentVariables((current) =>
+      current.map((variable) => (variable.id === id ? { ...variable, [key]: value } : variable)),
+    )
+  }
+
   const modelSummary = isByom
-    ? 'BYOM'
+    ? [modelType, isPredictive ? settings.modelFormat : undefined, modelLocation, secretName]
+        .filter(Boolean)
+        .join(' · ')
     : isFixedModel
-      ? 'Specified model'
-      : selectedModelChoice
+      ? 'Fixed in catalog item'
+      : selectedModel
+
   const servingSummary = [
-    selectedModelType,
-    isPredictive ? settings.modelFormat : undefined,
-    !isPredictive && variation !== 'predictive' ? settings.servingMethod : undefined,
-    settings.runtime,
-    settings.gpu,
+    canConfigureLlm ? settings.deploymentMethod : undefined,
+    chosenServingRuntime,
   ]
     .filter(Boolean)
     .join(' · ')
-  const modelOptionsToShow = showAllModels ? modelOptions : modelOptions.slice(0, 3)
-  const clusterResources =
-    selectedClusterId === 'ocp-us-east-1'
-      ? {
-          cpu: ['8 vCPU', '16 vCPU', '32 vCPU', '64 vCPU'],
-          memory: ['16 GiB', '32 GiB', '64 GiB', '128 GiB'],
-          gpu: ['None', '1 × NVIDIA L4 · 24 GiB', '1 × NVIDIA A10G · 24 GiB'],
-        }
-      : {
-          cpu: ['8 vCPU', '16 vCPU', '32 vCPU'],
-          memory: ['16 GiB', '32 GiB', '64 GiB'],
-          gpu: ['None', '1 × NVIDIA A10G · 24 GiB'],
-        }
-
-  const clusterLabel = (id: string) =>
-    id === 'ocp-us-east-1' ? 'ocp-us-east-1 · US East' : 'ocp-eu-west-1 · EU West'
 
   return (
     <div className="vision-model-flow-preview">
@@ -172,31 +217,34 @@ export function ModelServiceLaunchWizardPreview({
         height="46rem"
         navAriaLabel="Launch model instance steps"
       >
-        <WizardStep name="General" id="model-launch-general">
-          <Title headingLevel="h2" size="xl">
-            General
-          </Title>
-          <Form>
-            <FormGroup label="Project or namespace" fieldId="launch-model-project" isRequired>
+        <WizardStep name="General" id={`model-launch-${variation}-general`}>
+          <Form autoComplete="off" className="provider-setup-template__publish-display-form">
+            <FormGroup label="Project or namespace" fieldId={`launch-${variation}-project`} isRequired>
               <FormSelect
-                id="launch-model-project"
+                id={`launch-${variation}-project`}
                 value={project}
                 onChange={(_event, value) => setProject(value)}
               >
-                <FormSelectOption value="ml-project" label="ml-project" />
-                <FormSelectOption value="ml-platform" label="ml-platform" />
+                <FormSelectOption
+                  value={DEMO_TENANT_PROJECT_NAME}
+                  label={DEMO_TENANT_PROJECT_NAME}
+                />
+                <FormSelectOption
+                  value={DEMO_TENANT_PROJECT_NAME_02}
+                  label={DEMO_TENANT_PROJECT_NAME_02}
+                />
               </FormSelect>
             </FormGroup>
-            <FormGroup label="Deployment name" fieldId="launch-model-name" isRequired>
+            <FormGroup label="Model deployment name" fieldId={`launch-${variation}-name`} isRequired>
               <TextInput
-                id="launch-model-name"
+                id={`launch-${variation}-name`}
                 value={deploymentName}
                 onChange={(_event, value) => setDeploymentName(value)}
               />
             </FormGroup>
-            <FormGroup label="Description" fieldId="launch-model-description">
+            <FormGroup label="Description" fieldId={`launch-${variation}-description`}>
               <TextArea
-                id="launch-model-description"
+                id={`launch-${variation}-description`}
                 value={description}
                 onChange={(_event, value) => setDescription(value)}
                 resizeOrientation="vertical"
@@ -205,229 +253,779 @@ export function ModelServiceLaunchWizardPreview({
           </Form>
         </WizardStep>
 
-        <WizardStep name="Cluster" id="model-launch-cluster">
-          <Title headingLevel="h2" size="xl">
-            Cluster
-          </Title>
-          <Form>
-            <FormGroup label="Cluster" fieldId="launch-model-cluster" isRequired>
-              <div
-                id="launch-model-cluster"
-                className={[
-                  'provider-setup-template__card-group',
-                  'provider-setup-template__card-group--instance-types',
-                  'vision-model-flow-preview__cluster-cards',
-                ].join(' ')}
+        <WizardStep name="Cluster" id={`model-launch-${variation}-cluster`}>
+          <Form autoComplete="off" className="provider-setup-template__publish-hardware-step">
+            <p className="provider-setup-template__publish-step-lede">
+              Select the cluster before loading compatible resources.
+            </p>
+            <FormGroup
+              label="Eligible clusters"
+              fieldId={inputId('clusters')}
+              isRequired
+              role="radiogroup"
+            >
+              <Grid
+                id={inputId('clusters')}
+                hasGutter
                 role="radiogroup"
-                aria-label="Cluster"
+                aria-label="Eligible clusters"
               >
-                {eligibleClusterIds.map((id) => {
-                  const isSelected = id === selectedClusterId
-                  const isUsEast = id === 'ocp-us-east-1'
+                {clusters.map((cluster) => {
+                  const isSelected = cluster.id === selectedClusterId
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      className={getClusterCardClassName(isSelected)}
-                      onClick={() => setClusterId(id)}
-                    >
-                      {isSelected ? (
-                        <Label
-                          color="grey"
-                          isCompact
-                          className="provider-setup-template__select-card-selected-badge"
+                    <GridItem key={cluster.id} span={12} md={6} lg={4}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={getOptionClassName(isSelected)}
+                        onClick={() => setClusterId(cluster.id)}
+                      >
+                        {isSelected ? (
+                          <Label
+                            color="grey"
+                            isCompact
+                            className="provider-setup-template__select-card-selected-badge"
+                          >
+                            Selected
+                          </Label>
+                        ) : null}
+                        <Title
+                          headingLevel="h3"
+                          size="md"
+                          className="provider-setup-template__select-card-title"
                         >
-                          Selected
-                        </Label>
-                      ) : null}
-                      <Title
-                        headingLevel="h3"
-                        size="md"
-                        className="provider-setup-template__select-card-title"
-                      >
-                        {id}
-                      </Title>
-                      <Content
-                        component="p"
-                        className="provider-setup-template__select-card-detail"
-                      >
-                        {isUsEast
-                          ? 'US East · AWS us-east-1 · 3 worker nodes'
-                          : 'EU West · Azure westeurope · 3 worker nodes'}
-                      </Content>
-                      <Content
-                        component="p"
-                        className="provider-setup-template__select-card-accelerator"
-                      >
-                        {isUsEast ? '4 GPUs available' : '2 GPUs available'}
-                      </Content>
-                    </button>
+                          {cluster.name}
+                        </Title>
+                        <p className="provider-setup-template__select-card-detail">
+                          {cluster.region} · {cluster.platform} · {cluster.nodeCount} workers
+                        </p>
+                        <p className="provider-setup-template__select-card-accelerator">
+                          {cluster.gpuCount} GPUs
+                        </p>
+                      </button>
+                    </GridItem>
                   )
                 })}
-              </div>
+              </Grid>
             </FormGroup>
           </Form>
         </WizardStep>
 
-        <WizardStep name="Configure" id="model-launch-configure">
-          <Stack hasGutter>
-            <StackItem>
-              <Title headingLevel="h3" size="lg">
-                Model
-              </Title>
+        <WizardStep name="Configure" id={`model-launch-${variation}-configure`}>
+          <Form autoComplete="off" className="provider-setup-template__publish-hardware-step">
+            <FormSection title="Model" titleElement="h3">
               {isByom ? (
-                <Form>
-                  <FormGroup label="Connection type" fieldId="launch-model-connection-type" isRequired>
-                    <FormSelect
-                      id="launch-model-connection-type"
-                      value={connectionType}
-                      onChange={(_event, value) => setConnectionType(value)}
+                <>
+                  <FormGroup label="Model location" fieldId={inputId('model-location')} isRequired>
+                    <Select
+                      id={inputId('model-location')}
+                      isOpen={isModelLocationOpen}
+                      selected={modelLocation}
+                      onSelect={(_event, value) => {
+                        setModelLocation(value as string)
+                        setIsModelLocationOpen(false)
+                      }}
+                      onOpenChange={setIsModelLocationOpen}
+                      toggle={(toggleRef) => (
+                        <MenuToggle
+                          ref={toggleRef}
+                          isInForm
+                          isFullWidth
+                          onClick={() => setIsModelLocationOpen((isOpen) => !isOpen)}
+                          isExpanded={isModelLocationOpen}
+                          id={inputId('model-location-toggle')}
+                        >
+                          {modelLocation || 'Select a location'}
+                        </MenuToggle>
+                      )}
+                      shouldFocusToggleOnSelect
                     >
-                      <FormSelectOption value="S3" label="S3-compatible storage" />
-                      <FormSelectOption value="OCI" label="OCI registry" />
-                      <FormSelectOption value="Cluster storage" label="Cluster storage" />
-                    </FormSelect>
+                      <SelectList>
+                        {MODEL_LOCATIONS.map((location, index) => (
+                          <SelectOption
+                            key={location}
+                            id={inputId(`model-location-${index}`)}
+                            value={location}
+                          >
+                            {location}
+                          </SelectOption>
+                        ))}
+                      </SelectList>
+                    </Select>
                   </FormGroup>
-                  <FormGroup label="Model path" fieldId="launch-model-path" isRequired>
-                    <TextInput
-                      id="launch-model-path"
-                      value={modelPath}
-                      onChange={(_event, value) => setModelPath(value)}
-                    />
-                  </FormGroup>
-                  <FormGroup label="Secret" fieldId="launch-model-secret" isRequired>
-                    <FormSelect
-                      id="launch-model-secret"
-                      value={secretId}
-                      onChange={(_event, value) => setSecretId(value)}
+                  <FormGroup label="Secret" fieldId={inputId('model-secret')} isRequired>
+                    <Select
+                      id={inputId('model-secret')}
+                      isOpen={isSecretSelectionOpen}
+                      selected={secretSelection}
+                      onSelect={(_event, value) => {
+                        const selection = value as string
+                        setSecretSelection(selection)
+                        setIsNewSecret(selection === NEW_SECRET_OPTION)
+                        setSecretName(
+                          selection === NEW_SECRET_OPTION ? '' : selection,
+                        )
+                        setIsSecretSelectionOpen(false)
+                      }}
+                      onOpenChange={setIsSecretSelectionOpen}
+                      toggle={(toggleRef) => (
+                        <MenuToggle
+                          ref={toggleRef}
+                          isInForm
+                          isFullWidth
+                          onClick={() => setIsSecretSelectionOpen((isOpen) => !isOpen)}
+                          isExpanded={isSecretSelectionOpen}
+                          id={inputId('model-secret-toggle')}
+                        >
+                          {secretSelection || 'Select a secret'}
+                        </MenuToggle>
+                      )}
+                      shouldFocusToggleOnSelect
                     >
-                      <FormSelectOption value="" label="Select a Secret" />
-                    </FormSelect>
-                  </FormGroup>
-                </Form>
-              ) : isFixedModel ? null : (
-                <Form>
-                  <FormGroup label="Model" fieldId="launch-model-choice" isRequired>
-                    <Stack hasGutter>
-                      {modelOptionsToShow.length > 0
-                        ? modelOptionsToShow.map((model) => (
-                            <StackItem key={model}>
-                              <Radio
-                                id={`launch-model-${model.replaceAll(/[^a-z0-9]+/gi, '-')}`}
-                                name="launch-model-choice"
-                                label={model}
-                                isChecked={selectedModelChoice === model}
-                                onChange={() => setModelChoice(model)}
-                              />
-                            </StackItem>
-                          ))
-                        : null}
-                    </Stack>
-                    {modelOptions.length > 3 ? (
-                      <Button
-                        variant="link"
-                        isInline
-                        onClick={() => setShowAllModels((current) => !current)}
-                      >
-                        {showAllModels
-                          ? 'Show fewer options'
-                          : `View options (${modelOptions.length - 3} more)`}
-                      </Button>
+                      <SelectList>
+                        {MODEL_SOURCE_SECRETS.map((secret, index) => (
+                          <SelectOption
+                            key={secret}
+                            id={inputId(`model-secret-${index}`)}
+                            value={secret}
+                          >
+                            {secret}
+                          </SelectOption>
+                        ))}
+                        <SelectOption
+                          id={inputId('model-secret-new')}
+                          value={NEW_SECRET_OPTION}
+                        >
+                          {NEW_SECRET_OPTION}
+                        </SelectOption>
+                      </SelectList>
+                    </Select>
+                    {isNewSecret ? (
+                      <TextInput
+                        id={inputId('model-secret-new-name')}
+                        value={secretName}
+                        aria-label="New secret name"
+                        onChange={(_event, value) => setSecretName(value)}
+                      />
                     ) : null}
                   </FormGroup>
-                </Form>
-              )}
-            </StackItem>
-
-            <StackItem>
-              <Title headingLevel="h3" size="lg">
-                Serving method and runtime
-              </Title>
-              {requiresModelType ? (
-                <FormGroup label="Model type" fieldId="launch-model-type" isRequired>
-                  <FormSelect
-                    id="launch-model-type"
-                    value={selectedModelType}
-                    onChange={(_event, value) => setUserModelType(value as DeployModelType)}
+                </>
+              ) : isFixedModel ? (
+                <FormGroup label="Model" fieldId={inputId('model-fixed')}>
+                  <TextInput
+                    id={inputId('model-fixed')}
+                    value="Fixed in catalog item"
+                    isDisabled
+                    aria-label="Model fixed in catalog item"
+                  />
+                </FormGroup>
+              ) : (
+                <FormGroup label="Model" fieldId={inputId('model-choice')} isRequired>
+                  <Stack
+                    id={inputId('model-choice')}
+                    hasGutter
+                    role="radiogroup"
+                    aria-label="Model"
                   >
-                    <FormSelectOption
-                      value="Generative AI model (including LLMs and multimodal models)"
-                      label="Generative AI model (including LLMs and multimodal models)"
-                    />
-                    <FormSelectOption value="Predictive model" label="Predictive model" />
+                    {shownModels.map((model, index) => (
+                      <StackItem key={model}>
+                        <Radio
+                          id={inputId(`model-choice-${index}`)}
+                          name={inputId('model-choice')}
+                          label={model}
+                          isChecked={selectedModel === model}
+                          onChange={() => setModelChoice(model)}
+                        />
+                      </StackItem>
+                    ))}
+                  </Stack>
+                  {selectedModels.length > 3 ? (
+                    <Button
+                      variant="link"
+                      isInline
+                      onClick={() => setShowAllModels((current) => !current)}
+                    >
+                      {showAllModels ? 'Show fewer options' : 'View options'}
+                    </Button>
+                  ) : null}
+                </FormGroup>
+              )}
+            </FormSection>
+
+            <FormSection title="Serving method and runtime" titleElement="h3">
+              {isByom ? (
+                <FormGroup label="Model type" fieldId={inputId('model-type')} isRequired>
+                  <FormSelect
+                    id={inputId('model-type')}
+                    value={modelType}
+                    onChange={(_event, value) => setModelType(value as DeployModelType)}
+                  >
+                    {MODEL_TYPES.map((type) => (
+                      <FormSelectOption key={type} value={type} label={type} />
+                    ))}
                   </FormSelect>
                 </FormGroup>
               ) : null}
+
               {isPredictive ? (
-                <FormGroup label="Model format" fieldId="launch-model-format" isRequired>
+                <FormGroup label="Model format" fieldId={inputId('model-format')} isRequired>
                   <FormSelect
-                    id="launch-model-format"
+                    id={inputId('model-format')}
                     value={settings.modelFormat}
-                    onChange={(_event, value) =>
-                      setSettings((current) => ({ ...current, modelFormat: value }))
-                    }
+                    onChange={(_event, value) => updateSetting('modelFormat', value)}
                   >
-                    {MODEL_FORMAT_OPTIONS.map((format) => (
+                    {MODEL_FORMATS.map((format) => (
                       <FormSelectOption key={format} value={format} label={format} />
                     ))}
                   </FormSelect>
                 </FormGroup>
               ) : null}
-              {variation !== 'predictive'
-                ? settingField('servingMethod', 'Deployment method')
-                : null}
-              {settingField(
-                'runtime',
-                'Serving runtime',
-                LAUNCH_SETTING_OPTIONS.runtime,
-                isFixedModel ? 'locked' : settingModes.runtime,
-              )}
-            </StackItem>
 
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Compute</Title>
-              {settingField('cpu', 'CPU', clusterResources.cpu)}
-              {settingField('memory', 'Memory', clusterResources.memory)}
-              {settingField('gpu', 'GPU', clusterResources.gpu)}
-              {settingField('capacity', 'Number of replicas to deploy')}
-            </StackItem>
-
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Node topology</Title>
-              {settings.servingMethod === 'LLM inference service with llm-d' ? (
-                <>
-                  {settingField('topology', 'llm-d topology')}
-                  {settingField('routing', 'Routing configuration')}
-                </>
+              {canConfigureLlm ? (
+                <FormGroup
+                  label="Deployment method"
+                  fieldId={inputId('deployment-method-options')}
+                  isRequired
+                >
+                  <div
+                    id={inputId('deployment-method-options')}
+                    className="provider-setup-template__card-group provider-setup-template__card-group--instance-types provider-setup-template__card-group--instance-types-fill"
+                    role="radiogroup"
+                    aria-label="Deployment method"
+                  >
+                    {DEPLOYMENT_METHODS.map(({ id, label, description: detail }) => {
+                      const value = id === 'llm-d' ? 'LLM inference service with llm-d' : 'LLM inference service'
+                      const isSelected = settings.deploymentMethod === value
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          className={getOptionClassName(isSelected)}
+                          disabled={deploymentMethodLocked}
+                          onClick={() => updateSetting('deploymentMethod', value)}
+                        >
+                          {isSelected ? (
+                            <Label
+                              color="grey"
+                              isCompact
+                              className="provider-setup-template__select-card-selected-badge"
+                            >
+                              Selected
+                            </Label>
+                          ) : null}
+                          <Title headingLevel="h4" size="md">
+                            {label}
+                          </Title>
+                          <p className="provider-setup-template__select-card-detail">{detail}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </FormGroup>
               ) : null}
-            </StackItem>
 
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Runtime customization</Title>
-              {settingField('runtimeCustomization', 'Runtime arguments and environment')}
-            </StackItem>
+              {canConfigureLlm ? (
+                <FormGroup
+                  label="Accelerator configuration"
+                  fieldId={inputId('serving-runtime-toggle')}
+                  isRequired
+                >
+                  {modelRuntimeLocked ? (
+                    <TextInput
+                      id={inputId('serving-runtime-toggle')}
+                      value={chosenServingRuntime}
+                      isDisabled
+                      aria-label="Serving runtime fixed by catalog item"
+                    />
+                  ) : (
+                    <>
+                      <div className="pf-v6-u-mb-md">
+                        <Radio
+                          id={inputId('runtime-automatic')}
+                          name={inputId('runtime-selection')}
+                          label={
+                            <>
+                              <strong>Automatic selection:</strong> Automatically select the best
+                              accelerator configuration for my model based on the selected hardware
+                              profile.
+                            </>
+                          }
+                          isChecked={runtimeSelection === 'auto'}
+                          onChange={() => setRuntimeSelection('auto')}
+                        />
+                        {runtimeSelection === 'auto' ? (
+                          <div className="pf-v6-u-ml-lg pf-v6-u-mt-sm">
+                            <TextInput
+                              id={inputId('serving-runtime-toggle')}
+                              value="vLLM NVIDIA GPU config"
+                              isDisabled
+                              aria-label="Automatically selected accelerator configuration"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                      <Radio
+                        id={inputId('runtime-manual')}
+                        name={inputId('runtime-selection')}
+                        label={
+                          <>
+                            <strong>Manual selection:</strong> Manually select an accelerator
+                            configuration from a list of preconfigured and custom accelerator
+                            configurations.
+                          </>
+                        }
+                        isChecked={runtimeSelection === 'manual'}
+                        onChange={() => setRuntimeSelection('manual')}
+                      />
+                      {runtimeSelection === 'manual' ? (
+                        <div className="pf-v6-u-ml-lg pf-v6-u-mt-sm">
+                          <Select
+                            id={inputId('serving-runtime-select')}
+                            isOpen={isServingRuntimeOpen}
+                            selected={servingRuntime}
+                            onSelect={(_event, value) => {
+                              setServingRuntime(value as string)
+                              setIsServingRuntimeOpen(false)
+                            }}
+                            onOpenChange={setIsServingRuntimeOpen}
+                            toggle={(toggleRef) => (
+                              <MenuToggle
+                                ref={toggleRef}
+                                isInForm
+                                isFullWidth
+                                onClick={() => setIsServingRuntimeOpen((isOpen) => !isOpen)}
+                                isExpanded={isServingRuntimeOpen}
+                                id={inputId('serving-runtime-toggle')}
+                              >
+                                {servingRuntime || 'Select an accelerator configuration'}
+                              </MenuToggle>
+                            )}
+                            shouldFocusToggleOnSelect
+                          >
+                            <SelectList>
+                              {SERVING_RUNTIMES.map(({ id, value, version }) => (
+                                <SelectOption key={id} id={id} value={value}>
+                                  <span className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                                    {value}
+                                    <Label color="blue" isCompact className="pf-v6-u-ml-sm">
+                                      {version}
+                                    </Label>
+                                  </span>
+                                </SelectOption>
+                              ))}
+                            </SelectList>
+                          </Select>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </FormGroup>
+              ) : null}
+            </FormSection>
 
-            <StackItem>
-              <Title headingLevel="h3" size="lg">Lifecycle</Title>
-              {settingField('lifecycle', 'Deployment strategy')}
-            </StackItem>
-          </Stack>
+            <FormSection title="Compute" titleElement="h3">
+              <FormGroup label="Hardware profile" fieldId={inputId('hardware-profile')} isRequired>
+                <Select
+                  id={inputId('hardware-profile')}
+                  isOpen={false}
+                  selected={settings.hardwareProfile}
+                  onSelect={(_event, value) =>
+                    updateSetting('hardwareProfile', value as string)
+                  }
+                  toggle={(toggleRef) => (
+                    <MenuToggle
+                      ref={toggleRef}
+                      isInForm
+                      isFullWidth
+                      isDisabled
+                      id={inputId('hardware-profile-toggle')}
+                    >
+                      {settings.hardwareProfile}
+                    </MenuToggle>
+                  )}
+                >
+                  <SelectList>
+                    {HARDWARE_PROFILES.map((profile, index) => (
+                      <SelectOption
+                        key={profile}
+                        id={inputId(`hardware-profile-${index}`)}
+                        value={profile}
+                      >
+                        {profile}
+                      </SelectOption>
+                    ))}
+                  </SelectList>
+                </Select>
+              </FormGroup>
+              <FormGroup label="Number of replicas to deploy" fieldId={inputId('replicas')}>
+                <NumberInput
+                  id={inputId('replicas')}
+                  inputName="replicas"
+                  inputAriaLabel="Number of replicas to deploy"
+                  minusBtnAriaLabel="Decrease replica count"
+                  plusBtnAriaLabel="Increase replica count"
+                  min={1}
+                  value={settings.replicas}
+                  isDisabled={replicasLocked}
+                  onMinus={() => updateSetting('replicas', Math.max(1, settings.replicas - 1))}
+                  onPlus={() => updateSetting('replicas', settings.replicas + 1)}
+                  onChange={(event) => {
+                    const value = Number((event.target as HTMLInputElement).value)
+                    if (Number.isFinite(value) && value >= 1) {
+                      updateSetting('replicas', value)
+                    }
+                  }}
+                />
+              </FormGroup>
+            </FormSection>
+
+            {showTopology ? (
+              <FormSection title="Node topology" titleElement="h3">
+                <FormGroup label="Topology type" fieldId={inputId('topology-type')}>
+                  <Grid
+                    id={inputId('topology-type')}
+                    hasGutter
+                    role="radiogroup"
+                    aria-label="Topology type"
+                  >
+                    {TOPOLOGIES.map(({ id, label, description: detail }) => {
+                      const isSelected = settings.topology === id
+                      return (
+                        <GridItem key={id} span={12} md={6}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            className={getOptionClassName(isSelected)}
+                            disabled={topologyLocked}
+                            onClick={() => updateSetting('topology', id)}
+                          >
+                            {isSelected ? (
+                              <Label
+                                color="grey"
+                                isCompact
+                                className="provider-setup-template__select-card-selected-badge"
+                              >
+                                Selected
+                              </Label>
+                            ) : null}
+                            <Title headingLevel="h4" size="md">
+                              {label}
+                            </Title>
+                            <p className="provider-setup-template__select-card-detail">{detail}</p>
+                          </button>
+                        </GridItem>
+                      )
+                    })}
+                  </Grid>
+                </FormGroup>
+                <FormGroup
+                  label="Topology configuration"
+                  fieldId={inputId('topology-configuration')}
+                >
+                  <FormSelect
+                    id={inputId('topology-configuration')}
+                    value={settings.topologyConfiguration}
+                    isDisabled={topologyLocked}
+                    onChange={(_event, value) => updateSetting('topologyConfiguration', value)}
+                  >
+                    {TOPOLOGY_CONFIGURATIONS.map((configuration) => (
+                      <FormSelectOption
+                        key={configuration}
+                        value={configuration}
+                        label={configuration}
+                      />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+                <FormGroup
+                  label="Accelerator configuration"
+                  fieldId={inputId('topology-accelerator')}
+                >
+                  <FormSelect
+                    id={inputId('topology-accelerator')}
+                    value={settings.acceleratorConfiguration}
+                    isDisabled={topologyLocked}
+                    onChange={(_event, value) =>
+                      updateSetting('acceleratorConfiguration', value)
+                    }
+                  >
+                    {ACCELERATOR_CONFIGURATIONS.map((configuration) => (
+                      <FormSelectOption
+                        key={configuration}
+                        value={configuration}
+                        label={configuration}
+                      />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+                <FormGroup label="Routing" fieldId={inputId('routing')}>
+                  <FormSelect
+                    id={inputId('routing')}
+                    value={settings.routing}
+                    isDisabled={topologyLocked}
+                    onChange={(_event, value) => updateSetting('routing', value)}
+                  >
+                    {ROUTING_OPTIONS.map((option) => (
+                      <FormSelectOption key={option} value={option} label={option} />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+                {settings.topology.includes('disaggregated') ? (
+                  <>
+                    <FormGroup label="Decode replicas" fieldId={inputId('decode-replicas')}>
+                      <NumberInput
+                        id={inputId('decode-replicas')}
+                        inputName="decode-replicas"
+                        inputAriaLabel="Decode replicas"
+                        minusBtnAriaLabel="Decrease decode replicas"
+                        plusBtnAriaLabel="Increase decode replicas"
+                        min={1}
+                        value={settings.decodeReplicas}
+                        isDisabled={topologyLocked}
+                        onMinus={() =>
+                          updateSetting('decodeReplicas', Math.max(1, settings.decodeReplicas - 1))
+                        }
+                        onPlus={() => updateSetting('decodeReplicas', settings.decodeReplicas + 1)}
+                        onChange={(event) => {
+                          const value = Number((event.target as HTMLInputElement).value)
+                          if (Number.isFinite(value) && value >= 1) {
+                            updateSetting('decodeReplicas', value)
+                          }
+                        }}
+                      />
+                    </FormGroup>
+                    <FormGroup label="Prefill replicas" fieldId={inputId('prefill-replicas')}>
+                      <NumberInput
+                        id={inputId('prefill-replicas')}
+                        inputName="prefill-replicas"
+                        inputAriaLabel="Prefill replicas"
+                        minusBtnAriaLabel="Decrease prefill replicas"
+                        plusBtnAriaLabel="Increase prefill replicas"
+                        min={1}
+                        value={settings.prefillReplicas}
+                        isDisabled={topologyLocked}
+                        onMinus={() =>
+                          updateSetting('prefillReplicas', Math.max(1, settings.prefillReplicas - 1))
+                        }
+                        onPlus={() => updateSetting('prefillReplicas', settings.prefillReplicas + 1)}
+                        onChange={(event) => {
+                          const value = Number((event.target as HTMLInputElement).value)
+                          if (Number.isFinite(value) && value >= 1) {
+                            updateSetting('prefillReplicas', value)
+                          }
+                        }}
+                      />
+                    </FormGroup>
+                  </>
+                ) : null}
+              </FormSection>
+            ) : null}
+
+            {!runtimeCustomizationLocked ? (
+              <FormSection title="Runtime customization" titleElement="h3">
+                <FormGroup
+                  role="group"
+                  isStack
+                  label="Configuration parameters"
+                  fieldId={inputId('configuration-parameters')}
+                >
+                  <FormGroup fieldId={inputId('runtime-arguments')}>
+                    <div className={fieldActionRowClassName}>
+                      <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                        <label
+                          className="pf-v6-c-form__label pf-v6-u-mb-0"
+                          htmlFor={inputId('runtime-arguments')}
+                        >
+                          <span className="pf-v6-c-form__label-text">
+                            Additional runtime arguments
+                          </span>
+                        </label>
+                        <Popover
+                          headerContent="Runtime arguments"
+                          bodyContent="Serving runtime arguments define how the deployed model behaves. Overwriting predefined arguments only affects this model deployment."
+                        >
+                          <FormGroupLabelHelp
+                            aria-label="More info about runtime arguments"
+                            className="pf-v6-u-ml-sm"
+                            id={inputId('runtime-arguments-help')}
+                          />
+                        </Popover>
+                      </div>
+                      <Button variant="link" isInline isDisabled>
+                        View predefined arguments
+                      </Button>
+                    </div>
+                    <TextArea
+                      id={inputId('runtime-arguments')}
+                      value={runtimeArguments}
+                      placeholder={'--arg\n--arg2=value2\n--arg3 value3'}
+                      onChange={(_event, value) => setRuntimeArguments(value)}
+                      resizeOrientation="vertical"
+                      rows={3}
+                    />
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem>
+                          Overwriting the runtime&apos;s predefined listening port or model location
+                          will likely result in a failed deployment.
+                        </HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  </FormGroup>
+                  <div className={fieldActionRowClassName}>
+                    <div className="pf-v6-u-display-flex pf-v6-u-align-items-center">
+                      <Checkbox
+                        id={inputId('custom-environment-variables')}
+                        label="Add custom runtime environment variables"
+                        isChecked={addCustomRuntimeEnvironmentVariables}
+                        onChange={(_event, checked) =>
+                          setAddCustomRuntimeEnvironmentVariables(checked)
+                        }
+                      />
+                      <Popover
+                        headerContent="Environment variables"
+                        bodyContent="Environment variables can be predefined by the selected serving runtime. Overwriting predefined variables only affects this model deployment."
+                      >
+                        <FormGroupLabelHelp
+                          aria-label="More info about environment variables"
+                          className="pf-v6-u-ml-sm"
+                          id={inputId('environment-variables-help')}
+                        />
+                      </Popover>
+                    </div>
+                    <Button variant="link" isInline isDisabled>
+                      View predefined variables
+                    </Button>
+                  </div>
+                  {addCustomRuntimeEnvironmentVariables ? (
+                    <Stack hasGutter>
+                      {environmentVariables.map((variable, index) => (
+                        <StackItem key={variable.id}>
+                          <div className="vision-model-flow-preview__runtime-environment-row">
+                            <TextInput
+                              aria-label={`Environment variable ${index + 1} key`}
+                              value={variable.key}
+                              onChange={(_event, value) =>
+                                updateEnvironmentVariable(variable.id, 'key', value)
+                              }
+                            />
+                            <TextInput
+                              aria-label={`Environment variable ${index + 1} value`}
+                              value={variable.value}
+                              onChange={(_event, value) =>
+                                updateEnvironmentVariable(variable.id, 'value', value)
+                              }
+                            />
+                            <Button
+                              variant="plain"
+                              icon={<MinusCircleIcon />}
+                              aria-label={`Remove environment variable ${index + 1}`}
+                              onClick={() =>
+                                setEnvironmentVariables((current) =>
+                                  current.filter((entry) => entry.id !== variable.id),
+                                )
+                              }
+                            />
+                          </div>
+                        </StackItem>
+                      ))}
+                      <StackItem>
+                        <Button
+                          variant="link"
+                          icon={<PlusCircleIcon />}
+                          isInline
+                          onClick={() =>
+                            setEnvironmentVariables((current) => [
+                              ...current,
+                              {
+                                id: Math.max(0, ...current.map((variable) => variable.id)) + 1,
+                                key: '',
+                                value: '',
+                              },
+                            ])
+                          }
+                        >
+                          Add variable
+                        </Button>
+                      </StackItem>
+                    </Stack>
+                  ) : null}
+                </FormGroup>
+              </FormSection>
+            ) : null}
+
+            {!isByom ? (
+              <FormSection title="Lifecycle" titleElement="h3">
+                <FormGroup
+                  label="Deployment strategy"
+                  fieldId={inputId('deployment-strategy-options')}
+                >
+                  <Stack
+                    id={inputId('deployment-strategy-options')}
+                    hasGutter
+                    role="radiogroup"
+                    aria-label="Deployment strategy"
+                  >
+                    {[
+                      {
+                        label: 'Rolling update',
+                        detail:
+                          'Existing inference service pods are terminated after new ones are started. This ensures zero downtime and continuous availability.',
+                      },
+                      {
+                        label: 'Recreate',
+                        detail:
+                          'All existing inference service pods are terminated before any new ones are started. This saves resources but guarantees a period of downtime.',
+                      },
+                    ].map(({ label, detail }) => {
+                      const isSelected = settings.deploymentStrategy === label
+                      return (
+                        <StackItem key={label}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            className={getOptionClassName(isSelected)}
+                            disabled={lifecycleLocked}
+                            onClick={() => updateSetting('deploymentStrategy', label)}
+                          >
+                            {isSelected ? (
+                              <Label
+                                color="grey"
+                                isCompact
+                                className="provider-setup-template__select-card-selected-badge"
+                              >
+                                Selected
+                              </Label>
+                            ) : null}
+                            <Title headingLevel="h4" size="md">
+                              {label}
+                            </Title>
+                            <p className="provider-setup-template__select-card-detail">{detail}</p>
+                          </button>
+                        </StackItem>
+                      )
+                    })}
+                  </Stack>
+                </FormGroup>
+              </FormSection>
+            ) : null}
+          </Form>
         </WizardStep>
 
-        <WizardStep name="Review" id="model-launch-review">
-          <Title headingLevel="h2" size="xl">
-            Review model instance
-          </Title>
+        <WizardStep name="Review" id={`model-launch-${variation}-review`}>
           <DescriptionList isCompact>
             <DescriptionListGroup>
-              <DescriptionListTerm>Project</DescriptionListTerm>
+              <DescriptionListTerm>Project or namespace</DescriptionListTerm>
               <DescriptionListDescription>{project}</DescriptionListDescription>
             </DescriptionListGroup>
             {deploymentName ? (
               <DescriptionListGroup>
-                <DescriptionListTerm>Deployment name</DescriptionListTerm>
+                <DescriptionListTerm>Model deployment name</DescriptionListTerm>
                 <DescriptionListDescription>{deploymentName}</DescriptionListDescription>
               </DescriptionListGroup>
             ) : null}
@@ -438,32 +1036,44 @@ export function ModelServiceLaunchWizardPreview({
               </DescriptionListGroup>
             ) : null}
             <DescriptionListGroup>
-              <DescriptionListTerm>Model choice</DescriptionListTerm>
-              <DescriptionListDescription>
-                {modelSummary}
-              </DescriptionListDescription>
+              <DescriptionListTerm>Model</DescriptionListTerm>
+              <DescriptionListDescription>{modelSummary || 'Not selected'}</DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>
               <DescriptionListTerm>Cluster</DescriptionListTerm>
               <DescriptionListDescription>
-                {clusterLabel(selectedClusterId)}
+                {selectedCluster
+                  ? `${selectedCluster.name} · ${selectedCluster.region} · ${selectedCluster.platform}`
+                  : 'Not selected'}
               </DescriptionListDescription>
             </DescriptionListGroup>
+            {canConfigureLlm ? (
+              <DescriptionListGroup>
+                <DescriptionListTerm>Serving method and runtime</DescriptionListTerm>
+                <DescriptionListDescription>{servingSummary}</DescriptionListDescription>
+              </DescriptionListGroup>
+            ) : null}
             <DescriptionListGroup>
-              <DescriptionListTerm>Serving</DescriptionListTerm>
-              <DescriptionListDescription>
-                {servingSummary}
-              </DescriptionListDescription>
+              <DescriptionListTerm>Hardware profile</DescriptionListTerm>
+              <DescriptionListDescription>{settings.hardwareProfile}</DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Number of replicas to deploy</DescriptionListTerm>
+              <DescriptionListDescription>{settings.replicas}</DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
         </WizardStep>
 
-        <WizardStep name="Provisioning" id="model-launch-provisioning">
-          <Title headingLevel="h2" size="xl">
-            Provisioning
-          </Title>
+        <WizardStep name="Provisioning" id={`model-launch-${variation}-provisioning`}>
+          <Progress
+            value={0}
+            title="Provisioning model instance"
+            aria-label="Model instance provisioning"
+          />
         </WizardStep>
       </Wizard>
     </div>
   )
 }
+
+export { ModelServiceLaunchWizardPreview }

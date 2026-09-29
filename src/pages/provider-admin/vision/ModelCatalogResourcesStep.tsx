@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   Button,
-  Content,
   Form,
   FormGroup,
   FormSection,
@@ -23,6 +22,13 @@ import type {
   ModelSettingMode,
   ModelSettingModes,
 } from '../../../vision/modelAuthoringFlow'
+import {
+  ACCELERATOR_CONFIGURATIONS,
+  HARDWARE_PROFILES,
+  ROUTING_OPTIONS,
+  TOPOLOGIES,
+  TOPOLOGY_CONFIGURATIONS,
+} from './modelWizardOptions'
 import ModelCatalogResourceSection from './ModelCatalogResourceSection'
 
 type ModelCatalogResourcesStepProps = {
@@ -31,64 +37,6 @@ type ModelCatalogResourcesStepProps = {
 }
 
 type EnvironmentVariable = { id: number; key: string; value: string }
-
-const HARDWARE_PROFILES = [
-  'default',
-  'Small',
-  'Medium',
-  'Large',
-  'GPU (1x)',
-  'GPU (2x)',
-  'GPU (4x) A100',
-  'High performance',
-  'Standard',
-]
-
-const TOPOLOGIES = [
-  {
-    id: 'single-node',
-    label: 'Single node',
-    description:
-      "Each replica runs on a single node. Use when your model fits in a single GPU's memory.",
-  },
-  {
-    id: 'multi-node',
-    label: 'Multi-node',
-    description:
-      "Each replica spans multiple nodes using tensor parallelism. Use when your model is too large for a single GPU's memory.",
-  },
-  {
-    id: 'single-node-disaggregated',
-    label: 'Single node disaggregated',
-    description:
-      'Each replica runs on a single node, with prefill and decode handled by separate pools. Use when you want to optimize time-to-first-token and throughput independently.',
-  },
-  {
-    id: 'multi-node-disaggregated',
-    label: 'Multi-node disaggregated',
-    description:
-      'Each replica spans multiple nodes, with prefill and decode handled by separate pools. Use when your model requires both multi-node parallelism and prefill/decode optimization.',
-  },
-] as const
-
-const ACCELERATOR_CONFIGURATIONS = [
-  'default',
-  'Small',
-  'Medium',
-  'Large',
-  'GPU (1x)',
-  'GPU (2x)',
-  'GPU (4x) A100',
-  'High performance',
-  'Standard',
-]
-
-const ROUTING_OPTIONS = [
-  'Default optimized routing',
-  'Managed scheduler with HTTPRoute',
-  'Managed scheduler',
-  'Lab routing profile',
-]
 
 const getOptionClassName = (selected: boolean) =>
   `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
@@ -107,17 +55,10 @@ export function ModelCatalogResourcesStep({
   const [routing, setRouting] = useState('Default optimized routing')
   const [decodeReplicas, setDecodeReplicas] = useState(1)
   const [prefillReplicas, setPrefillReplicas] = useState(1)
-  const [validatedConfigs, setValidatedConfigs] = useState<string[]>([])
   const [runtimeArgs, setRuntimeArgs] = useState('')
   const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariable[]>([])
   const [deploymentStrategy, setDeploymentStrategy] = useState<'rolling' | 'recreate'>('rolling')
   const isDisaggregated = topology.includes('disaggregated')
-
-  const toggleValidatedConfig = (config: string) => {
-    setValidatedConfigs((current) =>
-      current.includes(config) ? current.filter((entry) => entry !== config) : [...current, config],
-    )
-  }
 
   const addEnvironmentVariable = () => {
     setEnvironmentVariables((current) => [...current, { id: Date.now(), key: '', value: '' }])
@@ -207,9 +148,9 @@ export function ModelCatalogResourcesStep({
                     >
                       {label}
                     </Title>
-                    <Content component="p" className="provider-setup-template__select-card-detail">
+                    <p className="provider-setup-template__select-card-detail">
                       {description}
-                    </Content>
+                    </p>
                   </button>
                 </GridItem>
               )
@@ -222,9 +163,13 @@ export function ModelCatalogResourcesStep({
             value={topologyConfig}
             onChange={(_event, value) => setTopologyConfig(value)}
           >
-            <FormSelectOption value="Single node (default)" label="Single node (default)" />
-            <FormSelectOption value="Multi-node data parallel" label="Multi-node data parallel" />
-            <FormSelectOption value="My custom 4xA100 config" label="My custom 4xA100 config" />
+            {TOPOLOGY_CONFIGURATIONS.map((configuration) => (
+              <FormSelectOption
+                key={configuration}
+                value={configuration}
+                label={configuration}
+              />
+            ))}
           </FormSelect>
         </FormGroup>
         <FormGroup label="Accelerator configuration" fieldId="model-catalog-accelerator-config">
@@ -304,48 +249,6 @@ export function ModelCatalogResourcesStep({
         mode={settingModes.runtimeCustomization}
         onModeChange={onSettingModeChange}
       >
-        <FormGroup
-          label="Validated configurations"
-          fieldId="model-catalog-validated-configs"
-          role="group"
-        >
-          <div
-            className="provider-setup-template__card-group provider-setup-template__card-group--instance-types"
-            role="group"
-            aria-label="Validated configurations"
-          >
-            {['Tool calling', 'Optimize for low latency'].map((config) => {
-              const selected = validatedConfigs.includes(config)
-              return (
-                <button
-                  key={config}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={selected}
-                  className={getOptionClassName(selected)}
-                  onClick={() => toggleValidatedConfig(config)}
-                >
-                  {selected ? (
-                    <Label
-                      color="grey"
-                      isCompact
-                      className="provider-setup-template__select-card-selected-badge"
-                    >
-                      Selected
-                    </Label>
-                  ) : null}
-                  <Title
-                    headingLevel="h4"
-                    size="md"
-                    className="provider-setup-template__select-card-title"
-                  >
-                    {config}
-                  </Title>
-                </button>
-              )
-            })}
-          </div>
-        </FormGroup>
         <FormGroup label="Additional runtime arguments" fieldId="model-catalog-runtime-args">
           <TextArea
             id="model-catalog-runtime-args"
@@ -420,10 +323,10 @@ export function ModelCatalogResourcesStep({
                 label={
                   <>
                     <strong>Rolling update</strong>
-                    <Content component="p" className="provider-setup-template__select-card-detail">
+                    <p className="provider-setup-template__select-card-detail">
                       Existing inference service pods are terminated after new ones are started.
                       This ensures zero downtime and continuous availability.
-                    </Content>
+                    </p>
                   </>
                 }
                 isChecked={deploymentStrategy === 'rolling'}
@@ -437,10 +340,10 @@ export function ModelCatalogResourcesStep({
                 label={
                   <>
                     <strong>Recreate</strong>
-                    <Content component="p" className="provider-setup-template__select-card-detail">
+                    <p className="provider-setup-template__select-card-detail">
                       All existing inference service pods are terminated before any new ones are
                       started. This saves resources but guarantees a period of downtime.
-                    </Content>
+                    </p>
                   </>
                 }
                 isChecked={deploymentStrategy === 'recreate'}

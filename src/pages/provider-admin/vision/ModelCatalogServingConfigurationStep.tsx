@@ -13,6 +13,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { ModelSettingId, ModelSettingMode, ModelSettingModes } from '../../../vision/modelAuthoringFlow'
+import { DEPLOYMENT_METHODS, SERVING_RUNTIMES } from './modelWizardOptions'
 import { CatalogTenantAccessCards } from './CatalogTenantAccessCards'
 
 type ModelCatalogServingConfigurationStepProps = {
@@ -20,42 +21,6 @@ type ModelCatalogServingConfigurationStepProps = {
   settingModes: ModelSettingModes
   onSettingModeChange: (id: ModelSettingId, mode: ModelSettingMode) => void
 }
-
-const DEPLOYMENT_METHODS = [
-  {
-    id: 'standard',
-    label: 'LLM inference service',
-    description: 'Deploy a large language model using the standard LLM inference service.',
-  },
-  {
-    id: 'llm-d',
-    label: 'LLM inference service with llm-d',
-    description:
-      'Deploy a large language model with llm-d for additional scheduling and routing capabilities.',
-  },
-] as const
-
-const SERVING_RUNTIMES = [
-  { id: 'config-vllm-nvidia', value: 'vLLM NVIDIA GPU config', version: 'v0.8.5' },
-  {
-    id: 'config-vllm-intel-gaudi',
-    value: 'vLLM Intel Gaudi Accelerator config',
-    version: 'v0.7.3',
-  },
-  { id: 'config-vllm-spyre-x86', value: 'vLLM Spyre on x86 config', version: 'v0.8.5' },
-  { id: 'config-vllm-amd', value: 'vLLM AMD GPU config', version: 'v0.8.5' },
-  {
-    id: 'config-vllm-cpu-ppc',
-    value: 'vLLM CPU (ppc64le/s390x) config',
-    version: 'v0.6.6',
-  },
-  {
-    id: 'config-vllm-cpu-amd64',
-    value: 'vLLM CPU (amd 64-EXPERIMENTAL) config',
-    version: 'v0.6.6',
-  },
-  { id: 'config-vllm-spyre-s390x', value: 'vLLM Spyre s390x config', version: 'v0.7.3' },
-] as const
 
 const getOptionClassName = (selected: boolean) =>
   `provider-setup-template__select-card provider-setup-template__select-card--instance-type${
