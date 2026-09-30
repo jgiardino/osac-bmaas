@@ -64,7 +64,7 @@ function renderSpecRowValue(row: CatalogSpecRow): ReactNode {
   if (row.badge) {
     return (
       <span className="catalog-spec-row-value-with-badge">
-        <span>{row.value}</span>
+        {row.value ? <span>{row.value}</span> : null}
         <Label color={row.badge.color} isCompact>
           {row.badge.text}
         </Label>

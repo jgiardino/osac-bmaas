@@ -29,7 +29,7 @@ import {
   ROUTING_OPTIONS,
   TOPOLOGIES,
   TOPOLOGY_CONFIGURATIONS,
-} from './modelWizardOptions'
+} from '../../../vision/modelWizardOptions'
 import HardwareProfileResources from './HardwareProfileResources'
 import ModelCatalogResourceSection from './ModelCatalogResourceSection'
 

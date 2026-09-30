@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Tab, TabTitleText, Tabs } from '@patternfly/react-core'
-import '../../../model-authoring-flows.css'
 import {
   DEMO_APPROVED_MODELS,
   DEFAULT_MODEL_SETTING_MODES,
@@ -8,8 +7,8 @@ import {
   type ModelSettingMode,
   type ModelSettingModes,
 } from '../../../vision/modelAuthoringFlow'
+import ModelServiceLaunchWizard from '../../../components/tenant-user/ModelServiceLaunchWizard'
 import { ModelCatalogItemWizardPreview } from './ModelCatalogItemWizardPreview'
-import { ModelServiceLaunchWizardPreview } from './ModelServiceLaunchWizardPreview'
 
 export function VisionModelAuthoringFlowsPage() {
   const [activeFlow, setActiveFlow] = useState<
@@ -57,7 +56,7 @@ export function VisionModelAuthoringFlowsPage() {
           title={<TabTitleText>Launch instance: predictive</TabTitleText>}
           id="vision-model-authoring-flow-tab-predictive"
         >
-          <ModelServiceLaunchWizardPreview
+          <ModelServiceLaunchWizard
             variation="predictive"
             settingModes={settingModes}
             selectedModels={selectedModels}
@@ -69,7 +68,7 @@ export function VisionModelAuthoringFlowsPage() {
           title={<TabTitleText>Launch instance: llm-instruct</TabTitleText>}
           id="vision-model-authoring-flow-tab-llm-instruct"
         >
-          <ModelServiceLaunchWizardPreview
+          <ModelServiceLaunchWizard
             variation="llm-instruct"
             settingModes={settingModes}
             selectedModels={selectedModels}
@@ -81,7 +80,7 @@ export function VisionModelAuthoringFlowsPage() {
           title={<TabTitleText>Launch instance: llm-tool-calling</TabTitleText>}
           id="vision-model-authoring-flow-tab-llm-tool-calling"
         >
-          <ModelServiceLaunchWizardPreview
+          <ModelServiceLaunchWizard
             variation="llm-tool-calling"
             settingModes={settingModes}
             selectedModels={selectedModels}

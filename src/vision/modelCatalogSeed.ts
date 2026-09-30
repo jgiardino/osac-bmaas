@@ -38,8 +38,10 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
     templateRefId: 'maas-llm-lightweight-text-gen',
     templateName: 'llm-lightweight-text-gen',
     modelChoice: {
-      mode: 'undecided',
-      summary: 'Model choice is not defined yet for this offer.',
+      mode: 'limited-catalog',
+      summary:
+        'At launch, choose between Llama-3.2-3B-Instruct and Qwen-2.5-3B-Instruct.',
+      selectedModels: ['Llama-3.2-3B-Instruct', 'Qwen-2.5-3B-Instruct'],
     },
     rateCard: {
       hourlyRate: 2.4,
@@ -68,6 +70,11 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       mode: 'limited-catalog',
       summary:
         'At launch, choose from models selected by the administrator for instruction-tuned use, then provide the model source location and credentials. The OSAC Secret workflow still needs definition.',
+      selectedModels: [
+        'gemma-4-31B-it',
+        'Qwen3-VL-30B-A3B-Instruct',
+        'Devstral-Small-2-24B-Instruct-2512',
+      ],
     },
     rateCard: {
       hourlyRate: 4.8,
@@ -96,6 +103,7 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
       mode: 'fixed-model',
       summary:
         'The administrator selects one model, supplies its source location and credentials, and configures its tool-calling runtime; no model choice is needed at launch. The OSAC Secret workflow still needs definition.',
+      selectedModels: ['gemma-4-26B-A4B-it'],
     },
     rateCard: {
       hourlyRate: 8.5,
@@ -121,8 +129,10 @@ export const MODEL_CATALOG_SEED: readonly ModelCatalogSeedItem[] = [
     templateRefId: 'maas-llm-high-capacity-reasoning',
     templateName: 'llm-high-capacity-reasoning',
     modelChoice: {
-      mode: 'undecided',
-      summary: 'Model choice is not defined yet for this offer.',
+      mode: 'fixed-model',
+      summary:
+        'The administrator selects one model and supplies its source location and credentials. No model choice is needed at launch. The OSAC Secret workflow still needs definition.',
+      selectedModels: ['DeepSeek-R1'],
     },
     rateCard: {
       hourlyRate: 24,

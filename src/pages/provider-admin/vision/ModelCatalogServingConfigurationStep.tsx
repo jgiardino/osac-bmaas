@@ -13,7 +13,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { ModelSettingId, ModelSettingMode, ModelSettingModes } from '../../../vision/modelAuthoringFlow'
-import { DEPLOYMENT_METHODS, SERVING_RUNTIMES } from './modelWizardOptions'
+import { DEPLOYMENT_METHODS, SERVING_RUNTIMES } from '../../../vision/modelWizardOptions'
 import { CatalogTenantAccessCards } from './CatalogTenantAccessCards'
 
 type ModelCatalogServingConfigurationStepProps = {

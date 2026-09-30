@@ -3,7 +3,27 @@ export type ModelChoicePolicy =
   | 'specified-models'
   | 'configured-catalog'
 
-export type ServiceWizardVariation = 'predictive' | 'llm-instruct' | 'llm-tool-calling'
+export type ServiceWizardVariation =
+  | 'predictive'
+  | 'llm-instruct'
+  | 'llm-tool-calling'
+  | 'llm-lightweight-text-gen'
+  | 'llm-high-capacity-reasoning'
+
+const SERVICE_WIZARD_VARIATION_BY_CATALOG_ITEM_ID: Readonly<
+  Record<string, ServiceWizardVariation>
+> = {
+  'cat-predictive': 'predictive',
+  'cat-llm-instruct': 'llm-instruct',
+  'cat-llm-tool-calling': 'llm-tool-calling',
+  'cat-llm-lightweight-text-gen': 'llm-lightweight-text-gen',
+  'cat-llm-high-capacity-reasoning': 'llm-high-capacity-reasoning',
+}
+
+export const getServiceWizardVariation = (
+  catalogItemId: string,
+): ServiceWizardVariation | null =>
+  SERVICE_WIZARD_VARIATION_BY_CATALOG_ITEM_ID[catalogItemId] ?? null
 
 export type SpecifiedModelSource = 'catalog' | 'connection'
 

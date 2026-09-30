@@ -139,6 +139,11 @@ import { LaunchCostPanel } from '../billing/LaunchCostPanel'
 import { CatalogDiskImageValue } from '../catalog/CatalogDiskImageValue'
 import { useWizardLeaveConfirm } from '../shared/useWizardLeaveConfirm'
 import type { LaunchNetworkFieldKind } from '../../tenantUser/launchNetworking'
+import {
+  DEFAULT_MODEL_SETTING_MODES,
+  getServiceWizardVariation,
+} from '../../vision/modelAuthoringFlow'
+import ModelServiceLaunchWizard from './ModelServiceLaunchWizard'
 
 type TenantUserLaunchInstanceWizardProps = {
   isOpen: boolean
@@ -276,6 +281,10 @@ export function TenantUserLaunchInstanceWizard({
   const isClusterCatalogItem = catalogItem.serviceId === 'cluster'
   const isVmCatalogItem = catalogItem.serviceId === 'virtual-machine'
   const isBareMetalCatalogItem = catalogItem.serviceId === 'baremetal'
+  const modelServiceVariation =
+    catalogItem.serviceId === 'models'
+      ? getServiceWizardVariation(catalogItem.catalogItemId)
+      : null
   const isBareMetalHardwareEditable =
     isBareMetalCatalogItem &&
     resolveCatalogHardwareOsMode(catalogItem.hardwareOsMode) === 'editable'
@@ -2944,10 +2953,10 @@ export function TenantUserLaunchInstanceWizard({
     ? 'Launch instance for cluster'
     : isVmCatalogItem
       ? 'Launch instance for virtual machine'
-      : isBareMetalCatalogItem
+        : isBareMetalCatalogItem
         ? 'Launch instance for bare metal'
         : catalogItem.serviceId === 'models'
-          ? 'Launch instance for model'
+          ? `Launch instance: ${catalogItem.displayName}`
           : 'Launch instance'
 
   const wizard = isOpen ? (
@@ -2997,6 +3006,61 @@ export function TenantUserLaunchInstanceWizard({
       ))}
     </Wizard>
   ) : null
+
+  if (modelServiceVariation) {
+    if (!isOpen) {
+      return null
+    }
+
+    const modelServiceWizard = (
+      <ModelServiceLaunchWizard
+        key={catalogItem.catalogItemId}
+        variation={modelServiceVariation}
+        settingModes={DEFAULT_MODEL_SETTING_MODES}
+        selectedModels={catalogItem.modelChoice?.selectedModels ?? []}
+        eligibleClusterIds={catalogDraft?.modelClusterAvailability?.eligibleClusterIds}
+        projectOptions={projects.map((project) => project.name)}
+        initialProject={selectedProject?.name}
+        height={isPage ? '100%' : '40rem'}
+        isPlain={isPage}
+        onClose={requestClose}
+      />
+    )
+
+    if (isPage) {
+      return (
+        <>
+          <CatalogWizardPageShell
+            title={wizardTitle}
+            description={activeStepDescription || undefined}
+            onBackToCatalog={requestClose}
+            catalogItemLabel={catalogItem.displayName}
+            onBackToCatalogItem={onBackToCatalogItem}
+          >
+            {modelServiceWizard}
+          </CatalogWizardPageShell>
+          {leaveConfirmModal}
+        </>
+      )
+    }
+
+    return (
+      <>
+        <Modal
+          variant={ModalVariant.medium}
+          width="64rem"
+          maxWidth="64rem"
+          isOpen={isOpen}
+          onEscapePress={requestClose}
+          aria-label={wizardTitle}
+          className="tenant-user-launch-wizard__modal"
+        >
+          {modelServiceWizard}
+        </Modal>
+        {leaveConfirmModal}
+      </>
+    )
+  }
 
   if (isPage) {
     if (!isOpen) {

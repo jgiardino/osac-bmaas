@@ -486,21 +486,6 @@ export function resolveCatalogSpecRows(
   ]
 }
 
-function getModelChoiceLabel(choice: CatalogModelChoice): string {
-  switch (choice.mode) {
-    case 'byom':
-      return 'Bring your own model (BYOM)'
-    case 'fixed-model':
-      return 'One administrator-selected model'
-    case 'limited-catalog':
-      return 'Predefined model choices'
-    case 'configured-catalog':
-      return 'Any model in the configured catalog'
-    case 'undecided':
-      return 'Not defined yet'
-  }
-}
-
 function getModelChoiceBadge(choice: CatalogModelChoice): CatalogSpecRow['badge'] {
   switch (choice.mode) {
     case 'byom':
@@ -513,6 +498,31 @@ function getModelChoiceBadge(choice: CatalogModelChoice): CatalogSpecRow['badge'
       return { text: 'Full catalog', color: 'blue' }
     case 'undecided':
       return { text: 'Decision needed', color: 'orange' }
+  }
+}
+
+function getCatalogCardModelChoiceRow(choice?: CatalogModelChoice): CatalogSpecRow {
+  const selectedModels = choice?.selectedModels?.map((model) => model.trim()).filter(Boolean) ?? []
+  if (selectedModels.length > 1) {
+    return {
+      label: 'Model choice',
+      value: selectedModels.join(', '),
+      badge: { text: 'Decision needed', color: 'orange' },
+    }
+  }
+
+  if (selectedModels.length === 1) {
+    return {
+      label: 'Model choice',
+      value: selectedModels[0],
+      badge: { text: 'Locked', color: 'grey' },
+    }
+  }
+
+  return {
+    label: 'Model choice',
+    value: '',
+    badge: { text: 'Editable', color: 'purple' },
   }
 }
 
@@ -532,14 +542,16 @@ function buildModelCatalogSpecRows(
   options?: { includeDetails?: boolean },
 ): CatalogSpecRow[] {
   const rows: CatalogSpecRow[] = []
-  if (item.modelChoice) {
-    rows.push({
-      label: 'Model choice',
-      value: options?.includeDetails
-        ? item.modelChoice.summary
-        : getModelChoiceLabel(item.modelChoice),
-      badge: getModelChoiceBadge(item.modelChoice),
-    })
+  if (options?.includeDetails) {
+    if (item.modelChoice) {
+      rows.push({
+        label: 'Model choice',
+        value: item.modelChoice.summary,
+        badge: getModelChoiceBadge(item.modelChoice),
+      })
+    }
+  } else {
+    rows.push(getCatalogCardModelChoiceRow(item.modelChoice))
   }
 
   return [...rows, ...(item.modelProperties ?? []).map(toModelPropertySpecRow)]
