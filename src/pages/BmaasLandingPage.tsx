@@ -211,6 +211,10 @@ export function BmaasLandingPage() {
           label: 'AI Grid (future vision)',
           to: '/tenant-admin/northsummit/workspace?nav=ai-grid',
         },
+        {
+          label: 'Model deployment MVP',
+          to: '/tenant-admin/northsummit/workspace?nav=admin-models&navVersion=model-deployment-mvp',
+        },
       ],
     },
     {

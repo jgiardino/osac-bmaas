@@ -5,6 +5,7 @@ export type TenantAdminNavId =
   | 'playground'
   | 'api-keys'
   | 'admin-maas-governance'
+  | 'admin-models'
   | 'admin-model-catalog-settings'
   | 'admin-api-keys'
   | 'admin-ai-usage'
@@ -116,6 +117,17 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
   },
   { id: 'secrets', label: 'Secrets' },
 ]
+
+/** Tenant Admin navigation used by the Model deployment MVP landing-page entry. */
+export const TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS: TenantAdminNavItem[] =
+  TENANT_ADMIN_NAV_ITEMS.map((item) =>
+    item.id === 'ai-administration'
+      ? {
+          ...item,
+          children: [{ id: 'admin-models', label: 'Models' }, ...(item.children ?? [])],
+        }
+      : item,
+  )
 
 export function getTenantAdminLeafNavItems(
   items: readonly TenantAdminNavItem[] = TENANT_ADMIN_NAV_ITEMS,

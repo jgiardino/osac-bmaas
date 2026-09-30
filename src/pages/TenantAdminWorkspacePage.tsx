@@ -9,6 +9,7 @@ import { ProviderAdminVirtualNetworksPage } from './infrastructure/ProviderAdmin
 import { TenantAdminCatalogPage } from './tenant-admin/TenantAdminCatalogPage'
 import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
+import TenantAdminModelsPage from './tenant-admin/ai/models/TenantAdminModelsPage'
 import { TenantAdminOverviewPage } from './tenant-admin/TenantAdminOverviewPage'
 import { TenantAdminAdministratorsPage } from './tenant-admin/TenantAdminAdministratorsPage'
 import { TenantAdminBillingPage } from './tenant-admin/TenantAdminBillingPage'
@@ -19,6 +20,7 @@ import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
 import {
   TENANT_ADMIN_NAV_ITEMS,
+  TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS,
   isServicesNavId,
   type TenantAdminNavId,
 } from '../tenantAdmin/constants'
@@ -88,6 +90,7 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
     value === 'playground' ||
     value === 'api-keys' ||
     value === 'admin-maas-governance' ||
+    value === 'admin-models' ||
     value === 'admin-model-catalog-settings' ||
     value === 'admin-api-keys' ||
     value === 'admin-ai-usage' ||
@@ -184,6 +187,11 @@ function readInitialTenantAdminNav(
 export function TenantAdminWorkspacePage() {
   const { tenant: tenantParam } = useParams<{ tenant: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navVersion = searchParams.get('navVersion')
+  const navItems =
+    navVersion === 'model-deployment-mvp'
+      ? TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS
+      : TENANT_ADMIN_NAV_ITEMS
   const isValidTenant = Boolean(
     tenantParam && isDemoTenantId(tenantParam) && tenantParam === 'northsummit',
   )
@@ -350,6 +358,8 @@ export function TenantAdminWorkspacePage() {
         return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
       case 'admin-maas-governance':
         return <MaaSGovernancePage />
+      case 'admin-models':
+        return <TenantAdminModelsPage />
       case 'admin-model-catalog-settings':
         return <ModelCatalogSettingsPage />
       case 'ai-grid':
@@ -483,7 +493,7 @@ export function TenantAdminWorkspacePage() {
     <TenantShell
       role="tenant-admin"
       displayName={displayName}
-      navItems={TENANT_ADMIN_NAV_ITEMS}
+      navItems={navItems}
       showNavigation
       activeNavId={activeNavId}
       onNavChange={handleNavChange}

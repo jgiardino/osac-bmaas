@@ -1,5 +1,8 @@
 import type { TenantAdminNavId } from './constants'
-import { getTenantAdminLeafNavItems } from './constants'
+import {
+  getTenantAdminLeafNavItems,
+  TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS,
+} from './constants'
 import type { TenantCatalogItem } from './catalogItems'
 import {
   createDemoTenantCatalogGeneralPurposeItem,
@@ -144,7 +147,10 @@ const LEGACY_TENANT_ADMIN_NAV_IDS: Record<string, TenantAdminNavId> = {
 }
 
 const VALID_TENANT_ADMIN_NAV_IDS = new Set<TenantAdminNavId>(
-  getTenantAdminLeafNavItems().map((item) => item.id),
+  [
+    ...getTenantAdminLeafNavItems(),
+    ...getTenantAdminLeafNavItems(TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS),
+  ].map((item) => item.id),
 )
 
 function normalizeTenantAdminNavId(value: string | null): TenantAdminNavId {
