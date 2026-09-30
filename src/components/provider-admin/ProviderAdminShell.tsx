@@ -190,7 +190,7 @@ export function ProviderAdminShell({
                 title="AI"
                 isExpanded={expandedNavGroups.has('ai')}
                 isActive={isProviderAiNavId(activeNavId)}
-                onToggle={(_event, isExpanded) => {
+                onExpand={(_event, isExpanded) => {
                   setExpandedNavGroups((current) => {
                     const next = new Set(current)
                     if (isExpanded) {
@@ -220,7 +220,7 @@ export function ProviderAdminShell({
               title="Administration"
               isExpanded={expandedNavGroups.has('administration')}
               isActive={isAdministrationNavId(activeNavId)}
-              onToggle={(_event, isExpanded) => {
+              onExpand={(_event, isExpanded) => {
                 setExpandedNavGroups((current) => {
                   const next = new Set(current)
                   if (isExpanded) {

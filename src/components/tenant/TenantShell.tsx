@@ -113,7 +113,7 @@ export function TenantShell({
           title={item.label}
           isExpanded={expandedNavItems.has(item.id)}
           isActive={isSectionActive}
-          onToggle={(_event, isExpanded) => {
+          onExpand={(_event, isExpanded) => {
             setExpandedNavItems((current) => {
               const next = new Set(current)
               if (isExpanded) {
