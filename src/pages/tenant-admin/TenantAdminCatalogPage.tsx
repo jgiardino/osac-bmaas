@@ -128,6 +128,17 @@ type TenantAdminCatalogPageProps = {
   onProvisioningStarted?: (instance: TenantInstance) => void
   onDismissDuringProvisioning?: (instanceId: string, serviceId: CatalogServiceId) => void
   onWizardFinished?: (instanceId: string, serviceId: CatalogServiceId) => void
+  /** Hide model offerings when the workspace exposes Models as a dedicated AI page. */
+  hideModelService?: boolean
+}
+
+function getTenantAdminCatalogItems(
+  organization: RegisteredOrganization,
+  catalogDraft: ProviderCatalogDraft | null,
+  hideModelService: boolean,
+): TenantCatalogGovernanceItemWithNetworking[] {
+  const items = getTenantCatalogGovernanceItems(organization, catalogDraft)
+  return hideModelService ? items.filter((item) => item.serviceId !== 'models') : items
 }
 
 function toLaunchCatalogDraft(
@@ -324,10 +335,11 @@ export function TenantAdminCatalogPage({
   onProvisioningStarted,
   onDismissDuringProvisioning,
   onWizardFinished,
+  hideModelService = false,
 }: TenantAdminCatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [catalogItems, setCatalogItems] = useState(() =>
-    getTenantCatalogGovernanceItems(organization, catalogDraft),
+    getTenantAdminCatalogItems(organization, catalogDraft, hideModelService),
   )
   const [viewMode, setViewMode] = useState<CatalogViewMode>(() => getCatalogViewMode('grid'))
   const initialServiceFilters = catalogItems.map((item) => item.serviceId)
@@ -365,7 +377,7 @@ export function TenantAdminCatalogPage({
   )
 
   const refreshCatalogItems = () => {
-    setCatalogItems(getTenantCatalogGovernanceItems(organization, catalogDraft))
+    setCatalogItems(getTenantAdminCatalogItems(organization, catalogDraft, hideModelService))
   }
 
   const prependToCatalogDisplayOrder = (catalogItemId: string) => {
@@ -627,7 +639,7 @@ export function TenantAdminCatalogPage({
     }
 
     // Re-read governance so Editable hardware/OS from session storage is current.
-    const freshItems = getTenantCatalogGovernanceItems(organization, catalogDraft)
+    const freshItems = getTenantAdminCatalogItems(organization, catalogDraft, hideModelService)
     setCatalogItems(freshItems)
     const freshItem = freshItems.find((entry) => entry.id === item.id) ?? item
 
@@ -661,7 +673,7 @@ export function TenantAdminCatalogPage({
   ) => {
     if (isTenantScopedCatalogItemId(itemId)) {
       updateTenantCatalogItem(organization.slug, itemId, (stored) => {
-        const current = getTenantCatalogGovernanceItems(organization, catalogDraft).find(
+        const current = getTenantAdminCatalogItems(organization, catalogDraft, hideModelService).find(
           (item) => item.id === itemId,
         )
         if (!current) {
@@ -675,7 +687,7 @@ export function TenantAdminCatalogPage({
           status: next.status === 'Unpublished' ? 'Unpublished' : 'Live',
         }
       })
-      const nextItems = getTenantCatalogGovernanceItems(organization, catalogDraft)
+      const nextItems = getTenantAdminCatalogItems(organization, catalogDraft, hideModelService)
       setCatalogItems(nextItems)
       const updated = nextItems.find((item) => item.id === itemId)
       if (updated) {
@@ -728,7 +740,7 @@ export function TenantAdminCatalogPage({
       applyPublishedPayloadToTenantCatalogItem(stored, payload),
     )
     refreshCatalogItems()
-    const nextItems = getTenantCatalogGovernanceItems(organization, catalogDraft)
+    const nextItems = getTenantAdminCatalogItems(organization, catalogDraft, hideModelService)
     const updated = nextItems.find((item) => item.id === catalogItemId)
     if (updated) {
       setSelectedCatalogItem(updated)
@@ -824,7 +836,7 @@ export function TenantAdminCatalogPage({
 
     const deletedId = selectedCatalogItem.id
     removeTenantCatalogItem(organization.slug, deletedId)
-    setCatalogItems(getTenantCatalogGovernanceItems(organization, catalogDraft))
+    setCatalogItems(getTenantAdminCatalogItems(organization, catalogDraft, hideModelService))
     setIsDetailsDrawerOpen(false)
     syncWorkspaceCatalogItemParam(setSearchParams, null, { replace: true })
     setIsEditWizardOpen(false)
@@ -870,6 +882,7 @@ export function TenantAdminCatalogPage({
           hidePublishScope
           templates={catalogTemplates}
           organizations={[organization]}
+          hiddenServiceIds={hideModelService ? ['models'] : undefined}
           defaultTemplateRefId={catalogTemplates[0]?.templateRefId}
           onClose={() => setIsCreateWizardOpen(false)}
           onCreateCatalogItem={handleCreateCatalogItem}
@@ -983,6 +996,7 @@ export function TenantAdminCatalogPage({
               selectedFilters={selectedFilters}
               serviceCounts={serviceCounts}
               onToggle={handleFilterToggle}
+              hiddenServiceIds={hideModelService ? ['models'] : undefined}
             />
             <FormSelect
               className="catalog-status-filter"

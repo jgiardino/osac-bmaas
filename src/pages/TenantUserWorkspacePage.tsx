@@ -47,6 +47,10 @@ import { TenantUserActivityLogPage } from './tenant-user/TenantUserActivityLogPa
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserCatalogPage } from './tenant-user/TenantUserCatalogPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
+import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
+import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
+import { PlaygroundPage } from './tenant-user/genai/playground'
+import { GENAI_API_KEYS_DETAIL_PARAMS } from './tenant-user/genai/genaiNavParams'
 import { TenantAdminProjectsTeamsPage } from './tenant-admin/TenantAdminProjectsTeamsPage'
 import { ensureTenantDemoProjects } from '../tenantAdmin/storage'
 import type { TenantProject } from '../tenantAdmin/projects'
@@ -67,8 +71,10 @@ function isTenantUserNavId(value: string | null): value is TenantUserNavId {
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
-    value === 'services-models' ||
     value === 'services-virtual-machines' ||
+    value === 'genai-asset-endpoints' ||
+    value === 'genai-playground' ||
+    value === 'genai-api-keys' ||
     value === 'projects-teams' ||
     value === 'networking-virtual-networks' ||
     value === 'networking-external-ip-pools' ||
@@ -119,6 +125,9 @@ function ensureTenantUserPostOnboardingPrototype(tenantSlug: string, navId: Tena
 }
 
 function normalizeTenantUserNavParam(value: string | null): TenantUserNavId | null {
+  if (value === 'services-models') {
+    return 'services-baremetal'
+  }
   if (isTenantUserNavId(value)) {
     return value
   }
@@ -278,7 +287,10 @@ export function TenantUserWorkspacePage() {
       setActiveNavId(nextNavId)
       setTenantUserActiveNav(tenantSlug, nextNavId)
       setNavContentKey((current) => current + 1)
-      syncWorkspaceNavParam(setSearchParams, nextNavId, { showLanding: true })
+      syncWorkspaceNavParam(setSearchParams, nextNavId, {
+        showLanding: true,
+        clearParams: GENAI_API_KEYS_DETAIL_PARAMS,
+      })
 
       if (isServicesNavId(nextNavId)) {
         setInstances(ensureTenantDemoInstances(tenantSlug))
@@ -424,6 +436,16 @@ export function TenantUserWorkspacePage() {
             }}
           />
         )
+      case 'genai-asset-endpoints':
+        return (
+          <AiAssetEndpointsPage
+            onNavigateToPlayground={() => handleNavChange('genai-playground')}
+          />
+        )
+      case 'genai-playground':
+        return <PlaygroundPage />
+      case 'genai-api-keys':
+        return <GenaiApiKeysPage surface="tenant-user" />
       case 'projects-teams':
         return organization ? (
           <TenantAdminProjectsTeamsPage

@@ -707,11 +707,17 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
   return (
     value === 'overview' ||
     value === 'ai-grid' ||
+    value === 'provider-ai-models' ||
+    value === 'provider-ai-usage' ||
+    value === 'provider-ai-model-catalog-settings' ||
     value === 'catalog' ||
     value === 'services-baremetal' ||
     value === 'services-clusters' ||
     value === 'services-models' ||
     value === 'services-virtual-machines' ||
+    value === 'genai-asset-endpoints' ||
+    value === 'genai-playground' ||
+    value === 'genai-api-keys' ||
     value === 'projects-teams' ||
     value === 'infrastructure-data-centers' ||
     value === 'infrastructure-hardware-inventory' ||

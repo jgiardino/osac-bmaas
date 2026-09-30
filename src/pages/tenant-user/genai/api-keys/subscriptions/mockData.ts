@@ -1,5 +1,5 @@
 import type { Subscription } from './types';
-import { maasGovernanceIdentities } from '../../../../../vision/maasModelSeed';
+import { maasGovernanceIdentities } from '../../../../../vision/legacyModelInstanceSeed';
 
 // Generate YAML for a subscription
 const generateSubscriptionYAML = (subscription: Subscription): string => {

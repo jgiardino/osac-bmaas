@@ -332,6 +332,8 @@ type ProviderSetupPublishCatalogWizardProps = {
   isSaving?: boolean
   /** Tenant admins configure offerings for their org only — omit provider Visibility step. */
   hidePublishScope?: boolean
+  /** Hide services that are surfaced in a dedicated workspace area. */
+  hiddenServiceIds?: readonly CatalogServiceId[]
 }
 
 function CustomHardwareUnitNumberInput({
@@ -428,6 +430,7 @@ export function ProviderSetupPublishCatalogWizard({
   isPublishing = false,
   isSaving = false,
   hidePublishScope = false,
+  hiddenServiceIds = [],
 }: ProviderSetupPublishCatalogWizardProps) {
   const isEditMode = mode === 'edit'
   const isSubmitting = isPublishing || isSaving
@@ -1484,7 +1487,9 @@ export function ProviderSetupPublishCatalogWizard({
                   role="radiogroup"
                   aria-label="Catalog service"
                 >
-                  {CATALOG_SERVICE_OFFERINGS.map((service) => {
+                  {CATALOG_SERVICE_OFFERINGS.filter(
+                    (service) => !hiddenServiceIds.includes(service.id),
+                  ).map((service) => {
                     const isSelected = selectedServiceId === service.id
                     const titleId = `publish-catalog-service-${service.id}-title`
 

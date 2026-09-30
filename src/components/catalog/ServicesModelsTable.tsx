@@ -1,6 +1,7 @@
 import { Label, LabelGroup } from '@patternfly/react-core'
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import type { ExternalModelSeed } from '../../vision/externalModelSeed'
+import { VISION_ORGS } from '../../vision/fleetWorld'
 import {
   groupModelInstancesByModelId,
   type ModelInstanceSeedItem,
@@ -11,13 +12,13 @@ import { ExternalModelsExpandedProvidersTable } from './ExternalModelsExpandedPr
 import { InternalDeploymentsTable } from './InternalDeploymentsTable'
 import { MaasModelIdentity } from './MaasModelIdentity'
 
-const SERVICES_MODEL_DATA_COLUMNS = 3
-
 type ServicesModelsTableProps = {
   instances: ModelInstanceSeedItem[]
   externalModels: ExternalModelSeed[]
   expandedIds: ReadonlySet<string>
   onToggleExpand: (id: string) => void
+  showVisibility?: boolean
+  showInternalLabels?: boolean
   idPrefix?: string
 }
 
@@ -26,6 +27,8 @@ export const ServicesModelsTable = ({
   externalModels,
   expandedIds,
   onToggleExpand,
+  showVisibility = false,
+  showInternalLabels = true,
   idPrefix = 'services-models-table',
 }: ServicesModelsTableProps) => {
   const groups = groupModelInstancesByModelId(instances)
@@ -49,6 +52,7 @@ export const ServicesModelsTable = ({
           <Th />
           <Th>Model</Th>
           <Th>Deployments</Th>
+          {showVisibility ? <Th>Visibility</Th> : null}
           <Th modifier="fitContent">Status</Th>
           <Th modifier="fitContent" screenReaderText="Actions" />
         </Tr>
@@ -75,7 +79,7 @@ export const ServicesModelsTable = ({
                   displayName={representative.displayName}
                   modelRefId={representative.maasModelRefId}
                   description={representative.description}
-                  labels={[{ text: 'Internal', color: 'orange' }]}
+                  labels={showInternalLabels ? [{ text: 'Internal', color: 'orange' }] : []}
                 />
               </Td>
               <Td dataLabel="Deployments" id={`${rowId}-deployments`}>
@@ -92,6 +96,11 @@ export const ServicesModelsTable = ({
                   ))}
                 </LabelGroup>
               </Td>
+              {showVisibility ? (
+                <Td dataLabel="Visibility" id={`${rowId}-visibility`}>
+                  {representative.tenantLabel}
+                </Td>
+              ) : null}
               <Td dataLabel="Status" modifier="fitContent" id={`${rowId}-status`}>
                 <Label color="green" isCompact id={`${rowId}-status-label`}>
                   Ready
@@ -103,7 +112,7 @@ export const ServicesModelsTable = ({
             </Tr>
             <AlignedExpandableRow
               isExpanded={isExpanded}
-              colSpan={SERVICES_MODEL_DATA_COLUMNS}
+              colSpan={3 + (showVisibility ? 1 : 0)}
               id={`${rowId}-expanded`}
             >
               <InternalDeploymentsTable
@@ -157,6 +166,12 @@ export const ServicesModelsTable = ({
                   ))}
                 </LabelGroup>
               </Td>
+              {showVisibility ? (
+                <Td dataLabel="Visibility" id={`${rowId}-visibility`}>
+                  {VISION_ORGS.find((organization) => organization.id === row.model.orgId)?.label ??
+                    row.model.orgId}
+                </Td>
+              ) : null}
               <Td dataLabel="Status" modifier="fitContent" id={`${rowId}-status`}>
                 <ExternalModelPhaseLabel phase={row.model.phase} id={`${rowId}-status-label`} />
               </Td>
@@ -166,7 +181,7 @@ export const ServicesModelsTable = ({
             </Tr>
             <AlignedExpandableRow
               isExpanded={isExpanded}
-              colSpan={SERVICES_MODEL_DATA_COLUMNS}
+              colSpan={3 + (showVisibility ? 1 : 0)}
               id={`${rowId}-expanded`}
             >
               <ExternalModelsExpandedProvidersTable

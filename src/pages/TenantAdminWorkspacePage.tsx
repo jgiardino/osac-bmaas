@@ -18,6 +18,12 @@ import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPa
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import { TenantUserInstancesPage } from './tenant-user/TenantUserInstancesPage'
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
+import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
+import { PlaygroundPage } from './tenant-user/genai/playground'
+import {
+  GENAI_API_KEYS_DETAIL_PARAMS,
+  MAAS_GOVERNANCE_DETAIL_PARAMS,
+} from './tenant-user/genai/genaiNavParams'
 import {
   TENANT_ADMIN_NAV_ITEMS,
   TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS,
@@ -68,14 +74,6 @@ import { LAUNCH_INSTANCE_PROVISIONING_DURATION_MS, LAUNCH_INSTANCE_SERVICES_PROV
 const TENANT_ADMIN_PLACEHOLDER_PAGES: Partial<
   Record<TenantAdminNavId, { title: string; description: string }>
 > = {
-  'ai-asset-endpoints': {
-    title: 'AI asset endpoints',
-    description: 'View and manage AI asset endpoints available to this tenant.',
-  },
-  playground: {
-    title: 'Playground',
-    description: 'Explore tenant model endpoints in the GenAI studio playground.',
-  },
   'admin-ai-usage': {
     title: 'AI usage',
     description: 'Review AI model usage across the tenant.',
@@ -108,8 +106,23 @@ function isTenantAdminNavId(value: string | null): value is TenantAdminNavId {
   )
 }
 
-function normalizeTenantAdminNavParam(value: string | null): TenantAdminNavId | null {
+function normalizeTenantAdminNavParam(
+  value: string | null,
+  isModelDeploymentMvp = false,
+): TenantAdminNavId | null {
+  if (value === 'genai-asset-endpoints') {
+    return 'ai-asset-endpoints'
+  }
+  if (value === 'genai-playground') {
+    return 'playground'
+  }
+  if (value === 'genai-api-keys') {
+    return 'api-keys'
+  }
   if (isTenantAdminNavId(value)) {
+    if (isModelDeploymentMvp && value === 'services-models') {
+      return 'admin-models'
+    }
     return value
   }
   if (value === 'administrators') {
@@ -174,22 +187,28 @@ function readInitialTenantAdminNav(
   tenant: string,
   searchParams: URLSearchParams,
 ): TenantAdminNavId {
-  const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
+  const isModelDeploymentMvp = searchParams.get('navVersion') === 'model-deployment-mvp'
+  const requestedNav = normalizeTenantAdminNavParam(
+    searchParams.get('nav'),
+    isModelDeploymentMvp,
+  )
   if (requestedNav) {
     ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav, searchParams)
     return requestedNav
   }
 
   syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
-  return getTenantActiveNav(tenant)
+  const activeNav = getTenantActiveNav(tenant)
+  return isModelDeploymentMvp && activeNav === 'services-models' ? 'admin-models' : activeNav
 }
 
 export function TenantAdminWorkspacePage() {
   const { tenant: tenantParam } = useParams<{ tenant: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const navVersion = searchParams.get('navVersion')
+  const isModelDeploymentMvp = navVersion === 'model-deployment-mvp'
   const navItems =
-    navVersion === 'model-deployment-mvp'
+    isModelDeploymentMvp
       ? TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS
       : TENANT_ADMIN_NAV_ITEMS
   const isValidTenant = Boolean(
@@ -238,7 +257,10 @@ export function TenantAdminWorkspacePage() {
     syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
     const workspaceOrganization = getWorkspaceOrganization(tenant)
     setOrganization(workspaceOrganization)
-    const requestedNav = normalizeTenantAdminNavParam(searchParams.get('nav'))
+    const requestedNav = normalizeTenantAdminNavParam(
+      searchParams.get('nav'),
+      isModelDeploymentMvp,
+    )
     setInstances(
       shouldHideDemoServicesInstances(tenant)
         ? []
@@ -251,11 +273,20 @@ export function TenantAdminWorkspacePage() {
       ensureTenantAdminPostOnboardingPrototype(tenant, requestedNav, searchParams)
       setActiveNavId(requestedNav)
       setTenantActiveNav(tenant, requestedNav)
+      if (searchParams.get('nav') !== requestedNav) {
+        syncWorkspaceNavParam(setSearchParams, requestedNav, { replace: true })
+      }
       return
     }
 
-    syncWorkspaceNavParam(setSearchParams, getTenantActiveNav(tenant), { replace: true })
-  }, [isValidTenant, searchParams, setSearchParams, tenant])
+    const activeNav = getTenantActiveNav(tenant)
+    const normalizedActiveNav =
+      isModelDeploymentMvp && activeNav === 'services-models' ? 'admin-models' : activeNav
+    if (normalizedActiveNav !== activeNav) {
+      setTenantActiveNav(tenant, normalizedActiveNav)
+    }
+    syncWorkspaceNavParam(setSearchParams, normalizedActiveNav, { replace: true })
+  }, [isValidTenant, isModelDeploymentMvp, searchParams, setSearchParams, tenant])
 
   if (!isValidTenant) {
     return <Navigate to="/" replace />
@@ -278,7 +309,10 @@ export function TenantAdminWorkspacePage() {
     setActiveNavId(nextNavId)
     setTenantActiveNav(tenant, nextNavId)
     setNavContentKey((current) => current + 1)
-    syncWorkspaceNavParam(setSearchParams, nextNavId, { showLanding: true })
+    syncWorkspaceNavParam(setSearchParams, nextNavId, {
+      showLanding: true,
+      clearParams: [...GENAI_API_KEYS_DETAIL_PARAMS, ...MAAS_GOVERNANCE_DETAIL_PARAMS],
+    })
     if (isServicesNavId(nextNavId)) {
       setInstances(
         shouldHideDemoServicesInstances(tenant)
@@ -352,6 +386,12 @@ export function TenantAdminWorkspacePage() {
     }
 
     switch (activeNavId) {
+      case 'ai-asset-endpoints':
+        return (
+          <AiAssetEndpointsPage onNavigateToPlayground={() => handleNavChange('playground')} />
+        )
+      case 'playground':
+        return <PlaygroundPage />
       case 'api-keys':
         return <GenaiApiKeysPage />
       case 'admin-api-keys':
@@ -407,6 +447,7 @@ export function TenantAdminWorkspacePage() {
           <TenantAdminCatalogPage
             organization={organization}
             catalogDraft={catalogDraft}
+            hideModelService={isModelDeploymentMvp}
             projects={projects}
             initialProjectId={isAllProjectsScope(projectScopeId) ? null : projectScopeId}
             onProjectScopeChange={handleProjectScopeChange}

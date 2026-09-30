@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { Button, Label, Switch, Toolbar, ToolbarContent, ToolbarItem } from '@patternfly/react-core';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  Button,
+  Label,
+  Switch,
+  Toolbar,
+  ToolbarContent,
+  ToolbarItem,
+} from '@patternfly/react-core';
 import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table';
 
 import { TenantUserPageChrome } from '../../../tenant-user/genai/TenantUserPageChrome';
@@ -8,7 +17,15 @@ import { GenaiPageStack } from '../../../tenant-user/genai/GenaiPageStack';
 import { MOCK_CATALOG_SOURCE_CONFIGS } from './mocks';
 import type { CatalogSourceConfigRow } from './types';
 
-const ModelCatalogSettingsPage = () => {
+interface ModelCatalogSettingsPageProps {
+  isProviderAdmin?: boolean
+  onBackToModels?: () => void
+}
+
+const ModelCatalogSettingsPage = ({
+  isProviderAdmin = false,
+  onBackToModels,
+}: ModelCatalogSettingsPageProps) => {
   const [sources, setSources] = useState<CatalogSourceConfigRow[]>(MOCK_CATALOG_SOURCE_CONFIGS);
 
   const handleToggle = (sourceId: string, enabled: boolean) => {
@@ -17,12 +34,31 @@ const ModelCatalogSettingsPage = () => {
     );
   };
 
+  const breadcrumbs = onBackToModels ? (
+    <Breadcrumb aria-label="Model catalog settings breadcrumb">
+      <BreadcrumbItem
+        to="#"
+        onClick={(event) => {
+          event.preventDefault();
+          onBackToModels();
+        }}
+      >
+        Models
+      </BreadcrumbItem>
+      <BreadcrumbItem isActive>Model catalog settings</BreadcrumbItem>
+    </Breadcrumb>
+  ) : undefined;
+
   return (
     <TenantUserPageChrome
       pageClassName="tenant-admin-model-catalog-settings"
-      kicker="AI"
       title="Model catalog settings"
-      description="Add and manage model sources that populate the model catalog for users in your organization."
+      description={
+        isProviderAdmin
+          ? 'Add and manage model sources that populate the model catalog for users across your tenants.'
+          : 'Add and manage model sources that populate the model catalog for users in your organization.'
+      }
+      breadcrumbs={breadcrumbs}
     >
       <GenaiPageStack>
         <Toolbar id="model-catalog-settings-toolbar" hasNoPadding>

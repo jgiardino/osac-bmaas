@@ -319,7 +319,9 @@ export function ProviderAdminCatalogPage({
   onEditLeaveAttemptChange,
 }: ProviderAdminCatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialServiceFilters = catalogItems.map(getDraftServiceId)
+  const initialServiceFilters = catalogItems
+    .filter((item) => getDraftServiceId(item) !== 'models')
+    .map(getDraftServiceId)
   const [selectedFilters, setSelectedFilters] = useState<Set<CatalogServiceId>>(
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
@@ -351,7 +353,10 @@ export function ProviderAdminCatalogPage({
   const itemParam = getWorkspaceCatalogItemParam(searchParams)
 
   const uniqueCatalogItems = useMemo(
-    () => dedupeCatalogItemsById(catalogItems),
+    () =>
+      dedupeCatalogItemsById(
+        catalogItems.filter((item) => getDraftServiceId(item) !== 'models'),
+      ),
     [catalogItems],
   )
   /** Freeze card order for the session so publish/unpublish never reshuffles the grid. */
@@ -556,7 +561,7 @@ export function ProviderAdminCatalogPage({
     }
 
     const catalogItem =
-      catalogItems.find((item) => item.catalogItemId === intent.catalogItemId) ?? null
+      orderedCatalogItems.find((item) => item.catalogItemId === intent.catalogItemId) ?? null
     if (!catalogItem) {
       return
     }
@@ -944,6 +949,7 @@ export function ProviderAdminCatalogPage({
           presentation="page"
           isOpen={isPublishWizardOpen}
           templates={availableTemplates}
+          hiddenServiceIds={['models']}
           organizations={organizations}
           defaultTemplateRefId={newestCatalogItem?.templateRefId}
           initialPublishScope={publishResumeScope}
@@ -972,6 +978,7 @@ export function ProviderAdminCatalogPage({
           isOpen={isEditWizardOpen}
           editingCatalog={selectedCatalogItem}
           templates={availableTemplates}
+          hiddenServiceIds={['models']}
           organizations={organizations}
           initialPublishScope={selectedCatalogItem.scope}
           initialEnterpriseTenantId={editResumeTenantId}
@@ -1025,8 +1032,8 @@ export function ProviderAdminCatalogPage({
             Catalog
           </Title>
           <Content component="p" className="provider-admin-catalog-items__lede">
-            Create catalog items from master templates across Bare Metal, Clusters, Models, and
-            Virtual machines, then attach them to tenants.
+            Create catalog items from master templates across Bare Metal, Clusters, and Virtual
+            machines, then attach them to tenants.
           </Content>
         </FlexItem>
         <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
@@ -1048,6 +1055,7 @@ export function ProviderAdminCatalogPage({
             selectedFilters={selectedFilters}
             serviceCounts={serviceCounts}
             onToggle={handleFilterToggle}
+            hiddenServiceIds={['models']}
           />
           <PillFilterSelect
             id="catalog-status-filter"

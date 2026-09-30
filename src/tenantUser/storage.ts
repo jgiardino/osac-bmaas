@@ -45,6 +45,9 @@ export type TenantUserNavId =
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
+  | 'genai-asset-endpoints'
+  | 'genai-playground'
+  | 'genai-api-keys'
   | 'projects-teams'
   | 'networking-virtual-networks'
   | 'networking-subnets'
@@ -57,8 +60,10 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
   'catalog',
   'services-baremetal',
   'services-clusters',
-  'services-models',
   'services-virtual-machines',
+  'genai-asset-endpoints',
+  'genai-playground',
+  'genai-api-keys',
   'projects-teams',
   'networking-virtual-networks',
   'networking-external-ip-pools',
@@ -69,6 +74,7 @@ const TENANT_USER_NAV_IDS: TenantUserNavId[] = [
 const LEGACY_TENANT_USER_NAV_IDS: Record<string, TenantUserNavId> = {
   'my-instances': 'services-baremetal',
   services: 'services-baremetal',
+  'services-models': 'services-baremetal',
   'networking-subnets': 'networking-virtual-networks',
   'networking-security-groups': 'networking-virtual-networks',
 }

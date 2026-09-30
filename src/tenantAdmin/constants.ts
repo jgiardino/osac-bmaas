@@ -120,14 +120,23 @@ export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
 
 /** Tenant Admin navigation used by the Model deployment MVP landing-page entry. */
 export const TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS: TenantAdminNavItem[] =
-  TENANT_ADMIN_NAV_ITEMS.map((item) =>
-    item.id === 'ai-administration'
-      ? {
-          ...item,
-          children: [{ id: 'admin-models', label: 'Models' }, ...(item.children ?? [])],
-        }
-      : item,
-  )
+  TENANT_ADMIN_NAV_ITEMS.map((item) => {
+    if (item.id === 'ai-administration') {
+      return {
+        ...item,
+        children: [{ id: 'admin-models', label: 'Models' }, ...(item.children ?? [])],
+      }
+    }
+
+    if (item.id === 'services') {
+      return {
+        ...item,
+        children: (item.children ?? []).filter((child) => child.id !== 'services-models'),
+      }
+    }
+
+    return item
+  })
 
 export function getTenantAdminLeafNavItems(
   items: readonly TenantAdminNavItem[] = TENANT_ADMIN_NAV_ITEMS,

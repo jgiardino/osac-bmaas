@@ -17,6 +17,8 @@ type TenantUserPageChromeProps = {
   kickerExtra?: ReactNode
   /** Optional actions aligned with the title row (catalog pattern). */
   actions?: ReactNode
+  /** Optional breadcrumb shown above the page header. */
+  breadcrumbs?: ReactNode
 }
 
 /**
@@ -32,6 +34,7 @@ export function TenantUserPageChrome({
   kicker,
   kickerExtra,
   actions,
+  breadcrumbs,
 }: TenantUserPageChromeProps) {
   return (
     <div
@@ -39,6 +42,7 @@ export function TenantUserPageChrome({
         .filter(Boolean)
         .join(' ')}
     >
+      {breadcrumbs}
       <Flex
         className="tenant-genai-page__page-header"
         alignItems={{ default: 'alignItemsFlexStart' }}

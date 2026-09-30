@@ -91,6 +91,14 @@ export function TenantShell({
       : flattenTenantNavItems(navItems)
   const [internalActiveNavId, setInternalActiveNavId] = useState(flattenedNavItems[0]?.id ?? '')
   const activeNavId = activeNavIdProp ?? internalActiveNavId
+  const [expandedNavItems, setExpandedNavItems] = useState<Set<string>>(
+    () =>
+      new Set(
+        role === 'tenant-admin' && activeNavId === 'admin-models'
+          ? ['ai-administration']
+          : [],
+      ),
+  )
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
 
@@ -103,8 +111,19 @@ export function TenantShell({
           key={item.id}
           id={`tenant-${role}-nav-${item.id}`}
           title={item.label}
-          isExpanded
+          isExpanded={expandedNavItems.has(item.id)}
           isActive={isSectionActive}
+          onToggle={(_event, isExpanded) => {
+            setExpandedNavItems((current) => {
+              const next = new Set(current)
+              if (isExpanded) {
+                next.add(item.id)
+              } else {
+                next.delete(item.id)
+              }
+              return next
+            })
+          }}
         >
           {item.children.map((child) => (
             <NavItem

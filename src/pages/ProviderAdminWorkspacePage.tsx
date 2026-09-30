@@ -21,7 +21,13 @@ import { ProviderAdminExternalNetworksPage } from './infrastructure/ProviderAdmi
 import { PlaceholderProviderAdminPage } from './PlaceholderProviderAdminPage'
 import { ProviderServiceSelectionPage } from './provider-setup/ProviderServiceSelectionPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
+import TenantAdminModelsPage from './tenant-admin/ai/models/TenantAdminModelsPage'
+import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
+import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
+import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
+import { PlaygroundPage } from './tenant-user/genai/playground'
+import { GENAI_API_KEYS_DETAIL_PARAMS } from './tenant-user/genai/genaiNavParams'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
@@ -33,6 +39,7 @@ import {
 import {
   getProviderActiveNav,
   getProviderCatalogItems,
+  getProviderRegisteredOrganizations,
   getProviderSelectedServices,
   isProviderServicesSelected,
   isProviderSetupComplete,
@@ -85,10 +92,14 @@ export function ProviderAdminWorkspacePage() {
   const [workspaceTransition, setWorkspaceTransition] = useState<WorkspaceTransition>('idle')
   const [openTemplateLookup, setOpenTemplateLookup] = useState<BmaasTemplateLookup | null>(null)
   const [openCatalogItemKey, setOpenCatalogItemKey] = useState<string | null>(null)
+  const [providerModelsInitialTab, setProviderModelsInitialTab] = useState<'catalog' | 'deployments'>(
+    'deployments',
+  )
   const [navContentKey, setNavContentKey] = useState(0)
   const catalogEditLeaveAttemptRef = useRef<((onConfirmed: () => void) => void) | null>(null)
 
   const navParam = searchParams.get('nav')
+  const isModelDeploymentMvp = searchParams.get('navVersion') === 'model-deployment-mvp'
 
   useLayoutEffect(() => {
     const requestedNav = normalizeProviderNavParam(navParam)
@@ -242,7 +253,10 @@ export function ProviderAdminWorkspacePage() {
     setActiveNavId(resolvedNavId)
     setProviderActiveNav(resolvedNavId)
     setNavContentKey((current) => current + 1)
-    syncWorkspaceNavParam(setSearchParams, resolvedNavId, { showLanding: true })
+    syncWorkspaceNavParam(setSearchParams, resolvedNavId, {
+      showLanding: true,
+      clearParams: GENAI_API_KEYS_DETAIL_PARAMS,
+    })
   }
 
   const handleNavChange = (navId: ProviderAdminNavId) => {
@@ -295,6 +309,42 @@ export function ProviderAdminWorkspacePage() {
             }}
           />
         )
+      case 'provider-ai-models':
+        return (
+          <TenantAdminModelsPage
+            providerOrganizations={getProviderRegisteredOrganizations()}
+            initialTab={providerModelsInitialTab}
+            onTabChange={setProviderModelsInitialTab}
+            onManageSources={() => {
+              setProviderModelsInitialTab('catalog')
+              handleNavChange('provider-ai-model-catalog-settings')
+            }}
+          />
+        )
+      case 'provider-ai-model-catalog-settings':
+        return (
+          <ModelCatalogSettingsPage
+            isProviderAdmin
+            onBackToModels={() => handleNavChange('provider-ai-models')}
+          />
+        )
+      case 'provider-ai-usage':
+        return (
+          <PlaceholderProviderAdminPage
+            title="AI usage"
+            description="Review AI model usage across the provider environment."
+          />
+        )
+      case 'genai-asset-endpoints':
+        return (
+          <AiAssetEndpointsPage
+            onNavigateToPlayground={() => handleNavChange('genai-playground')}
+          />
+        )
+      case 'genai-playground':
+        return <PlaygroundPage />
+      case 'genai-api-keys':
+        return <GenaiApiKeysPage />
       case 'infrastructure-data-centers':
         return <ProviderAdminDataCentersPage />
       case 'infrastructure-hardware-inventory':
@@ -365,6 +415,7 @@ export function ProviderAdminWorkspacePage() {
       activeNavId={activeNavId}
       onNavChange={handleNavChange}
       workspaceTransition={workspaceTransition}
+      isModelDeploymentMvp={isModelDeploymentMvp}
     >
       {renderWorkspaceContent()}
     </ProviderAdminShell>

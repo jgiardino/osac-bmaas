@@ -79,6 +79,18 @@ export const VisionGridServicesTab = ({
   onViewModelGroup,
   onViewExternalModelGroup,
 }: VisionGridServicesTabProps) => {
+  const showModels = objectTypes.includes('models')
+  const isModelSelection =
+    selection.kind === 'deployment' ||
+    selection.kind === 'off-platform-model' ||
+    selection.kind === 'preset' ||
+    selection.kind === 'model-group' ||
+    selection.kind === 'external-model-group'
+
+  if (!showModels && isModelSelection) {
+    return <Content component="p">This service is not available in the current filter.</Content>
+  }
+
   if (mode === 'detail') {
     if (selection.kind === 'cluster') {
       return (
@@ -204,7 +216,6 @@ export const VisionGridServicesTab = ({
     return matches(cluster.name) || matches(site.regionLabel) || matches(org.label)
   })
   const showClusters = objectTypes.includes('clusters')
-  const showModels = objectTypes.includes('models')
   const seedOrgId = seedOrgFromClusters(clusters)
   const visibleSeedModels = servicesModelsForOrg(seedOrgId).filter(
     (item) =>

@@ -31,7 +31,7 @@ import { ExpandableRowContent, Table, Tbody, Td, Th, Thead, Tr } from '@patternf
 import { GenaiPageStack } from '../../GenaiPageStack';
 import { mockApiKeysEngineerV34 } from '../mockDataV34';
 import { mockSubscriptions } from '../subscriptions/mockData';
-import { apiKeyModelIdentities } from '../../../../../vision/maasModelSeed';
+import { apiKeyModelIdentities } from '../../../../../vision/legacyModelInstanceSeed';
 import { useVisionOrgFilter } from '../../../../../vision/useVisionOrgFilter';
 import type { VisionOrgId } from '../../../../../vision/fleetWorld';
 import { MaasModelIdentity } from '../../../../../components/catalog/MaasModelIdentity';

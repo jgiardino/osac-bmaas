@@ -9,6 +9,7 @@ type CatalogServiceFilterToggleProps = {
   serviceCounts: Record<CatalogServiceId, number>
   onToggle: (serviceId: CatalogServiceId, isSelected: boolean) => void
   className?: string
+  hiddenServiceIds?: readonly CatalogServiceId[]
   /** Prefix for toggle button ids (avoids clashes across pages). */
   idPrefix?: string
   ariaLabel?: string
@@ -19,6 +20,7 @@ export function CatalogServiceFilterToggle({
   serviceCounts,
   onToggle,
   className,
+  hiddenServiceIds = [],
   idPrefix = 'catalog-filter-',
   ariaLabel = 'Catalog service filters',
 }: CatalogServiceFilterToggleProps) {
@@ -27,7 +29,7 @@ export function CatalogServiceFilterToggle({
       aria-label={ariaLabel}
       className={['catalog-service-filter', className].filter(Boolean).join(' ')}
     >
-      {CATALOG_SERVICE_FILTERS.map((filter) => (
+      {CATALOG_SERVICE_FILTERS.filter((filter) => !hiddenServiceIds.includes(filter.id)).map((filter) => (
         <ToggleGroupItem
           key={filter.id}
           text={`${filter.label} ${serviceCounts[filter.id]}`}

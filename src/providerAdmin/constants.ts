@@ -1,11 +1,17 @@
 export type ProviderAdminNavId =
   | 'overview'
   | 'ai-grid'
+  | 'provider-ai-models'
+  | 'provider-ai-usage'
+  | 'provider-ai-model-catalog-settings'
   | 'catalog'
   | 'services-baremetal'
   | 'services-clusters'
   | 'services-models'
   | 'services-virtual-machines'
+  | 'genai-asset-endpoints'
+  | 'genai-playground'
+  | 'genai-api-keys'
   | 'projects-teams'
   | 'networking'
   | 'networking-virtual-networks'
@@ -35,7 +41,6 @@ export const PROVIDER_ADMIN_NAV_ITEMS: ProviderAdminNavItem[] = [
 export const PROVIDER_ADMIN_SERVICES_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'services-baremetal', label: 'Bare metal' },
   { id: 'services-clusters', label: 'Clusters' },
-  { id: 'services-models', label: 'Models' },
   { id: 'services-virtual-machines', label: 'Virtual machines' },
 ]
 
@@ -52,6 +57,19 @@ export const PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'administration-organizations', label: 'Tenants' },
   { id: 'administration-billing', label: 'Billing' },
 ]
+
+export const PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS: ProviderAdminNavItem[] = [
+  { id: 'provider-ai-models', label: 'Models' },
+  { id: 'provider-ai-usage', label: 'Usage' },
+]
+
+export function isProviderAiNavId(navId: string): boolean {
+  return (
+    navId === 'provider-ai-models' ||
+    navId === 'provider-ai-usage' ||
+    navId === 'provider-ai-model-catalog-settings'
+  )
+}
 
 export function isServicesNavId(navId: string): boolean {
   return navId.startsWith('services-')

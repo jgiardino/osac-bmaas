@@ -5,22 +5,31 @@ import { useApiKeysSurface } from './stubs'
 
 /**
  * Ethan workspace uses ?nav= + detail query params (not /genai/... routes).
- * Keep the selected API keys menu item and layer details query params over it.
+ * Keep nav=genai-api-keys and layer keyId / subscriptionId / tab / subTab / modal.
  */
 export function useApiKeysPaths() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const surface = useApiKeysSurface()
   const isAdmin = surface === 'tenant-admin'
+  const currentNav = searchParams.get('nav')
+  const apiKeysNavId =
+    currentNav === 'admin-api-keys' || currentNav === 'ai-admin-api-keys'
+      ? currentNav
+      : currentNav === 'api-keys' || currentNav === 'genai-api-keys'
+        ? currentNav
+        : isAdmin
+          ? 'admin-api-keys'
+          : 'genai-api-keys'
 
   const withApiKeysNav = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
       const next = new URLSearchParams(searchParams)
-      next.set('nav', isAdmin ? 'admin-api-keys' : 'api-keys')
+      next.set('nav', apiKeysNavId)
       mutate(next)
       return `${pathname}?${next.toString()}`
     },
-    [isAdmin, pathname, searchParams],
+    [apiKeysNavId, pathname, searchParams],
   )
 
   const listPath = withApiKeysNav((next) => {

@@ -13,7 +13,7 @@ type GenaiApiKeysPageProps = {
 
 /**
  * GenAI API keys list + key/subscription details via ?keyId / ?subscriptionId
- * while staying on the active GenAI Studio or AI admin API keys menu item.
+ * while staying on nav=genai-api-keys or nav=ai-admin-api-keys.
  */
 export function GenaiApiKeysPage({ surface = 'tenant-user', kicker }: GenaiApiKeysPageProps) {
   const [searchParams] = useSearchParams()

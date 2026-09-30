@@ -36,10 +36,12 @@ import {
 } from '@patternfly/react-core'
 import {
   PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS,
+  PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS,
   PROVIDER_ADMIN_NETWORKING_NAV_ID,
   PROVIDER_ADMIN_NETWORKING_NAV_LABEL,
   resolveProviderAdminNavId,
   isAdministrationNavId,
+  isProviderAiNavId,
   isNetworkingNavId,
   type ProviderAdminNavId,
 } from '../../providerAdmin/constants'
@@ -54,6 +56,7 @@ type ProviderAdminShellProps = {
   activeNavId?: ProviderAdminNavId
   onNavChange?: (navId: ProviderAdminNavId) => void
   workspaceTransition?: WorkspaceTransition
+  isModelDeploymentMvp?: boolean
 }
 
 export function ProviderAdminShell({
@@ -62,10 +65,14 @@ export function ProviderAdminShell({
   activeNavId = 'overview',
   onNavChange,
   workspaceTransition = 'idle',
+  isModelDeploymentMvp = false,
 }: ProviderAdminShellProps) {
   const navigate = useNavigate()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
+  const [expandedNavGroups, setExpandedNavGroups] = useState<Set<string>>(
+    () => new Set(isProviderAiNavId(activeNavId) ? ['ai'] : []),
+  )
 
   const header = (
     <Masthead>
@@ -177,17 +184,63 @@ export function ProviderAdminShell({
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
               Catalog
             </NavItem>
+            {isModelDeploymentMvp ? (
+              <NavExpandable
+                id="provider-admin-ai-nav"
+                title="AI"
+                isExpanded={expandedNavGroups.has('ai')}
+                isActive={isProviderAiNavId(activeNavId)}
+                onToggle={(_event, isExpanded) => {
+                  setExpandedNavGroups((current) => {
+                    const next = new Set(current)
+                    if (isExpanded) {
+                      next.add('ai')
+                    } else {
+                      next.delete('ai')
+                    }
+                    return next
+                  })
+                }}
+              >
+                {PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS.map((item) => (
+                  <NavItem
+                    key={item.id}
+                    itemId={item.id}
+                    isActive={activeNavId === item.id}
+                    to="#"
+                    preventDefault
+                  >
+                    {item.label}
+                  </NavItem>
+                ))}
+              </NavExpandable>
+            ) : null}
             <NavExpandable
               id="provider-admin-administration-nav"
               title="Administration"
-              isExpanded
+              isExpanded={expandedNavGroups.has('administration')}
               isActive={isAdministrationNavId(activeNavId)}
+              onToggle={(_event, isExpanded) => {
+                setExpandedNavGroups((current) => {
+                  const next = new Set(current)
+                  if (isExpanded) {
+                    next.add('administration')
+                  } else {
+                    next.delete('administration')
+                  }
+                  return next
+                })
+              }}
             >
               {PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS.map((item) => (
                 <NavItem
                   key={item.id}
                   itemId={item.id}
-                  isActive={activeNavId === item.id}
+                  isActive={
+                    activeNavId === item.id ||
+                    (activeNavId === 'provider-ai-model-catalog-settings' &&
+                      item.id === 'provider-ai-models')
+                  }
                   to="#"
                   preventDefault
                 >

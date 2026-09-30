@@ -21,9 +21,9 @@ export type VisionDrawerTab = 'catalog' | 'services'
 
 export type VisionGridObjectType = 'clusters' | 'models' | 'gateways'
 
-export const DEFAULT_VISION_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
-export const CATALOG_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
-export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters', 'models']
+export const DEFAULT_VISION_OBJECT_TYPES: VisionGridObjectType[] = ['clusters']
+export const CATALOG_OBJECT_TYPES: VisionGridObjectType[] = ['clusters']
+export const SERVICES_OBJECT_TYPES: VisionGridObjectType[] = ['clusters']
 
 export type VisionDrawerSelection =
   | { kind: 'none' }

@@ -25,6 +25,8 @@ export type SyncWorkspaceNavOptions = NavigateOptions & {
    * (or any section) returns to the list view instead of keeping a detail open.
    */
   showLanding?: boolean
+  /** Additional query keys to remove when a workspace page is selected. */
+  clearParams?: readonly string[]
 }
 
 function isWorkspaceAction(value: string | null | undefined): value is WorkspaceAction {
@@ -104,7 +106,7 @@ export function syncWorkspaceNavParam(
   options?: SyncWorkspaceNavOptions,
 ): void {
   const showLanding = options?.showLanding === true
-  const { showLanding: _showLanding, ...navigateOptions } = options ?? {}
+  const { showLanding: _showLanding, clearParams = [], ...navigateOptions } = options ?? {}
 
   setSearchParams((current) => {
     const navMatches = current.get('nav') === navId
@@ -120,13 +122,15 @@ export function syncWorkspaceNavParam(
       (action === WORKSPACE_ACTION_CREATE_CATALOG_ITEM && navId !== 'catalog') ||
       (action === WORKSPACE_ACTION_REGISTER_TENANT && navId !== 'administration-organizations')
     const hasAction = Boolean(action)
+    const hasClearParams = clearParams.some((key) => current.has(key))
 
     if (
       navMatches &&
       !(shouldClearItem && hasItem) &&
       !(shouldClearInstance && hasInstance) &&
       !(shouldClearTenant && hasTenant) &&
-      !(shouldClearAction && hasAction)
+      !(shouldClearAction && hasAction) &&
+      !hasClearParams
     ) {
       return current
     }
@@ -144,6 +148,9 @@ export function syncWorkspaceNavParam(
     }
     if (shouldClearAction) {
       next.delete(WORKSPACE_ACTION_PARAM)
+    }
+    for (const key of clearParams) {
+      next.delete(key)
     }
     return next
   }, navigateOptions)

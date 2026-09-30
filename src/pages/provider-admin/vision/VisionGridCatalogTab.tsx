@@ -135,7 +135,10 @@ export const VisionGridCatalogTab = ({
 }: VisionGridCatalogTabProps) => {
   const modelRows = buildVisionCatalogModelRows(catalogItems)
   const clusterRows = buildVisionCatalogClusterRows(catalogItems)
-  const selectedModel = modelRows.find((row) => isModelRowSelected(row, selection))
+  const showModels = objectTypes.includes('models')
+  const selectedModel = showModels
+    ? modelRows.find((row) => isModelRowSelected(row, selection))
+    : undefined
   const selectedCluster = clusterRows.find((row) => isClusterRowSelected(row, selection))
   const query = search.trim().toLowerCase()
   const matchesQuery = (name: string, catalogItemId: string) =>
@@ -149,7 +152,6 @@ export const VisionGridCatalogTab = ({
     matchesQuery(row.displayName, row.catalogItemId),
   )
   const showClusters = objectTypes.includes('clusters')
-  const showModels = objectTypes.includes('models')
 
   if (mode === 'detail') {
     if (selectedModel) {

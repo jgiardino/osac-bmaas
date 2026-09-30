@@ -157,6 +157,10 @@ export function BmaasLandingPage() {
       label: 'AI Grid (future vision)',
       to: '/ai-grid',
     },
+    {
+      label: 'Model deployment (MVP)',
+      to: '/provider/workspace?nav=provider-ai-models&navVersion=model-deployment-mvp',
+    },
   ]
 
   const roles: RoleBlockProps[] = [
@@ -212,7 +216,7 @@ export function BmaasLandingPage() {
           to: '/tenant-admin/northsummit/workspace?nav=ai-grid',
         },
         {
-          label: 'Model deployment MVP',
+          label: 'Model deployment (MVP)',
           to: '/tenant-admin/northsummit/workspace?nav=admin-models&navVersion=model-deployment-mvp',
         },
       ],

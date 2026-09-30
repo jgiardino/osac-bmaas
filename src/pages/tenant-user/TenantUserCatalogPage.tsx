@@ -170,7 +170,7 @@ export function TenantUserCatalogPage({
     () =>
       getTenantUserCatalogCards(organization, catalogDraft, {
         preferCatalogDraft,
-      }),
+      }).filter((item) => item.serviceId !== 'models'),
     [organization, catalogDraft, preferCatalogDraft],
   )
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<TenantUserCatalogCard | null>(
@@ -427,6 +427,7 @@ export function TenantUserCatalogPage({
               selectedFilters={selectedFilters}
               serviceCounts={serviceCounts}
               onToggle={handleFilterToggle}
+              hiddenServiceIds={['models']}
             />
             <SearchInput
               className="catalog-search"

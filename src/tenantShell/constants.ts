@@ -30,8 +30,13 @@ export function flattenTenantNavItems(
 export const TENANT_USER_SERVICES_NAV_ITEMS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'services-baremetal', label: 'Bare metal' },
   { id: 'services-clusters', label: 'Clusters' },
-  { id: 'services-models', label: 'Models' },
   { id: 'services-virtual-machines', label: 'Virtual machines' },
+]
+
+export const TENANT_USER_GENAI_NAV_ITEMS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'genai-asset-endpoints', label: 'AI asset endpoints' },
+  { id: 'genai-playground', label: 'Playground' },
+  { id: 'genai-api-keys', label: 'API keys' },
 ]
 
 export const TENANT_USER_NAV_ITEMS: TenantNavItem[] = [
@@ -40,6 +45,11 @@ export const TENANT_USER_NAV_ITEMS: TenantNavItem[] = [
     id: 'services',
     label: 'Services',
     children: TENANT_USER_SERVICES_NAV_ITEMS,
+  },
+  {
+    id: 'genai-studio',
+    label: 'GenAI studio',
+    children: TENANT_USER_GENAI_NAV_ITEMS,
   },
   { id: 'projects-teams', label: 'Projects' },
   {
