@@ -94,7 +94,10 @@ export function TenantShell({
   const [expandedNavItems, setExpandedNavItems] = useState<Set<string>>(
     () =>
       new Set(
-        role === 'tenant-admin' && (activeNavId === 'admin-models' || activeNavId === 'ai-grid')
+        role === 'tenant-admin' &&
+        (activeNavId === 'admin-models' ||
+          activeNavId === 'admin-maas-governance' ||
+          activeNavId === 'ai-grid')
           ? ['ai-administration']
           : [],
       ),
