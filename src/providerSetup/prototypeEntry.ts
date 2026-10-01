@@ -629,6 +629,20 @@ function ensureModelCatalogItems(): ProviderCatalogDraft[] {
   return getProviderCatalogItems()
 }
 
+/** Restores missing model catalog entries without resyncing other catalog items. */
+export function ensureProviderModelCatalogItems(): ProviderCatalogDraft[] {
+  let currentItems = getProviderCatalogItems()
+
+  for (const draft of createModelCatalogDrafts()) {
+    if (!currentItems.some((item) => item.catalogItemId === draft.catalogItemId)) {
+      addProviderCatalogItem(draft)
+      currentItems = getProviderCatalogItems()
+    }
+  }
+
+  return currentItems
+}
+
 /** Ensures demo catalog offerings exist for finished Provider Admin screens. */
 export function ensureProviderCatalogDemoItems(): ProviderCatalogDraft[] {
   ensureDemoBareMetalTemplates()
@@ -708,6 +722,7 @@ export function isProviderAdminNavId(value: string | null): value is ProviderAdm
     value === 'overview' ||
     value === 'ai-grid' ||
     value === 'provider-ai-models' ||
+    value === 'provider-ai-maas-governance' ||
     value === 'provider-ai-usage' ||
     value === 'provider-ai-model-catalog-settings' ||
     value === 'catalog' ||

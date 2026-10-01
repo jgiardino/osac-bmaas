@@ -217,7 +217,7 @@ export function BmaasLandingPage() {
         },
         {
           label: 'Model deployment (MVP)',
-          to: '/tenant-admin/northsummit/workspace?nav=admin-models&navVersion=model-deployment-mvp',
+          to: '/tenant-admin/northsummit/workspace?nav=admin-maas-governance&navVersion=model-deployment-mvp',
         },
       ],
     },

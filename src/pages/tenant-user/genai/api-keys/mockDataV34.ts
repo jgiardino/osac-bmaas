@@ -11,8 +11,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-04-01T08:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-25T09:15:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-2',
@@ -24,8 +24,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-10-12T10:30:00Z'),
     status: 'revoked',
     lastUsedAt: new Date('2026-01-25T10:30:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-5',
@@ -36,8 +36,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     creationDate: new Date('2025-10-10T14:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-25T14:00:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-13',
@@ -60,8 +60,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-02-20T09:00:00Z'),
     status: 'expired',
     lastUsedAt: new Date('2026-01-25T14:30:00Z'),
-    subscriptionId: 'research-unlimited',
-    subscriptionName: 'Research Unlimited',
+    subscriptionId: 'sub-nsb-limited',
+    subscriptionName: 'Limited',
   },
   {
     id: 'key-15',
@@ -73,8 +73,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-05-10T10:00:00Z'),
     status: 'revoked',
     lastUsedAt: new Date('2025-09-15T16:45:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-16',
@@ -86,8 +86,8 @@ export const mockApiKeysEngineerV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-12-01T10:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-28T15:30:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
 ];
 
@@ -102,8 +102,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-04-01T08:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-25T09:15:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-2',
@@ -115,8 +115,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-10-12T10:30:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-25T10:30:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-3',
@@ -128,8 +128,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-01-18T14:20:00Z'),
     status: 'expired',
     lastUsedAt: new Date('2026-01-25T10:30:00Z'),
-    subscriptionId: 'research-unlimited',
-    subscriptionName: 'Research Unlimited',
+    subscriptionId: 'sub-nsb-limited',
+    subscriptionName: 'Limited',
   },
   {
     id: 'key-4',
@@ -151,8 +151,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     creationDate: new Date('2025-10-10T14:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-25T14:00:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-6',
@@ -164,8 +164,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-03-15T10:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2022-07-07T14:30:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-7',
@@ -177,8 +177,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-08-20T10:00:00Z'),
     status: 'revoked',
     lastUsedAt: new Date('2026-01-25T14:30:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-8',
@@ -190,8 +190,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-09-15T09:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-28T11:30:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-9',
@@ -202,8 +202,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     creationDate: new Date('2025-11-01T14:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-27T16:45:00Z'),
-    subscriptionId: 'research-unlimited',
-    subscriptionName: 'Research Unlimited',
+    subscriptionId: 'sub-nsb-limited',
+    subscriptionName: 'Limited',
   },
   {
     id: 'key-10',
@@ -215,8 +215,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-06-05T10:00:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-28T09:00:00Z'),
-    subscriptionId: 'standard-tier',
-    subscriptionName: 'Standard Subscription',
+    subscriptionId: 'sub-nsb-standard',
+    subscriptionName: 'Standard',
   },
   {
     id: 'key-11',
@@ -228,8 +228,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-05-20T08:30:00Z'),
     status: 'active',
     lastUsedAt: new Date('2026-01-28T14:20:00Z'),
-    subscriptionId: 'enterprise-tier',
-    subscriptionName: 'Enterprise Subscription',
+    subscriptionId: 'sub-nsb-premium',
+    subscriptionName: 'Premium',
   },
   {
     id: 'key-12',
@@ -241,8 +241,8 @@ export const mockApiKeysAdminV34: ApiKeyV34[] = [
     expirationDate: new Date('2026-06-15T11:00:00Z'),
     status: 'revoked',
     lastUsedAt: new Date('2025-10-01T09:30:00Z'),
-    subscriptionId: 'research-unlimited',
-    subscriptionName: 'Research Unlimited',
+    subscriptionId: 'sub-nsb-limited',
+    subscriptionName: 'Limited',
   },
 ];
 
@@ -275,9 +275,9 @@ const heavyUserKeyNames = [
 ];
 
 const heavyUserSubscriptions = [
-  { id: 'enterprise-tier', name: 'Enterprise Subscription' },
-  { id: 'standard-tier', name: 'Standard Subscription' },
-  { id: 'research-unlimited', name: 'Research Unlimited' },
+  { id: 'sub-nsb-premium', name: 'Premium' },
+  { id: 'sub-nsb-standard', name: 'Standard' },
+  { id: 'sub-nsb-limited', name: 'Limited' },
 ];
 
 export const mockHeavyUserKeysV34: ApiKeyV34[] = heavyUserKeyNames.map((name, i) => {

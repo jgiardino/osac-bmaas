@@ -1,4 +1,5 @@
 import { maasGovernanceModelRows } from '../../../../vision/maasModelSeed';
+import { NORTH_SUMMIT_SUBSCRIPTION_TIERS } from '../../../../vision/maasSubscriptionTiers';
 
 export type PhaseStatus = 'Active' | 'Failed' | 'Pending' | 'Deleting' | 'Degraded' | 'Unhealthy' | 'Unknown';
 export type CoverageStatus = 'fully-configured' | 'subscription-only' | 'policy-only' | 'unconfigured';
@@ -281,48 +282,188 @@ export const mockAuthPoliciesList: AuthPolicyListItem[] = [
   },
 ];
 
+const NORTH_SUMMIT_MODEL_IDS: string[] = [
+  IDS.granite,
+  IDS.mistral,
+  IDS.codeAssist,
+  IDS.gemini,
+  IDS.embeddings,
+];
+
+const NORTH_SUMMIT_MODEL_LIMITS: Array<{
+  modelId: string;
+  standardTokenLimits: TokenRateLimit[];
+}> = [
+  {
+    modelId: IDS.granite,
+    standardTokenLimits: [
+      { tokens: 1500, per: 1, unit: 'minute' },
+      { tokens: 50000, per: 1, unit: 'hour' },
+      { tokens: 500000, per: 1, unit: 'day' },
+    ],
+  },
+  {
+    modelId: IDS.mistral,
+    standardTokenLimits: [
+      { tokens: 800, per: 1, unit: 'minute' },
+      { tokens: 20000, per: 1, unit: 'hour' },
+      { tokens: 150000, per: 1, unit: 'day' },
+    ],
+  },
+  {
+    modelId: IDS.codeAssist,
+    standardTokenLimits: [
+      { tokens: 800, per: 1, unit: 'minute' },
+      { tokens: 50000, per: 1, unit: 'hour' },
+      { tokens: 500000, per: 1, unit: 'day' },
+    ],
+  },
+  {
+    modelId: IDS.gemini,
+    standardTokenLimits: [
+      { tokens: 400, per: 1, unit: 'minute' },
+      { tokens: 25000, per: 1, unit: 'hour' },
+      { tokens: 250000, per: 1, unit: 'day' },
+    ],
+  },
+  {
+    modelId: IDS.embeddings,
+    standardTokenLimits: [
+      { tokens: 2000, per: 1, unit: 'minute' },
+      { tokens: 100000, per: 1, unit: 'hour' },
+      { tokens: 1000000, per: 1, unit: 'day' },
+    ],
+  },
+];
+
+const createNorthSummitTierSubscriptions = (): SubscriptionListItem[] =>
+  NORTH_SUMMIT_SUBSCRIPTION_TIERS.map((tier) => ({
+    id: `sub-nsb-${tier.id}`,
+    name: tier.label,
+    resourceName: `nsb-${tier.id}-access`,
+    description: tier.description,
+    phase: 'Active',
+    priority: tier.priority,
+    groups: [tier.groupName],
+    models: NORTH_SUMMIT_MODEL_IDS,
+    tokenLimits: Object.fromEntries(
+      NORTH_SUMMIT_MODEL_LIMITS.map((model) => [
+        model.modelId,
+        model.standardTokenLimits.map((limit) => ({
+          ...limit,
+          tokens: Math.round(limit.tokens * tier.multiplier),
+        })),
+      ]),
+    ),
+    dateCreated: new Date('2026-09-12'),
+    lastModified: new Date('2026-09-18'),
+  }));
+
+const allViewsMockSubscriptionsList: SubscriptionListItem[] = [
+  ...mockSubscriptionsList,
+  ...createNorthSummitTierSubscriptions(),
+];
+
+const mvpMockSubscriptionsList: SubscriptionListItem[] = [
+  ...createNorthSummitTierSubscriptions(),
+  ...mockSubscriptionsList.filter(
+    (subscription) => !subscription.models.some((modelId) => NORTH_SUMMIT_MODEL_IDS.includes(modelId)),
+  ),
+];
+
+const mvpMockAuthPoliciesList: AuthPolicyListItem[] = [
+  {
+    id: 'pol-nsb-tenant-access',
+    name: 'North Summit MaaS access',
+    resourceName: 'north-summit-maas-access',
+    description: 'Authorization for Limited, Standard, and Premium access across North Summit Bank MaaS models.',
+    phase: 'Active',
+    groups: NORTH_SUMMIT_SUBSCRIPTION_TIERS.map((tier) => tier.groupName),
+    models: NORTH_SUMMIT_MODEL_IDS,
+    dateCreated: new Date('2026-09-12'),
+    lastModified: new Date('2026-09-18'),
+  },
+  ...mockAuthPoliciesList.filter(
+    (policy) => !policy.models.some((modelId) => NORTH_SUMMIT_MODEL_IDS.includes(modelId)),
+  ),
+];
+
+export const getMockSubscriptionsList = (isModelDeploymentMvp = false): SubscriptionListItem[] =>
+  isModelDeploymentMvp ? mvpMockSubscriptionsList : allViewsMockSubscriptionsList;
+
+export const getMockAuthPoliciesList = (isModelDeploymentMvp = false): AuthPolicyListItem[] =>
+  isModelDeploymentMvp ? mvpMockAuthPoliciesList : mockAuthPoliciesList;
+
 let _dataVersion = 0;
-export const getDataVersion = (): number => _dataVersion;
+let _mvpDataVersion = 0;
+export const getDataVersion = (isModelDeploymentMvp = false): number =>
+  isModelDeploymentMvp ? _mvpDataVersion : _dataVersion;
 
-export const addSubscriptionToStore = (sub: SubscriptionListItem): void => {
-  mockSubscriptionsList.push(sub);
-  _dataVersion++;
+const incrementDataVersion = (isModelDeploymentMvp: boolean): void => {
+  if (isModelDeploymentMvp) {
+    _mvpDataVersion++;
+  } else {
+    _dataVersion++;
+  }
 };
 
-export const addAuthPolicyToStore = (pol: AuthPolicyListItem): void => {
-  mockAuthPoliciesList.push(pol);
-  _dataVersion++;
+export const addSubscriptionToStore = (
+  sub: SubscriptionListItem,
+  isModelDeploymentMvp = false,
+): void => {
+  getMockSubscriptionsList(isModelDeploymentMvp).push(sub);
+  incrementDataVersion(isModelDeploymentMvp);
 };
 
-export const deleteSubscriptionFromStore = (id: string): void => {
-  const idx = mockSubscriptionsList.findIndex((s) => s.id === id);
-  if (idx >= 0) {mockSubscriptionsList.splice(idx, 1);}
-  _dataVersion++;
+export const addAuthPolicyToStore = (
+  pol: AuthPolicyListItem,
+  isModelDeploymentMvp = false,
+): void => {
+  getMockAuthPoliciesList(isModelDeploymentMvp).push(pol);
+  incrementDataVersion(isModelDeploymentMvp);
 };
 
-export const deleteAuthPolicyFromStore = (id: string): void => {
-  const idx = mockAuthPoliciesList.findIndex((p) => p.id === id);
-  if (idx >= 0) {mockAuthPoliciesList.splice(idx, 1);}
-  _dataVersion++;
+export const deleteSubscriptionFromStore = (id: string, isModelDeploymentMvp = false): void => {
+  const subscriptions = getMockSubscriptionsList(isModelDeploymentMvp);
+  const idx = subscriptions.findIndex((s) => s.id === id);
+  if (idx >= 0) {subscriptions.splice(idx, 1);}
+  incrementDataVersion(isModelDeploymentMvp);
 };
 
-export const removeGroupFromSubscription = (subId: string, groupName: string): void => {
-  const sub = mockSubscriptionsList.find((s) => s.id === subId);
+export const deleteAuthPolicyFromStore = (id: string, isModelDeploymentMvp = false): void => {
+  const policies = getMockAuthPoliciesList(isModelDeploymentMvp);
+  const idx = policies.findIndex((p) => p.id === id);
+  if (idx >= 0) {policies.splice(idx, 1);}
+  incrementDataVersion(isModelDeploymentMvp);
+};
+
+export const removeGroupFromSubscription = (
+  subId: string,
+  groupName: string,
+  isModelDeploymentMvp = false,
+): void => {
+  const sub = getMockSubscriptionsList(isModelDeploymentMvp).find((s) => s.id === subId);
   if (sub) {
     sub.groups = sub.groups.filter((g) => g !== groupName);
-    _dataVersion++;
+    incrementDataVersion(isModelDeploymentMvp);
   }
 };
 
-export const removeGroupFromPolicy = (polId: string, groupName: string): void => {
-  const pol = mockAuthPoliciesList.find((p) => p.id === polId);
+export const removeGroupFromPolicy = (
+  polId: string,
+  groupName: string,
+  isModelDeploymentMvp = false,
+): void => {
+  const pol = getMockAuthPoliciesList(isModelDeploymentMvp).find((p) => p.id === polId);
   if (pol) {
     pol.groups = pol.groups.filter((g) => g !== groupName);
-    _dataVersion++;
+    incrementDataVersion(isModelDeploymentMvp);
   }
 };
 
-export const computeGovernanceModels = (): GovernanceModel[] => {
+export const computeGovernanceModels = (isModelDeploymentMvp = false): GovernanceModel[] => {
+  const subscriptions = getMockSubscriptionsList(isModelDeploymentMvp);
+  const policies = getMockAuthPoliciesList(isModelDeploymentMvp);
   const grouped = new Map<string, GovernanceModel>();
   maasGovernanceModelRows().forEach((row) => {
     const existing = grouped.get(row.modelId);
@@ -333,7 +474,7 @@ export const computeGovernanceModels = (): GovernanceModel[] => {
       gatewayId: row.gatewayId,
     };
     if (!existing) {
-      const subs: SubscriptionRef[] = mockSubscriptionsList
+      const subs: SubscriptionRef[] = subscriptions
         .filter((s) => s.models.includes(row.modelId))
         .map((s) => ({
           id: s.id,
@@ -343,7 +484,7 @@ export const computeGovernanceModels = (): GovernanceModel[] => {
           groups: s.groups,
           tokenLimits: s.tokenLimits[row.modelId] || [],
         }));
-      const pols: AuthPolicyRef[] = mockAuthPoliciesList
+      const pols: AuthPolicyRef[] = policies
         .filter((p) => p.models.includes(row.modelId))
         .map((p) => ({
           id: p.id,
@@ -385,12 +526,14 @@ export const computeGovernanceModels = (): GovernanceModel[] => {
 
 const originalGroupNames = ['data-science-team', 'analytics-team', 'ml-engineers'];
 
-export const computeGovernanceGroups = (): GovernanceGroup[] => {
+export const computeGovernanceGroups = (isModelDeploymentMvp = false): GovernanceGroup[] => {
   const allGroupNames = new Set<string>(originalGroupNames);
-  mockSubscriptionsList.forEach((s) => s.groups.forEach((g) => allGroupNames.add(g)));
-  mockAuthPoliciesList.forEach((p) => p.groups.forEach((g) => allGroupNames.add(g)));
+  const subscriptions = getMockSubscriptionsList(isModelDeploymentMvp);
+  const policies = getMockAuthPoliciesList(isModelDeploymentMvp);
+  subscriptions.forEach((s) => s.groups.forEach((g) => allGroupNames.add(g)));
+  policies.forEach((p) => p.groups.forEach((g) => allGroupNames.add(g)));
 
-  const models = computeGovernanceModels();
+  const models = computeGovernanceModels(isModelDeploymentMvp);
   const uniqueModels = models.filter((model, index) =>
     models.findIndex((entry) => entry.identityId === model.identityId) === index,
   );

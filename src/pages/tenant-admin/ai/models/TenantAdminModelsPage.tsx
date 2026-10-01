@@ -135,7 +135,7 @@ const TenantAdminModelsPage = ({
   const [deployments, setDeployments] = useState(INITIAL_DEPLOYMENTS)
   const [searchValue, setSearchValue] = useState('')
   const [selectedTenantId, setSelectedTenantId] = useState('')
-  const [deploymentView, setDeploymentView] = useState<ModelDeploymentView>('flat-list')
+  const [deploymentView, setDeploymentView] = useState<ModelDeploymentView>('grouped-by-model')
   const [expandedDeploymentId, setExpandedDeploymentId] = useState<string | null>(null)
   const isProviderAdmin = providerOrganizations !== undefined
   const tenantOptions = [
@@ -228,6 +228,11 @@ const TenantAdminModelsPage = ({
       ]
     })
 
+  const selectTab = (tab: MainTab) => {
+    setActiveTab(tab)
+    onTabChange?.(tab)
+  }
+
   return (
     <TenantUserPageChrome
       pageClassName="tenant-admin-models"
@@ -239,9 +244,7 @@ const TenantAdminModelsPage = ({
         <Tabs
           activeKey={activeTab}
           onSelect={(_event, tabIndex) => {
-            const nextTab = tabIndex as MainTab
-            setActiveTab(nextTab)
-            onTabChange?.(nextTab)
+            selectTab(tabIndex as MainTab)
           }}
           id="tenant-admin-models-tabs"
           aria-label="Models sections"
@@ -319,7 +322,7 @@ const TenantAdminModelsPage = ({
                     <Button
                       variant="primary"
                       id="tenant-admin-deploy-model-button"
-                      onClick={() => setActiveTab('catalog')}
+                      onClick={() => selectTab('catalog')}
                     >
                       Deploy model
                     </Button>

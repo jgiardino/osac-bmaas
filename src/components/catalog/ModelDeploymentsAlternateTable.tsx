@@ -4,12 +4,15 @@ import { ActionsColumn, Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/reac
 import { AlignedExpandableRow } from './AlignedExpandableRow'
 import { MaasModelIdentity } from './MaasModelIdentity'
 import { ServicesModelsTable } from './ServicesModelsTable'
-import type { VisionOrgId } from '../../vision/fleetWorld'
+import { VISION_ORGS, type VisionOrgId } from '../../vision/fleetWorld'
+import { externalModelsForOrg } from '../../vision/externalModelSeed'
+import type { ExternalModelSeed } from '../../vision/externalModelSeed'
 import {
   servicesModelInstances,
   servicesModelsForOrg,
   type ModelInstanceSeedItem,
 } from '../../vision/legacyModelInstanceSeed'
+import { ExternalModelPhaseLabel } from './ExternalModelPhaseLabel'
 import type { RegisteredOrganization } from '../../providerAdmin/organizations'
 
 export type ModelDeploymentAlternateView = 'flat-list' | 'grouped-by-model' | 'grouped-by-cluster'
@@ -26,6 +29,7 @@ interface ModelDeploymentsAlternateTableProps {
 interface ClusterModelGroup {
   id: string
   instances: ModelInstanceSeedItem[]
+  externalModels: ExternalModelSeed[]
 }
 
 const getVisionOrgId = (organization: RegisteredOrganization | undefined): VisionOrgId | null => {
@@ -67,10 +71,19 @@ const ModelDeploymentsAlternateTable = ({
   const query = searchValue.trim().toLocaleLowerCase()
   const internalModels = filteredInternalModels.filter(
     (model) =>
+      model.modelId !== 'credit-risk-scorer' &&
+      (!query ||
+        model.displayName.toLocaleLowerCase().includes(query) ||
+        model.maasModelRefId.toLocaleLowerCase().includes(query) ||
+        model.description.toLocaleLowerCase().includes(query)),
+  )
+  const externalModels = (selectedVisionOrgId ? externalModelsForOrg(selectedVisionOrgId) : []).filter(
+    (model) =>
       !query ||
       model.displayName.toLocaleLowerCase().includes(query) ||
-      model.maasModelRefId.toLocaleLowerCase().includes(query) ||
-      model.description.toLocaleLowerCase().includes(query),
+      model.name.toLocaleLowerCase().includes(query) ||
+      model.description.toLocaleLowerCase().includes(query) ||
+      model.providerRefs.some((provider) => provider.displayName.toLocaleLowerCase().includes(query)),
   )
   const toggleExpandedModel = (id: string) => {
     setExpandedModelIds((current) => {
@@ -96,33 +109,43 @@ const ModelDeploymentsAlternateTable = ({
     })
   }
 
-  if (internalModels.length === 0) {
-    return (
-      <EmptyState titleText="No internal model deployments for this tenant" headingLevel="h2">
-        <EmptyStateBody>
-          {showVisibility
-            ? 'Select another tenant or choose All tenants to view model deployments.'
-            : 'Deploy an internal model to see it here.'}
-        </EmptyStateBody>
-      </EmptyState>
-    )
-  }
+  const emptyStateBody = query
+    ? 'Try a different search or clear the search field.'
+    : showVisibility
+      ? 'Select another tenant or choose All tenants to view model deployments.'
+      : 'Deploy a model to see it here.'
+  const emptyStateTitle = query ? 'No models match your filter' : 'No model deployments for this tenant'
 
   if (view === 'grouped-by-model') {
+    if (internalModels.length === 0 && externalModels.length === 0) {
+      return (
+        <EmptyState titleText={emptyStateTitle} headingLevel="h2">
+          <EmptyStateBody>{emptyStateBody}</EmptyStateBody>
+        </EmptyState>
+      )
+    }
+
     return (
       <ServicesModelsTable
         instances={internalModels}
-        externalModels={[]}
+        externalModels={externalModels}
         expandedIds={expandedModelIds}
         onToggleExpand={toggleExpandedModel}
         showVisibility={showVisibility}
-        showInternalLabels={false}
         idPrefix="model-deployments-grouped-by-model"
       />
     )
   }
 
   if (view === 'flat-list') {
+    if (internalModels.length === 0 && externalModels.length === 0) {
+      return (
+        <EmptyState titleText={emptyStateTitle} headingLevel="h2">
+          <EmptyStateBody>{emptyStateBody}</EmptyStateBody>
+        </EmptyState>
+      )
+    }
+
     return (
       <Table
         variant="compact"
@@ -165,6 +188,40 @@ const ModelDeploymentsAlternateTable = ({
               </Td>
             </Tr>
           ))}
+          {externalModels.map((model) => (
+            <Tr key={model.name} id={`flat-model-${model.name}`}>
+              <Td dataLabel="Model">
+                <MaasModelIdentity
+                  id={`flat-model-${model.name}-identity`}
+                  displayName={model.displayName}
+                  modelRefId={model.name}
+                  description={model.description}
+                  labels={[{ text: 'External', color: 'teal' }]}
+                />
+              </Td>
+              <Td dataLabel="Cluster">
+                <LabelGroup isCompact>
+                  {model.providerRefs.map((provider) => (
+                    <Label key={provider.providerName} color="teal" isCompact>
+                      {provider.displayName}
+                    </Label>
+                  ))}
+                </LabelGroup>
+              </Td>
+              {showVisibility ? (
+                <Td dataLabel="Visibility">
+                  {VISION_ORGS.find((organization) => organization.id === model.orgId)?.label ??
+                    model.orgId}
+                </Td>
+              ) : null}
+              <Td dataLabel="Status" modifier="fitContent">
+                <ExternalModelPhaseLabel phase={model.phase} id={`flat-model-${model.name}-status`} />
+              </Td>
+              <Td isActionCell modifier="fitContent">
+                <ActionsColumn items={[{ title: 'View details' }]} />
+              </Td>
+            </Tr>
+          ))}
         </Tbody>
       </Table>
     )
@@ -177,9 +234,26 @@ const ModelDeploymentsAlternateTable = ({
     clusterModels.push(model)
     clustersById.set(clusterId, clusterModels)
   }
-  const clusterGroups: ClusterModelGroup[] = [...clustersById.entries()].map(
-    ([id, instances]) => ({ id, instances }),
-  )
+  const externalModelsByClusterId = new Map<string, ExternalModelSeed[]>()
+  for (const model of externalModels) {
+    const clusterModels = externalModelsByClusterId.get('Off-platform') ?? []
+    clusterModels.push(model)
+    externalModelsByClusterId.set('Off-platform', clusterModels)
+  }
+  const clusterIds = new Set([...clustersById.keys(), ...externalModelsByClusterId.keys()])
+  const clusterGroups: ClusterModelGroup[] = [...clusterIds].map((id) => ({
+    id,
+    instances: clustersById.get(id) ?? [],
+    externalModels: externalModelsByClusterId.get(id) ?? [],
+  }))
+
+  if (clusterGroups.length === 0) {
+    return (
+      <EmptyState titleText={emptyStateTitle} headingLevel="h2">
+        <EmptyStateBody>{emptyStateBody}</EmptyStateBody>
+      </EmptyState>
+    )
+  }
 
   return (
     <>
@@ -206,6 +280,10 @@ const ModelDeploymentsAlternateTable = ({
               group.instances.map((item) => [item.modelId, item.displayName] as const),
             ).entries(),
           )
+          const modelNames = [
+            ...models.map(([modelId, displayName]) => ({ id: modelId, displayName })),
+            ...group.externalModels.map((model) => ({ id: model.name, displayName: model.displayName })),
+          ]
           const actions = [
             {
               title: isExpanded ? 'Hide models' : 'View models',
@@ -231,9 +309,9 @@ const ModelDeploymentsAlternateTable = ({
                 </Td>
                 <Td dataLabel="Models">
                   <LabelGroup isCompact>
-                    {models.map(([modelId, displayName]) => (
-                      <Label key={modelId} variant="outline" isCompact>
-                        {displayName}
+                    {modelNames.map((model) => (
+                      <Label key={model.id} variant="outline" isCompact>
+                        {model.displayName}
                       </Label>
                     ))}
                   </LabelGroup>
@@ -283,6 +361,31 @@ const ModelDeploymentsAlternateTable = ({
                           <Label color="green" isCompact>
                             Ready
                           </Label>
+                        </Td>
+                      </Tr>
+                    ))}
+                    {group.externalModels.map((model) => (
+                      <Tr key={model.name} resetOffset id={`${rowId}-model-${model.name}`}>
+                        <Td dataLabel="Model">
+                          <MaasModelIdentity
+                            id={`${rowId}-model-${model.name}-identity`}
+                            displayName={model.displayName}
+                            modelRefId={model.name}
+                            description={model.description}
+                            labels={[{ text: 'External', color: 'teal' }]}
+                          />
+                        </Td>
+                        {showVisibility ? (
+                          <Td dataLabel="Visibility">
+                            {VISION_ORGS.find((organization) => organization.id === model.orgId)
+                              ?.label ?? model.orgId}
+                          </Td>
+                        ) : null}
+                        <Td dataLabel="Status" modifier="fitContent">
+                          <ExternalModelPhaseLabel
+                            phase={model.phase}
+                            id={`${rowId}-model-${model.name}-status`}
+                          />
                         </Td>
                       </Tr>
                     ))}

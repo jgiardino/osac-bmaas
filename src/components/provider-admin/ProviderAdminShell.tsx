@@ -36,6 +36,7 @@ import {
 } from '@patternfly/react-core'
 import {
   PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS,
+  PROVIDER_ADMIN_AI_NAV_ITEMS,
   PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS,
   PROVIDER_ADMIN_NETWORKING_NAV_ID,
   PROVIDER_ADMIN_NETWORKING_NAV_LABEL,
@@ -72,6 +73,41 @@ export function ProviderAdminShell({
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false)
   const [expandedNavGroups, setExpandedNavGroups] = useState<Set<string>>(
     () => new Set(isProviderAiNavId(activeNavId) ? ['ai'] : []),
+  )
+  const providerAiNavItems = isModelDeploymentMvp
+    ? PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS
+    : PROVIDER_ADMIN_AI_NAV_ITEMS
+  const isContentFilled = activeNavId === 'ai-grid'
+  const aiNavigation = (
+    <NavExpandable
+      id="provider-admin-ai-nav"
+      title="AI"
+      isExpanded={expandedNavGroups.has('ai')}
+      isActive={isProviderAiNavId(activeNavId)}
+      onExpand={(_event, isExpanded) => {
+        setExpandedNavGroups((current) => {
+          const next = new Set(current)
+          if (isExpanded) {
+            next.add('ai')
+          } else {
+            next.delete('ai')
+          }
+          return next
+        })
+      }}
+    >
+      {providerAiNavItems.map((item) => (
+        <NavItem
+          key={item.id}
+          itemId={item.id}
+          isActive={activeNavId === item.id}
+          to="#"
+          preventDefault
+        >
+          {item.label}
+        </NavItem>
+      ))}
+    </NavExpandable>
   )
 
   const header = (
@@ -178,43 +214,10 @@ export function ProviderAdminShell({
             >
               Overview
             </NavItem>
-            <NavItem itemId="ai-grid" isActive={activeNavId === 'ai-grid'} to="#" preventDefault>
-              AI Grid
-            </NavItem>
             <NavItem itemId="catalog" isActive={activeNavId === 'catalog'} to="#" preventDefault>
               Catalog
             </NavItem>
-            {isModelDeploymentMvp ? (
-              <NavExpandable
-                id="provider-admin-ai-nav"
-                title="AI"
-                isExpanded={expandedNavGroups.has('ai')}
-                isActive={isProviderAiNavId(activeNavId)}
-                onExpand={(_event, isExpanded) => {
-                  setExpandedNavGroups((current) => {
-                    const next = new Set(current)
-                    if (isExpanded) {
-                      next.add('ai')
-                    } else {
-                      next.delete('ai')
-                    }
-                    return next
-                  })
-                }}
-              >
-                {PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS.map((item) => (
-                  <NavItem
-                    key={item.id}
-                    itemId={item.id}
-                    isActive={activeNavId === item.id}
-                    to="#"
-                    preventDefault
-                  >
-                    {item.label}
-                  </NavItem>
-                ))}
-              </NavExpandable>
-            ) : null}
+            {aiNavigation}
             <NavExpandable
               id="provider-admin-administration-nav"
               title="Administration"
@@ -271,7 +274,7 @@ export function ProviderAdminShell({
         masthead={header}
         sidebar={sidebar}
         isManagedSidebar={showNavigation}
-        isContentFilled={activeNavId === 'ai-grid'}
+        isContentFilled={isContentFilled}
         className={[
           showNavigation ? 'provider-admin-shell-page' : undefined,
           workspaceTransition === 'entering' ? 'provider-admin-shell-page--entering' : undefined,
@@ -280,7 +283,7 @@ export function ProviderAdminShell({
           .join(' ')}
       >
         <PageSection
-          isFilled={activeNavId === 'ai-grid'}
+          isFilled={isContentFilled}
           isWidthLimited={!showNavigation}
           isCenterAligned={!showNavigation}
           className="provider-admin-shell__main"

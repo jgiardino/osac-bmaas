@@ -37,6 +37,7 @@ import { externalModelsForOrg } from '../../../vision/externalModelSeed'
 import { groupModelInstancesByModelId, servicesModelsForOrg } from '../../../vision/legacyModelInstanceSeed'
 import { catalogItemVisibleForTenant } from '../../../vision/visionCatalogRows'
 import {
+  CATALOG_OBJECT_TYPES,
   relatedClusterIdsForSelection,
   seedVisionDrawerSelection,
   SERVICES_OBJECT_TYPES,
@@ -177,6 +178,7 @@ export const VisionModelFleetPage = ({
     setDrawerTab(nextTab)
     setDetail({ kind: 'none' })
     setListSearch('')
+    setObjectTypes(nextTab === 'catalog' ? [...CATALOG_OBJECT_TYPES] : [...SERVICES_OBJECT_TYPES])
   }
 
   const showServicesType = (type: VisionGridObjectType) => {
@@ -250,15 +252,13 @@ export const VisionModelFleetPage = ({
 
   return (
     <div className="ai-grid-future-vision">
-      <div className="ai-grid-future-vision__toolbar">
-        <VisionGridFilters
-          orgFilter={orgFilter}
-          view={drawerTab}
-          onOrgChange={setOrgFilter}
-          onViewChange={handleViewChange}
-          showTenantFilter={!lockedOrgId}
-        />
-      </div>
+      <VisionGridFilters
+        orgFilter={orgFilter}
+        view={drawerTab}
+        onOrgChange={setOrgFilter}
+        onViewChange={handleViewChange}
+        showTenantFilter={!lockedOrgId}
+      />
       <Divider inset={{ default: 'insetNone' }} />
       <div className="ai-grid-future-vision__fleet" aria-label="AI Grid map and drawer">
         <Drawer

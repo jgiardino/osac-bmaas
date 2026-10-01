@@ -2,6 +2,7 @@ export type ProviderAdminNavId =
   | 'overview'
   | 'ai-grid'
   | 'provider-ai-models'
+  | 'provider-ai-maas-governance'
   | 'provider-ai-usage'
   | 'provider-ai-model-catalog-settings'
   | 'catalog'
@@ -34,8 +35,14 @@ export type ProviderAdminNavItem = {
 
 export const PROVIDER_ADMIN_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'ai-grid', label: 'AI Grid' },
   { id: 'catalog', label: 'Catalog' },
+]
+
+export const PROVIDER_ADMIN_AI_NAV_ITEMS: ProviderAdminNavItem[] = [
+  { id: 'ai-grid', label: 'AI Grid' },
+  { id: 'provider-ai-models', label: 'Models' },
+  { id: 'provider-ai-maas-governance', label: 'MaaS governance' },
+  { id: 'provider-ai-usage', label: 'Usage' },
 ]
 
 export const PROVIDER_ADMIN_SERVICES_NAV_ITEMS: ProviderAdminNavItem[] = [
@@ -58,14 +65,13 @@ export const PROVIDER_ADMIN_ADMINISTRATION_NAV_ITEMS: ProviderAdminNavItem[] = [
   { id: 'administration-billing', label: 'Billing' },
 ]
 
-export const PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS: ProviderAdminNavItem[] = [
-  { id: 'provider-ai-models', label: 'Models' },
-  { id: 'provider-ai-usage', label: 'Usage' },
-]
+export const PROVIDER_ADMIN_MODEL_DEPLOYMENT_MVP_AI_NAV_ITEMS = PROVIDER_ADMIN_AI_NAV_ITEMS
 
 export function isProviderAiNavId(navId: string): boolean {
   return (
+    navId === 'ai-grid' ||
     navId === 'provider-ai-models' ||
+    navId === 'provider-ai-maas-governance' ||
     navId === 'provider-ai-usage' ||
     navId === 'provider-ai-model-catalog-settings'
   )

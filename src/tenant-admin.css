@@ -132,7 +132,6 @@
 
 .tenant-genai-page__lede.pf-v6-c-content--p {
   margin: 0;
-  max-width: 42rem;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -156,10 +155,6 @@
 .tenant-genai-page__stack {
   min-width: 0;
   width: 100%;
-}
-
-.tenant-genai-page__tab-help.pf-v6-c-button {
-  padding: 0;
 }
 
 .tenant-user-genai-api-keys__revoke-modal-note.pf-v6-c-content--p {
@@ -4012,4 +4007,19 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--pf-t--global--spacer--sm);
+}
+
+/* Keep governance detail panels opaque like the expanded tables in the Sim prototype. */
+#j2-subs-table .pf-v6-c-table__expandable-row-content,
+#j2-pols-table .pf-v6-c-table__expandable-row-content,
+#tenant-maas-models-table .pf-v6-c-table__expandable-row-content,
+#tenant-maas-subscriptions-table .pf-v6-c-table__expandable-row-content {
+  background-color: var(--pf-t--global--background--color--primary--default);
+}
+
+.maas-governance-overview__card-body {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  margin-inline-start: calc(
+    var(--pf-t--global--spacer--xl) + var(--pf-t--global--spacer--xs)
+  );
 }

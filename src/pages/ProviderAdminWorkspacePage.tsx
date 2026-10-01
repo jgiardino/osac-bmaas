@@ -22,17 +22,22 @@ import { PlaceholderProviderAdminPage } from './PlaceholderProviderAdminPage'
 import { ProviderServiceSelectionPage } from './provider-setup/ProviderServiceSelectionPage'
 import { TenantSecretsPage } from './tenant/TenantSecretsPage'
 import TenantAdminModelsPage from './tenant-admin/ai/models/TenantAdminModelsPage'
+import { MaaSGovernancePage } from './tenant-admin/ai/maas-governance'
 import { ModelCatalogSettingsPage } from './tenant-admin/ai/model-catalog-settings'
 import { VisionModelFleetPage } from './provider-admin/vision/VisionModelFleetPage'
 import { AiAssetEndpointsPage } from './tenant-user/genai/asset-endpoints/AiAssetEndpointsPage'
 import { GenaiApiKeysPage } from './tenant-user/genai/api-keys'
 import { PlaygroundPage } from './tenant-user/genai/playground'
-import { GENAI_API_KEYS_DETAIL_PARAMS } from './tenant-user/genai/genaiNavParams'
+import {
+  GENAI_API_KEYS_DETAIL_PARAMS,
+  MAAS_GOVERNANCE_DETAIL_PARAMS,
+} from './tenant-user/genai/genaiNavParams'
 import type { ProviderServiceId } from '../providerSetup/constants'
 import { generateCatalogItemId, type PublishedTemplatePayload } from '../providerSetup/templateDemo'
 import { DEFAULT_CATALOG_NETWORK_POLICY } from '../providerAdmin/catalogNetworkPolicy'
 import {
   ensureProviderCatalogDemoItems,
+  ensureProviderModelCatalogItems,
   ensureProviderPostSetupPrototype,
   isProviderAdminNavId,
 } from '../providerSetup/prototypeEntry'
@@ -51,6 +56,12 @@ import {
 } from '../providerSetup/storage'
 import type { WorkspaceTransition } from '../providerAdmin/workspace'
 import type { BmaasTemplateLookup } from '../providerAdmin/bmaasTemplates'
+
+type ProviderModelsTab = 'catalog' | 'deployments'
+
+function isProviderModelsTab(value: string | null): value is ProviderModelsTab {
+  return value === 'catalog' || value === 'deployments'
+}
 
 function normalizeProviderNavParam(value: string | null): ProviderAdminNavId | null {
   const normalizedNav =
@@ -92,14 +103,18 @@ export function ProviderAdminWorkspacePage() {
   const [workspaceTransition, setWorkspaceTransition] = useState<WorkspaceTransition>('idle')
   const [openTemplateLookup, setOpenTemplateLookup] = useState<BmaasTemplateLookup | null>(null)
   const [openCatalogItemKey, setOpenCatalogItemKey] = useState<string | null>(null)
-  const [providerModelsInitialTab, setProviderModelsInitialTab] = useState<'catalog' | 'deployments'>(
-    'deployments',
-  )
+  const [providerModelsInitialTab, setProviderModelsInitialTab] =
+    useState<ProviderModelsTab>('deployments')
   const [navContentKey, setNavContentKey] = useState(0)
   const catalogEditLeaveAttemptRef = useRef<((onConfirmed: () => void) => void) | null>(null)
 
   const navParam = searchParams.get('nav')
   const isModelDeploymentMvp = searchParams.get('navVersion') === 'model-deployment-mvp'
+  const requestedProviderModelsTab = searchParams.get('tab')
+  const initialProviderModelsTab: ProviderModelsTab =
+    isProviderModelsTab(requestedProviderModelsTab)
+      ? requestedProviderModelsTab
+      : providerModelsInitialTab
 
   useLayoutEffect(() => {
     const requestedNav = normalizeProviderNavParam(navParam)
@@ -112,7 +127,13 @@ export function ProviderAdminWorkspacePage() {
       } else {
         setProviderActiveNav(requestedNav)
       }
-      setCatalogItems(getProviderCatalogItems())
+      // Hydrate the deep-linked workspace page with its persisted catalog snapshot.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCatalogItems(
+        requestedNav === 'ai-grid' || (requestedNav === 'catalog' && !isModelDeploymentMvp)
+          ? ensureProviderModelCatalogItems()
+          : getProviderCatalogItems(),
+      )
       setSelectedServices(getProviderSelectedServices())
       setServicesSelected(true)
       setSetupComplete(true)
@@ -129,8 +150,8 @@ export function ProviderAdminWorkspacePage() {
         storedItems.length > 0 ? storedItems : ensureProviderCatalogDemoItems(),
       )
     }
-    // Only react when `nav` changes — not when `item=` opens catalog details.
-  }, [navParam, setSearchParams])
+    // Rehydrate when the destination or prototype scope changes, not on item detail params.
+  }, [navParam, setSearchParams, isModelDeploymentMvp])
 
   const handleServicesContinue = (nextSelectedServices: ProviderServiceId[]) => {
     setProviderSelectedServices(nextSelectedServices)
@@ -255,7 +276,11 @@ export function ProviderAdminWorkspacePage() {
     setNavContentKey((current) => current + 1)
     syncWorkspaceNavParam(setSearchParams, resolvedNavId, {
       showLanding: true,
-      clearParams: GENAI_API_KEYS_DETAIL_PARAMS,
+      clearParams: [
+        ...GENAI_API_KEYS_DETAIL_PARAMS,
+        ...MAAS_GOVERNANCE_DETAIL_PARAMS,
+        ...(resolvedNavId === 'provider-ai-models' ? [] : ['tab']),
+      ],
     })
   }
 
@@ -287,6 +312,7 @@ export function ProviderAdminWorkspacePage() {
         return (
           <ProviderAdminCatalogPage
             catalogItems={catalogItems}
+            isModelDeploymentMvp={isModelDeploymentMvp}
             isEntering={workspaceTransition === 'entering'}
             onCreateCatalogItem={handleCreateCatalogItem}
             onCatalogItemsChange={(items) => setCatalogItems(items ?? getProviderCatalogItems())}
@@ -313,8 +339,18 @@ export function ProviderAdminWorkspacePage() {
         return (
           <TenantAdminModelsPage
             providerOrganizations={getProviderRegisteredOrganizations()}
-            initialTab={providerModelsInitialTab}
-            onTabChange={setProviderModelsInitialTab}
+            initialTab={initialProviderModelsTab}
+            onTabChange={(tab) => {
+              setProviderModelsInitialTab(tab)
+              setSearchParams(
+                (current) => {
+                  const next = new URLSearchParams(current)
+                  next.set('tab', tab)
+                  return next
+                },
+                { replace: true },
+              )
+            }}
             onManageSources={() => {
               setProviderModelsInitialTab('catalog')
               handleNavChange('provider-ai-model-catalog-settings')
@@ -326,6 +362,13 @@ export function ProviderAdminWorkspacePage() {
           <ModelCatalogSettingsPage
             isProviderAdmin
             onBackToModels={() => handleNavChange('provider-ai-models')}
+          />
+        )
+      case 'provider-ai-maas-governance':
+        return (
+          <MaaSGovernancePage
+            surface="provider-admin"
+            isModelDeploymentMvp={isModelDeploymentMvp}
           />
         )
       case 'provider-ai-usage':

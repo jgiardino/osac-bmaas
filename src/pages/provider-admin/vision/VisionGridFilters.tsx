@@ -1,17 +1,17 @@
 import { useLayoutEffect, useRef } from 'react'
 import {
-  FormSelect,
-  FormSelectOption,
   ToggleGroup,
   ToggleGroupItem,
+  Label,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
   Tooltip,
 } from '@patternfly/react-core'
-import { VISION_ORGS, type VisionOrgId } from '../../../vision/fleetWorld'
+import type { VisionOrgId } from '../../../vision/fleetWorld'
 import type { VisionDrawerTab } from '../../../vision/visionDrawer'
+import VisionOrgSelect from '../../../vision/VisionOrgSelect'
 
 type VisionGridFiltersProps = {
   orgFilter: VisionOrgId
@@ -37,24 +37,33 @@ export const VisionGridFilters = ({
   }, [])
 
   return (
-    <Toolbar id="vision-grid-toolbar" hasNoPadding>
+    <Toolbar id="vision-grid-toolbar">
       <ToolbarContent>
-        {showTenantFilter ? (
-          <ToolbarGroup variant="filter-group">
+        <ToolbarGroup
+          variant="filter-group"
+          alignItems="baseline"
+          columnGap={{ default: 'columnGapSm' }}
+        >
+          <ToolbarItem>
+            <Label
+              color="grey"
+              className="tenant-genai-page__kicker pf-v6-u-mb-0"
+              id="vision-grid-ai-label"
+            >
+              AI
+            </Label>
+          </ToolbarItem>
+          {showTenantFilter ? (
             <ToolbarItem>
-              <FormSelect
+              <VisionOrgSelect
                 id="vision-filter-org"
                 value={orgFilter}
-                onChange={(_event, value) => onOrgChange(value as VisionOrgId)}
-                aria-label="Filter by tenant"
-              >
-                {VISION_ORGS.map((org) => (
-                  <FormSelectOption key={org.id} value={org.id} label={org.label} />
-                ))}
-              </FormSelect>
+                onChange={onOrgChange}
+                menuToggle
+              />
             </ToolbarItem>
-          </ToolbarGroup>
-        ) : null}
+          ) : null}
+        </ToolbarGroup>
         <ToolbarGroup align={{ default: 'alignEnd' }} variant="action-group">
           <ToolbarItem>
             <Tooltip

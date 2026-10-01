@@ -79,6 +79,7 @@ export const TENANT_ADMIN_AI_NAV_ITEMS: ReadonlyArray<{
   id: TenantAdminNavId
   label: string
 }> = [
+  { id: 'ai-grid', label: 'AI Grid' },
   { id: 'admin-maas-governance', label: 'MaaS governance' },
   { id: 'admin-model-catalog-settings', label: 'Model catalog settings' },
   { id: 'admin-api-keys', label: 'API keys' },
@@ -87,7 +88,6 @@ export const TENANT_ADMIN_AI_NAV_ITEMS: ReadonlyArray<{
 
 export const TENANT_ADMIN_NAV_ITEMS: TenantAdminNavItem[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'ai-grid', label: 'AI Grid' },
   { id: 'catalog', label: 'Catalog' },
   {
     id: 'services',
@@ -124,7 +124,10 @@ export const TENANT_ADMIN_MODEL_DEPLOYMENT_MVP_NAV_ITEMS: TenantAdminNavItem[] =
     if (item.id === 'ai-administration') {
       return {
         ...item,
-        children: [{ id: 'admin-models', label: 'Models' }, ...(item.children ?? [])],
+        children: (item.children ?? []).filter(
+          (child) =>
+            child.id !== 'ai-grid' && child.id !== 'admin-model-catalog-settings',
+        ),
       }
     }
 

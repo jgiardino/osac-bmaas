@@ -15,7 +15,6 @@
   --pf-v6-c-content--MarginBlockEnd: 0;
   margin-block-start: 0;
   margin-block-end: 0;
-  max-width: 42rem;
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -38,10 +37,6 @@
 .tenant-genai-page__stack {
   min-width: 0;
   width: 100%;
-}
-
-.tenant-genai-page__tab-help.pf-v6-c-button {
-  padding: 0;
 }
 
 .tenant-user-genai-api-keys__revoke-modal-note.pf-v6-c-content--p {

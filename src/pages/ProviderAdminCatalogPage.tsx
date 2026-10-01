@@ -77,6 +77,7 @@ import { ProviderSetupPublishCatalogWizard } from './provider-setup/ProviderSetu
 
 type ProviderAdminCatalogPageProps = {
   catalogItems: ProviderCatalogDraft[]
+  isModelDeploymentMvp?: boolean
   isEntering?: boolean
   onCreateCatalogItem: (payload: PublishedTemplatePayload) => ProviderCatalogDraft | void
   onCatalogItemsChange?: (items?: ProviderCatalogDraft[]) => void
@@ -309,6 +310,7 @@ function getCatalogItemActions(
 
 export function ProviderAdminCatalogPage({
   catalogItems,
+  isModelDeploymentMvp = false,
   isEntering = false,
   onCreateCatalogItem,
   onCatalogItemsChange,
@@ -319,9 +321,14 @@ export function ProviderAdminCatalogPage({
   onEditLeaveAttemptChange,
 }: ProviderAdminCatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialServiceFilters = catalogItems
-    .filter((item) => getDraftServiceId(item) !== 'models')
-    .map(getDraftServiceId)
+  const visibleCatalogItems = useMemo(
+    () =>
+      isModelDeploymentMvp
+        ? catalogItems.filter((item) => getDraftServiceId(item) !== 'models')
+        : catalogItems,
+    [catalogItems, isModelDeploymentMvp],
+  )
+  const initialServiceFilters = visibleCatalogItems.map(getDraftServiceId)
   const [selectedFilters, setSelectedFilters] = useState<Set<CatalogServiceId>>(
     () => new Set(initialServiceFilters.length > 0 ? initialServiceFilters : ['baremetal']),
   )
@@ -353,11 +360,8 @@ export function ProviderAdminCatalogPage({
   const itemParam = getWorkspaceCatalogItemParam(searchParams)
 
   const uniqueCatalogItems = useMemo(
-    () =>
-      dedupeCatalogItemsById(
-        catalogItems.filter((item) => getDraftServiceId(item) !== 'models'),
-      ),
-    [catalogItems],
+    () => dedupeCatalogItemsById(visibleCatalogItems),
+    [visibleCatalogItems],
   )
   /** Freeze card order for the session so publish/unpublish never reshuffles the grid. */
   const catalogDisplayOrderRef = useRef<string[] | null>(null)
@@ -949,7 +953,7 @@ export function ProviderAdminCatalogPage({
           presentation="page"
           isOpen={isPublishWizardOpen}
           templates={availableTemplates}
-          hiddenServiceIds={['models']}
+          hiddenServiceIds={isModelDeploymentMvp ? ['models'] : []}
           organizations={organizations}
           defaultTemplateRefId={newestCatalogItem?.templateRefId}
           initialPublishScope={publishResumeScope}
@@ -978,7 +982,7 @@ export function ProviderAdminCatalogPage({
           isOpen={isEditWizardOpen}
           editingCatalog={selectedCatalogItem}
           templates={availableTemplates}
-          hiddenServiceIds={['models']}
+          hiddenServiceIds={isModelDeploymentMvp ? ['models'] : []}
           organizations={organizations}
           initialPublishScope={selectedCatalogItem.scope}
           initialEnterpriseTenantId={editResumeTenantId}
@@ -1032,8 +1036,9 @@ export function ProviderAdminCatalogPage({
             Catalog
           </Title>
           <Content component="p" className="provider-admin-catalog-items__lede">
-            Create catalog items from master templates across Bare Metal, Clusters, and Virtual
-            machines, then attach them to tenants.
+            {isModelDeploymentMvp
+              ? 'Create catalog items from master templates across Bare Metal, Clusters, and Virtual machines, then attach them to tenants.'
+              : 'Create catalog items from master templates across Bare Metal, Clusters, Models, and Virtual machines, then attach them to tenants.'}
           </Content>
         </FlexItem>
         <FlexItem alignSelf={{ default: 'alignSelfFlexStart' }}>
@@ -1055,7 +1060,7 @@ export function ProviderAdminCatalogPage({
             selectedFilters={selectedFilters}
             serviceCounts={serviceCounts}
             onToggle={handleFilterToggle}
-            hiddenServiceIds={['models']}
+            hiddenServiceIds={isModelDeploymentMvp ? ['models'] : []}
           />
           <PillFilterSelect
             id="catalog-status-filter"

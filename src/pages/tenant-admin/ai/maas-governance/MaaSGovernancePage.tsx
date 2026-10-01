@@ -7,7 +7,6 @@ import {
   CardBody,
   CardExpandableContent,
   CardHeader,
-  CardTitle,
   Checkbox,
   DescriptionList,
   DescriptionListDescription,
@@ -17,6 +16,7 @@ import {
   EmptyStateBody,
   Form,
   FormGroup,
+  Icon,
   Label,
   LabelGroup,
   MenuToggle,
@@ -32,7 +32,6 @@ import {
   SelectList,
   SelectOption,
   Tab,
-  TabAction,
   TabTitleText,
   Tabs,
   TextInput,
@@ -50,7 +49,6 @@ import {
 import AngleDownIcon from '@patternfly/react-icons/dist/esm/icons/angle-down-icon';
 import ExclamationTriangleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-triangle-icon';
 import FilterIcon from '@patternfly/react-icons/dist/esm/icons/filter-icon';
-import OutlinedQuestionCircleIcon from '@patternfly/react-icons/dist/esm/icons/outlined-question-circle-icon';
 import {
   ActionsColumn,
   ExpandableRowContent,
@@ -80,8 +78,8 @@ import {
   deleteAuthPolicyFromStore,
   deleteSubscriptionFromStore,
   getDataVersion,
-  mockAuthPoliciesList,
-  mockSubscriptionsList,
+  getMockAuthPoliciesList,
+  getMockSubscriptionsList,
   removeGroupFromPolicy,
   removeGroupFromSubscription,
 } from './mockData';
@@ -99,6 +97,8 @@ import {
   getAuthPolicyPhaseMessage,
   getSubscriptionPhaseMessage,
 } from './PopoverLabels';
+import TenantMaaSGovernanceView from './TenantMaaSGovernanceView';
+import MaaSGovernanceLearnMore from './MaaSGovernanceLearnMore';
 
 type MainTab = 'overview' | 'subscriptions' | 'policies';
 type OverviewView = 'model' | 'group';
@@ -215,10 +215,21 @@ const ModelCoverageStatusLabel = ({ model }: { model: GovernanceModel }) => {
   );
 };
 
-const MaaSGovernancePage = () => {
+interface MaaSGovernancePageProps {
+  surface?: 'tenant-admin' | 'provider-admin'
+  isModelDeploymentMvp?: boolean
+}
+
+const MaaSGovernancePage = ({
+  surface = 'tenant-admin',
+  isModelDeploymentMvp = false,
+}: MaaSGovernancePageProps) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
+  const isProviderAdmin = surface === 'provider-admin';
+  const subscriptionsList = getMockSubscriptionsList(isModelDeploymentMvp);
+  const authPoliciesList = getMockAuthPoliciesList(isModelDeploymentMvp);
 
   const { orgId: effectiveOrgId, setOrgId, showTenantSelect } = useVisionOrgFilter();
   const [modelDetailTab, setModelDetailTab] = React.useState<Record<string, 'deployments' | 'governance'>>({});
@@ -226,7 +237,7 @@ const MaaSGovernancePage = () => {
 
   const goMaas = (extra: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
-    next.set('nav', 'admin-maas-governance');
+    next.set('nav', isProviderAdmin ? 'provider-ai-maas-governance' : 'admin-maas-governance');
     Object.entries(extra).forEach(([key, value]) => {
       if (value === null) {
         next.delete(key);
@@ -238,10 +249,14 @@ const MaaSGovernancePage = () => {
   };
   const goManageDeployments = (model: GovernanceModel) => {
     const next = new URLSearchParams(searchParams);
-    next.set('nav', 'services-models');
-    next.set('view', 'list');
-    next.set('expand', model.identityId);
-    next.delete('tab');
+    next.set('nav', isProviderAdmin ? 'provider-ai-models' : 'services-models');
+    if (isProviderAdmin) {
+      next.set('tab', 'deployments');
+    } else {
+      next.set('view', 'list');
+      next.set('expand', model.identityId);
+      next.delete('tab');
+    }
     next.delete('maasWizard');
     next.delete('maasSubId');
     next.delete('maasPolId');
@@ -250,11 +265,17 @@ const MaaSGovernancePage = () => {
     next.delete('edit');
     navigate(`${pathname}?${next.toString()}`);
   };
-  const initialTab = (searchParams.get('tab') as MainTab) || 'overview';
-  const initialView = (searchParams.get('view') as OverviewView) || 'model';
+  const requestedTab = searchParams.get('tab');
+  const initialTab: MainTab =
+    requestedTab === 'subscriptions' || requestedTab === 'policies'
+      ? requestedTab
+      : 'overview';
+  const initialView = searchParams.get('view') === 'group' ? 'group' : 'model';
   const [activeTab, setActiveTab] = React.useState<MainTab>(initialTab);
   const [overviewView, setOverviewView] = React.useState<OverviewView>(initialView);
-  const [dataVersion, setDataVersion] = React.useState(getDataVersion);
+  const [dataVersion, setDataVersion] = React.useState(() =>
+    getDataVersion(isModelDeploymentMvp),
+  );
 
   const [expandedModels, setExpandedModels] = React.useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(new Set());
@@ -342,26 +363,26 @@ const MaaSGovernancePage = () => {
   const [policySortIndex, setPolicySortIndex] = React.useState<number | null>(null);
   const [policySortDirection, setPolicySortDirection] = React.useState<'asc' | 'desc'>('asc');
 
-  const refreshData = () => setDataVersion(getDataVersion());
+  const refreshData = () => setDataVersion(getDataVersion(isModelDeploymentMvp));
   // dataVersion busts memo when the in-memory mock store mutates
   const governanceModels = React.useMemo(() => {
     void dataVersion;
-    const all = computeGovernanceModels();
+    const all = computeGovernanceModels(isModelDeploymentMvp);
     return all.filter((model) => model.tenantId === effectiveOrgId);
-  }, [dataVersion, effectiveOrgId]);
+  }, [dataVersion, effectiveOrgId, isModelDeploymentMvp]);
   const allowedModelIds = React.useMemo(
     () => new Set(governanceModels.map((model) => model.identityId)),
     [governanceModels],
   );
   const governanceGroups = React.useMemo(() => {
     void dataVersion;
-    return computeGovernanceGroups()
+    return computeGovernanceGroups(isModelDeploymentMvp)
       .map((group) => {
         const models = group.models.filter((model) => allowedModelIds.has(model.modelId));
         return { ...group, models, modelCount: models.length };
       })
       .filter((group) => group.modelCount > 0);
-  }, [dataVersion, allowedModelIds]);
+  }, [dataVersion, allowedModelIds, isModelDeploymentMvp]);
 
   const toggleSet = (_set: Set<string>, id: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
     setter((prev) => { const next = new Set(prev); if (next.has(id)) {next.delete(id);} else {next.add(id);} return next; });
@@ -546,7 +567,7 @@ const MaaSGovernancePage = () => {
   }, [activeOverviewFilterEntries, governanceGroups]);
 
   const filteredSubscriptions = React.useMemo(() => {
-    return mockSubscriptionsList.filter(
+    return subscriptionsList.filter(
       (sub) =>
         sub.models.some((modelId) => allowedModelIds.has(modelId)) && matchesSubListFilters(sub),
     );
@@ -554,7 +575,7 @@ const MaaSGovernancePage = () => {
   }, [subFilters, subPhaseFilters, dataVersion, governanceModels, allowedModelIds]);
 
   const filteredPolicies = React.useMemo(() => {
-    return mockAuthPoliciesList.filter(
+    return authPoliciesList.filter(
       (pol) =>
         pol.models.some((modelId) => allowedModelIds.has(modelId)) && matchesPolicyListFilters(pol),
     );
@@ -603,10 +624,10 @@ const MaaSGovernancePage = () => {
       let diff = 0;
       switch (subSortIndex) {
         case 0: diff = a.name.localeCompare(b.name); break;
-        case 1: diff = a.groups.length - b.groups.length; break;
-        case 2: diff = a.models.length - b.models.length; break;
-        case 3: diff = a.priority - b.priority; break;
-        case 4: diff = a.phase.localeCompare(b.phase); break;
+        case 1: diff = a.phase.localeCompare(b.phase); break;
+        case 2: diff = a.groups.length - b.groups.length; break;
+        case 3: diff = a.models.length - b.models.length; break;
+        case 4: diff = a.priority - b.priority; break;
         default: return 0;
       }
       return subSortDirection === 'asc' ? diff : -diff;
@@ -621,9 +642,9 @@ const MaaSGovernancePage = () => {
       let diff = 0;
       switch (policySortIndex) {
         case 0: diff = a.name.localeCompare(b.name); break;
-        case 1: diff = a.groups.length - b.groups.length; break;
-        case 2: diff = a.models.length - b.models.length; break;
-        case 3: diff = a.phase.localeCompare(b.phase); break;
+        case 1: diff = a.phase.localeCompare(b.phase); break;
+        case 2: diff = a.groups.length - b.groups.length; break;
+        case 3: diff = a.models.length - b.models.length; break;
         default: return 0;
       }
       return policySortDirection === 'asc' ? diff : -diff;
@@ -675,7 +696,7 @@ const MaaSGovernancePage = () => {
             cardIds.push(`j2-gv-sub-${group.id}-card-${sub.id}`);
           }
           if (modelFilterTerm) {
-            const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
+            const fullSub = subscriptionsList.find((s) => s.id === sub.id);
             if (fullSub?.models.some((mId) => {
               const gm = governanceModels.find((m) => m.identityId === mId);
               return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
@@ -692,7 +713,7 @@ const MaaSGovernancePage = () => {
             cardIds.push(`j2-gv-pol-${group.id}-card-${pol.id}`);
           }
           if (modelFilterTerm) {
-            const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
+            const fullPol = authPoliciesList.find((p) => p.id === pol.id);
             if (fullPol?.models.some((mId) => {
               const gm = governanceModels.find((m) => m.identityId === mId);
               return (gm?.name ?? mId).toLowerCase().includes(modelFilterTerm) || (gm?.modelId ?? mId).toLowerCase().includes(modelFilterTerm);
@@ -704,7 +725,17 @@ const MaaSGovernancePage = () => {
       });
     }
     if (cardIds.length > 0) {expandAllCards(cardIds);}
-  }, [subNameFilterTerm, polNameFilterTerm, groupFilterTerm, modelFilterTerm, overviewView, governanceModels, governanceGroups]);
+  }, [
+    subNameFilterTerm,
+    polNameFilterTerm,
+    groupFilterTerm,
+    modelFilterTerm,
+    overviewView,
+    governanceModels,
+    governanceGroups,
+    subscriptionsList,
+    authPoliciesList,
+  ]);
 
   // --- Actions ---
   const getModelRowActions = (model: GovernanceModel): IAction[] => [
@@ -748,10 +779,10 @@ const MaaSGovernancePage = () => {
     const subsToRemove = Object.entries(removeGroupChecked).filter(([key, val]) => key.startsWith('sub-') && val).map(([key]) => key.replace('sub-', ''));
     const polsToRemove = Object.entries(removeGroupChecked).filter(([key, val]) => key.startsWith('pol-') && val).map(([key]) => key.replace('pol-', ''));
     subsToRemove.forEach((subId) => {
-      removeGroupFromSubscription(subId, removeGroupTarget.name);
+      removeGroupFromSubscription(subId, removeGroupTarget.name, isModelDeploymentMvp);
     });
     polsToRemove.forEach((polId) => {
-      removeGroupFromPolicy(polId, removeGroupTarget.name);
+      removeGroupFromPolicy(polId, removeGroupTarget.name, isModelDeploymentMvp);
     });
     refreshData();
     setRemoveGroupModalOpen(false);
@@ -802,7 +833,14 @@ const MaaSGovernancePage = () => {
                 }}
                 onOpenChange={setIsOverviewAttrOpen}
                 toggle={(toggleRef: React.Ref<HTMLButtonElement>) => (
-                  <MenuToggle ref={toggleRef} onClick={() => setIsOverviewAttrOpen(!isOverviewAttrOpen)} isExpanded={isOverviewAttrOpen} icon={<FilterIcon />} id="j2-overview-filter-toggle">
+                  <MenuToggle
+                    ref={toggleRef}
+                    onClick={() => setIsOverviewAttrOpen(!isOverviewAttrOpen)}
+                    isExpanded={isOverviewAttrOpen}
+                    icon={<Icon className="pill-filter-select__icon"><FilterIcon /></Icon>}
+                    className="bmaas-dropdown-toggle pill-filter-select__toggle"
+                    id="j2-overview-filter-toggle"
+                  >
                     {overviewFilterLabels[overviewFilterAttr]}
                   </MenuToggle>
                 )}
@@ -921,7 +959,14 @@ const MaaSGovernancePage = () => {
                   }}
                   onOpenChange={setIsAttrOpen}
                   toggle={(toggleRef: React.Ref<HTMLButtonElement>) => (
-                    <MenuToggle ref={toggleRef} onClick={() => setIsAttrOpen(!isAttrOpen)} isExpanded={isAttrOpen} icon={<FilterIcon />} id={`${idPrefix}-filter-toggle`}>
+                    <MenuToggle
+                      ref={toggleRef}
+                      onClick={() => setIsAttrOpen(!isAttrOpen)}
+                      isExpanded={isAttrOpen}
+                      icon={<Icon className="pill-filter-select__icon"><FilterIcon /></Icon>}
+                      className="bmaas-dropdown-toggle pill-filter-select__toggle"
+                      id={`${idPrefix}-filter-toggle`}
+                    >
                       {listFilterLabels[filterAttr]}
                     </MenuToggle>
                   )}
@@ -1117,15 +1162,13 @@ const MaaSGovernancePage = () => {
           toggleButtonProps={{ id: `${cardId}-toggle`, 'aria-label': `${sub.name} details`, 'aria-labelledby': `${cardId}-title ${cardId}-toggle` }}
           id={`${cardId}-header`}
         >
-          <CardTitle id={`${cardId}-title`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <Button variant="link" isInline onClick={() => goMaas({ maasSubId: sub.id, maasWizard: null, maasPolId: null, from: 'overview', view: overviewView })} id={`${cardId}-title-link`}>{sub.name}</Button>
-              <PhasePopoverLabel phase={sub.phase} message={getSubscriptionPhaseMessage(sub.phase, fullSub?.models.length ?? 1)} id={`${idPrefix}-phase-${sub.id}`} />
-            </div>
-          </CardTitle>
+          <div id={`${cardId}-title`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Button variant="link" isInline onClick={() => goMaas({ maasSubId: sub.id, maasWizard: null, maasPolId: null, from: 'overview', view: overviewView })} id={`${cardId}-title-link`}><strong>{sub.name}</strong></Button>
+            <PhasePopoverLabel phase={sub.phase} message={getSubscriptionPhaseMessage(sub.phase, fullSub?.models.length ?? 1)} id={`${idPrefix}-phase-${sub.id}`} />
+          </div>
         </CardHeader>
         <CardExpandableContent>
-          <CardBody id={`${cardId}-body`}>
+          <CardBody className="maas-governance-overview__card-body" id={`${cardId}-body`}>
             <DescriptionList isHorizontal isFluid isCompact id={`${idPrefix}-dl-labels-${sub.id}`}>
               {tokenLimitsForModelId && (
                 <DescriptionListGroup>
@@ -1203,15 +1246,13 @@ const MaaSGovernancePage = () => {
           toggleButtonProps={{ id: `${cardId}-toggle`, 'aria-label': `${pol.name} details`, 'aria-labelledby': `${cardId}-title ${cardId}-toggle` }}
           id={`${cardId}-header`}
         >
-          <CardTitle id={`${cardId}-title`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <Button variant="link" isInline onClick={() => goMaas({ maasPolId: pol.id, maasWizard: null, maasSubId: null, from: 'overview', view: overviewView })} id={`${cardId}-title-link`}>{pol.name}</Button>
-              <PhasePopoverLabel phase={pol.phase} message={getAuthPolicyPhaseMessage(pol.phase, fullPol?.models.length ?? 0)} id={`${idPrefix}-phase-${pol.id}`} />
-            </div>
-          </CardTitle>
+          <div id={`${cardId}-title`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Button variant="link" isInline onClick={() => goMaas({ maasPolId: pol.id, maasWizard: null, maasSubId: null, from: 'overview', view: overviewView })} id={`${cardId}-title-link`}><strong>{pol.name}</strong></Button>
+            <PhasePopoverLabel phase={pol.phase} message={getAuthPolicyPhaseMessage(pol.phase, fullPol?.models.length ?? 0)} id={`${idPrefix}-phase-${pol.id}`} />
+          </div>
         </CardHeader>
         <CardExpandableContent>
-          <CardBody id={`${cardId}-body`}>
+          <CardBody className="maas-governance-overview__card-body" id={`${cardId}-body`}>
             {showGroups && (
               <DescriptionList isHorizontal isFluid isCompact id={`${idPrefix}-dl-labels-${pol.id}`}>
                 <DescriptionListGroup>
@@ -1291,11 +1332,11 @@ const MaaSGovernancePage = () => {
     const subCardIds = model.subscriptions.map((sub) => `j2-mv-sub-${model.id}-card-${sub.id}`);
     const polCardIds = model.policies.map((pol) => `j2-mv-pol-${model.id}-card-${pol.id}`);
     const subItems = model.subscriptions.map((sub) => {
-      const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
+      const fullSub = subscriptionsList.find((s) => s.id === sub.id);
       return { groups: sub.groups, modelIds: fullSub?.models ?? [] };
     });
     const polItems = model.policies.map((pol) => {
-      const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
+      const fullPol = authPoliciesList.find((p) => p.id === pol.id);
       return { groups: pol.groups, modelIds: fullPol?.models ?? [] };
     });
     return (
@@ -1309,7 +1350,7 @@ const MaaSGovernancePage = () => {
               </EmptyState>
             ) : (
               model.subscriptions.map((sub) => {
-                const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
+                const fullSub = subscriptionsList.find((s) => s.id === sub.id);
                 return renderSubCard(sub, model.id, fullSub, `j2-mv-sub-${model.id}`, { showModels: false, tokenLimitsForModelId: model.identityId });
               })
             )}
@@ -1322,7 +1363,7 @@ const MaaSGovernancePage = () => {
               </EmptyState>
             ) : (
               model.policies.map((pol) => {
-                const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
+                const fullPol = authPoliciesList.find((p) => p.id === pol.id);
                 return renderPolCard(pol, model.id, fullPol, `j2-mv-pol-${model.id}`, { showModels: false });
               })
             )}
@@ -1345,11 +1386,11 @@ const MaaSGovernancePage = () => {
     const subCardIds = uniqueSubs.map((sub) => `j2-gv-sub-${group.id}-card-${sub.id}`);
     const polCardIds = uniquePols.map((pol) => `j2-gv-pol-${group.id}-card-${pol.id}`);
     const grpSubItems = uniqueSubs.map((sub) => {
-      const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
+      const fullSub = subscriptionsList.find((s) => s.id === sub.id);
       return { groups: sub.groups, modelIds: fullSub?.models ?? [] };
     });
     const grpPolItems = uniquePols.map((pol) => {
-      const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
+      const fullPol = authPoliciesList.find((p) => p.id === pol.id);
       return { groups: pol.groups, modelIds: fullPol?.models ?? [] };
     });
 
@@ -1369,7 +1410,7 @@ const MaaSGovernancePage = () => {
                 </EmptyState>
               ) : (
                 uniqueSubs.map((sub) => {
-                  const fullSub = mockSubscriptionsList.find((s) => s.id === sub.id);
+                  const fullSub = subscriptionsList.find((s) => s.id === sub.id);
                   return renderSubCard(sub, group.id, fullSub, `j2-gv-sub-${group.id}`, { showGroups: false });
                 })
               )}
@@ -1382,7 +1423,7 @@ const MaaSGovernancePage = () => {
                 </EmptyState>
               ) : (
                 uniquePols.map((pol) => {
-                  const fullPol = mockAuthPoliciesList.find((p) => p.id === pol.id);
+                  const fullPol = authPoliciesList.find((p) => p.id === pol.id);
                   return renderPolCard(pol, group.id, fullPol, `j2-gv-pol-${group.id}`, { showGroups: false });
                 })
               )}
@@ -1418,7 +1459,7 @@ const MaaSGovernancePage = () => {
             </Button>
           </Th>
           <Th sort={getGroupSortParams(1)} id="j2-grp-th-name">Group name</Th>
-          <Th sort={getGroupSortParams(2)} id="j2-grp-th-models">Models</Th>
+          <Th modifier="fitContent" sort={getGroupSortParams(2)} id="j2-grp-th-models">Models</Th>
           <Th sort={getGroupSortParams(3)} id="j2-grp-th-subs">Subscriptions</Th>
           <Th sort={getGroupSortParams(4)} id="j2-grp-th-pols">Authorization policies</Th>
           <Th screenReaderText="Actions" id="j2-grp-th-actions" />
@@ -1689,16 +1730,16 @@ const MaaSGovernancePage = () => {
   const renderSubGroupsExpanded = (groups: string[], subId: string) => (
     <ExpandableRowContent>
       <div className="pf-v6-u-pb-lg">
-      <Table aria-label="Groups in subscription" variant="compact" isNested id={`j2-sub-groups-detail-${subId}`}>
-        <Thead><Tr resetOffset><Th id={`j2-sub-groups-detail-th-${subId}`}>Group name</Th></Tr></Thead>
-        <Tbody>
-          {groups.map((g) => (
-            <Tr key={g} resetOffset id={`j2-sub-group-row-${subId}-${g}`}>
-              <Td dataLabel="Group name" id={`j2-sub-group-cell-${subId}-${g}`}><strong>{g}</strong></Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+        <Table aria-label="Groups in subscription" variant="compact" isNested id={`j2-sub-groups-detail-${subId}`}>
+          <Thead><Tr resetOffset><Th id={`j2-sub-groups-detail-th-${subId}`}>Group name</Th></Tr></Thead>
+          <Tbody>
+            {groups.map((group) => (
+              <Tr key={group} resetOffset id={`j2-sub-group-row-${subId}-${group}`}>
+                <Td dataLabel="Group name" id={`j2-sub-group-cell-${subId}-${group}`}><strong>{group}</strong></Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </div>
     </ExpandableRowContent>
   );
@@ -1762,10 +1803,10 @@ const MaaSGovernancePage = () => {
         <Thead>
           <Tr>
             <Th sort={getSubSortParams(0)} width={20} id="j2-sub-th-name">Subscription</Th>
-            <Th sort={getSubSortParams(1)} id="j2-sub-th-groups">Groups</Th>
-            <Th sort={getSubSortParams(2)} id="j2-sub-th-models">Models</Th>
-            <Th sort={getSubSortParams(3)} id="j2-sub-th-priority">Priority</Th>
-            <Th modifier="fitContent" sort={getSubSortParams(4)} id="j2-sub-th-phase">Status</Th>
+            <Th modifier="fitContent" sort={getSubSortParams(1)} id="j2-sub-th-phase">Status</Th>
+            <Th modifier="fitContent" sort={getSubSortParams(2)} id="j2-sub-th-groups">Groups</Th>
+            <Th modifier="fitContent" sort={getSubSortParams(3)} id="j2-sub-th-models">Models</Th>
+            <Th modifier="fitContent" sort={getSubSortParams(4)} id="j2-sub-th-priority">Priority</Th>
             <Th modifier="fitContent" screenReaderText="Actions" id="j2-sub-th-actions" />
           </Tr>
         </Thead>
@@ -1782,20 +1823,23 @@ const MaaSGovernancePage = () => {
                 <Tr isControlRow isContentExpanded={isRowExpanded} id={`j2-sub-row-${sub.id}`}>
                   <Td dataLabel="Name" id={`j2-sub-name-${sub.id}`}>
                     <Tooltip content={`Resource name: ${sub.resourceName}`} id={`j2-sub-name-tooltip-${sub.id}`}>
-                      <Button variant="link" isInline onClick={() => goMaas({ maasSubId: sub.id, maasWizard: null, maasPolId: null })} id={`j2-sub-name-link-${sub.id}`}>{sub.name}</Button>
+                      <Button variant="link" isInline onClick={() => goMaas({ maasSubId: sub.id, maasWizard: null, maasPolId: null })} id={`j2-sub-name-link-${sub.id}`}><strong>{sub.name}</strong></Button>
                     </Tooltip>
                     {sub.description && (
                       <div style={{ fontSize: 'var(--pf-t--global--font--size--sm)', color: 'var(--pf-t--global--text--color--subtle)' }} id={`j2-sub-desc-${sub.id}`}>{sub.description}</div>
                     )}
                   </Td>
-                  <Td dataLabel="Groups" compoundExpand={subCompoundExpand(sub.id, 'groups', rowIndex, 1)} id={`j2-sub-groups-cell-${sub.id}`}
+                  <Td dataLabel="Status" modifier="fitContent" id={`j2-sub-phase-td-${sub.id}`}>
+                    <PhasePopoverLabel phase={sub.phase} message={getSubscriptionPhaseMessage(sub.phase, sub.models.length)} id={`j2-sub-phase-${sub.id}`} />
+                  </Td>
+                  <Td dataLabel="Groups" compoundExpand={subCompoundExpand(sub.id, 'groups', rowIndex, 2)} id={`j2-sub-groups-cell-${sub.id}`}
                     onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) {toggleSubExpand(sub.id, 'groups');} }}>
                     {sub.groups.length === 0
                       ? <div style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--pf-t--global--icon--color--status--warning--default)' }} id={`j2-sub-groups-warn-wrap-${sub.id}`}><ExclamationTriangleIcon style={{ marginRight: '4px' }} /> 0</div>
                       : sub.groups.length
                     }
                   </Td>
-                  <Td dataLabel="Models" compoundExpand={subCompoundExpand(sub.id, 'models', rowIndex, 2)} id={`j2-sub-models-cell-${sub.id}`}
+                  <Td dataLabel="Models" compoundExpand={subCompoundExpand(sub.id, 'models', rowIndex, 3)} id={`j2-sub-models-cell-${sub.id}`}
                     onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) {toggleSubExpand(sub.id, 'models');} }}>
                     {sub.models.length === 0
                       ? <div style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--pf-t--global--icon--color--status--warning--default)' }} id={`j2-sub-models-warn-wrap-${sub.id}`}><ExclamationTriangleIcon style={{ marginRight: '4px' }} /> 0</div>
@@ -1803,22 +1847,15 @@ const MaaSGovernancePage = () => {
                     }
                   </Td>
                   <Td dataLabel="Priority" id={`j2-sub-priority-${sub.id}`}>{sub.priority}</Td>
-                  <Td dataLabel="Status" modifier="fitContent" id={`j2-sub-phase-td-${sub.id}`}>
-                    <PhasePopoverLabel phase={sub.phase} message={getSubscriptionPhaseMessage(sub.phase, sub.models.length)} id={`j2-sub-phase-${sub.id}`} />
-                  </Td>
                   <Td isActionCell modifier="fitContent" id={`j2-sub-actions-${sub.id}`}>
                     <ActionsColumn items={getSubRowActions(sub)} popperProps={{ position: 'right' }} id={`j2-sub-kebab-${sub.id}`} />
                   </Td>
                 </Tr>
                 <Tr isExpanded={expandedCol === 'groups'} id={`j2-sub-expand-groups-${sub.id}`}>
-                  <Td />
-                  <Td noPadding colSpan={SUB_COL_COUNT - 2} id={`j2-sub-expand-groups-td-${sub.id}`}>{renderSubGroupsExpanded(sub.groups, sub.id)}</Td>
-                  <Td />
+                  <Td colSpan={SUB_COL_COUNT} id={`j2-sub-expand-groups-td-${sub.id}`}>{renderSubGroupsExpanded(sub.groups, sub.id)}</Td>
                 </Tr>
                 <Tr isExpanded={expandedCol === 'models'} id={`j2-sub-expand-models-${sub.id}`}>
-                  <Td />
-                  <Td noPadding colSpan={SUB_COL_COUNT - 2} id={`j2-sub-expand-models-td-${sub.id}`}>{renderSubModelsExpanded(sub)}</Td>
-                  <Td />
+                  <Td colSpan={SUB_COL_COUNT} id={`j2-sub-expand-models-td-${sub.id}`}>{renderSubModelsExpanded(sub)}</Td>
                 </Tr>
               </Tbody>
             );
@@ -1840,16 +1877,16 @@ const MaaSGovernancePage = () => {
   const renderPolGroupsExpanded = (groups: string[], polId: string) => (
     <ExpandableRowContent>
       <div className="pf-v6-u-pb-lg">
-      <Table aria-label="Groups in policy" variant="compact" isNested id={`j2-pol-groups-detail-${polId}`}>
-        <Thead><Tr resetOffset><Th id={`j2-pol-groups-detail-th-${polId}`}>Group name</Th></Tr></Thead>
-        <Tbody>
-          {groups.map((g) => (
-            <Tr key={g} resetOffset id={`j2-pol-group-row-${polId}-${g}`}>
-              <Td dataLabel="Group name" id={`j2-pol-group-cell-${polId}-${g}`}><strong>{g}</strong></Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+        <Table aria-label="Groups in policy" variant="compact" isNested id={`j2-pol-groups-detail-${polId}`}>
+          <Thead><Tr resetOffset><Th id={`j2-pol-groups-detail-th-${polId}`}>Group name</Th></Tr></Thead>
+          <Tbody>
+            {groups.map((group) => (
+              <Tr key={group} resetOffset id={`j2-pol-group-row-${polId}-${group}`}>
+                <Td dataLabel="Group name" id={`j2-pol-group-cell-${polId}-${group}`}><strong>{group}</strong></Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </div>
     </ExpandableRowContent>
   );
@@ -1909,9 +1946,9 @@ const MaaSGovernancePage = () => {
         <Thead>
           <Tr>
             <Th sort={getPolicySortParams(0)} width={20} id="j2-pol-th-name">Authorization policy</Th>
-            <Th sort={getPolicySortParams(1)} id="j2-pol-th-groups">Groups</Th>
-            <Th sort={getPolicySortParams(2)} id="j2-pol-th-models">Models</Th>
-            <Th modifier="fitContent" sort={getPolicySortParams(3)} id="j2-pol-th-phase">Status</Th>
+            <Th modifier="fitContent" sort={getPolicySortParams(1)} id="j2-pol-th-phase">Status</Th>
+            <Th modifier="fitContent" sort={getPolicySortParams(2)} id="j2-pol-th-groups">Groups</Th>
+            <Th modifier="fitContent" sort={getPolicySortParams(3)} id="j2-pol-th-models">Models</Th>
             <Th modifier="fitContent" screenReaderText="Actions" id="j2-pol-th-actions" />
           </Tr>
         </Thead>
@@ -1928,42 +1965,38 @@ const MaaSGovernancePage = () => {
                 <Tr isControlRow isContentExpanded={isRowExpanded} id={`j2-pol-row-${pol.id}`}>
                   <Td dataLabel="Name" id={`j2-pol-name-${pol.id}`}>
                     <Tooltip content={`Resource name: ${pol.resourceName}`} id={`j2-pol-name-tooltip-${pol.id}`}>
-                      <Button variant="link" isInline onClick={() => goMaas({ maasPolId: pol.id, maasWizard: null, maasSubId: null })} id={`j2-pol-name-link-${pol.id}`}>{pol.name}</Button>
+                      <Button variant="link" isInline onClick={() => goMaas({ maasPolId: pol.id, maasWizard: null, maasSubId: null })} id={`j2-pol-name-link-${pol.id}`}><strong>{pol.name}</strong></Button>
                     </Tooltip>
                     {pol.description && (
                       <div style={{ fontSize: 'var(--pf-t--global--font--size--sm)', color: 'var(--pf-t--global--text--color--subtle)' }} id={`j2-pol-desc-${pol.id}`}>{pol.description}</div>
                     )}
                   </Td>
-                  <Td dataLabel="Groups" compoundExpand={policyCompoundExpand(pol.id, 'groups', rowIndex, 1)} id={`j2-pol-groups-cell-${pol.id}`}
+                  <Td dataLabel="Status" modifier="fitContent" id={`j2-pol-phase-td-${pol.id}`}>
+                    <PhasePopoverLabel phase={pol.phase} message={getAuthPolicyPhaseMessage(pol.phase, pol.models.length)} id={`j2-pol-phase-${pol.id}`} />
+                  </Td>
+                  <Td dataLabel="Groups" compoundExpand={policyCompoundExpand(pol.id, 'groups', rowIndex, 2)} id={`j2-pol-groups-cell-${pol.id}`}
                     onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) {togglePolicyExpand(pol.id, 'groups');} }}>
                     {pol.groups.length === 0
                       ? <div style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--pf-t--global--icon--color--status--warning--default)' }} id={`j2-pol-groups-warn-wrap-${pol.id}`}><ExclamationTriangleIcon style={{ marginRight: '4px' }} /> 0</div>
                       : pol.groups.length
                     }
                   </Td>
-                  <Td dataLabel="Models" compoundExpand={policyCompoundExpand(pol.id, 'models', rowIndex, 2)} id={`j2-pol-models-cell-${pol.id}`}
+                  <Td dataLabel="Models" compoundExpand={policyCompoundExpand(pol.id, 'models', rowIndex, 3)} id={`j2-pol-models-cell-${pol.id}`}
                     onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) {togglePolicyExpand(pol.id, 'models');} }}>
                     {pol.models.length === 0
                       ? <div style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--pf-t--global--icon--color--status--warning--default)' }} id={`j2-pol-models-warn-wrap-${pol.id}`}><ExclamationTriangleIcon style={{ marginRight: '4px' }} /> 0</div>
                       : pol.models.length
                     }
                   </Td>
-                  <Td dataLabel="Status" modifier="fitContent" id={`j2-pol-phase-td-${pol.id}`}>
-                    <PhasePopoverLabel phase={pol.phase} message={getAuthPolicyPhaseMessage(pol.phase, pol.models.length)} id={`j2-pol-phase-${pol.id}`} />
-                  </Td>
                   <Td isActionCell modifier="fitContent" id={`j2-pol-actions-${pol.id}`}>
                     <ActionsColumn items={getPolicyRowActions(pol)} popperProps={{ position: 'right' }} id={`j2-pol-kebab-${pol.id}`} />
                   </Td>
                 </Tr>
                 <Tr isExpanded={expandedCol === 'groups'} id={`j2-pol-expand-groups-${pol.id}`}>
-                  <Td />
-                  <Td noPadding colSpan={POLICY_COL_COUNT - 2} id={`j2-pol-expand-groups-td-${pol.id}`}>{renderPolGroupsExpanded(pol.groups, pol.id)}</Td>
-                  <Td />
+                  <Td colSpan={POLICY_COL_COUNT} id={`j2-pol-expand-groups-td-${pol.id}`}>{renderPolGroupsExpanded(pol.groups, pol.id)}</Td>
                 </Tr>
                 <Tr isExpanded={expandedCol === 'models'} id={`j2-pol-expand-models-${pol.id}`}>
-                  <Td />
-                  <Td noPadding colSpan={POLICY_COL_COUNT - 2} id={`j2-pol-expand-models-td-${pol.id}`}>{renderPolModelsExpanded(pol.models, pol.id)}</Td>
-                  <Td />
+                  <Td colSpan={POLICY_COL_COUNT} id={`j2-pol-expand-models-td-${pol.id}`}>{renderPolModelsExpanded(pol.models, pol.id)}</Td>
                 </Tr>
               </Tbody>
             );
@@ -1982,7 +2015,16 @@ const MaaSGovernancePage = () => {
     </>
   );
 
-    const maasWizard = searchParams.get('maasWizard')
+  if (!isProviderAdmin && isModelDeploymentMvp) {
+    return (
+      <TenantMaaSGovernanceView
+        models={governanceModels}
+        subscriptions={subscriptionsList}
+      />
+    );
+  }
+
+  const maasWizard = searchParams.get('maasWizard')
   const maasSubId = searchParams.get('maasSubId')
   const maasPolId = searchParams.get('maasPolId')
 
@@ -1996,7 +2038,7 @@ const MaaSGovernancePage = () => {
         : 'Authorization policy details'
     return (
       <TenantUserPageChrome
-        pageClassName="tenant-admin-maas-governance"
+        pageClassName={`${surface}-maas-governance`}
         kicker="AI"
         title={stubTitle}
         description="This admin flow is stubbed in the Ethan prototype. Use the breadcrumb-style back control to return to MaaS governance."
@@ -2025,13 +2067,14 @@ const MaaSGovernancePage = () => {
   return (
     <>
     <TenantUserPageChrome
-      pageClassName="tenant-admin-maas-governance"
+      pageClassName={`${surface}-maas-governance`}
       kicker="AI"
       kickerExtra={
         showTenantSelect ? (
           <VisionOrgSelect
             id="j2-filter-org"
             value={effectiveOrgId}
+            menuToggle
             onChange={(value) => {
               setOrgId(value)
               setModelPage(1)
@@ -2043,7 +2086,14 @@ const MaaSGovernancePage = () => {
         ) : undefined
       }
       title="MaaS governance"
-      description="Manage subscriptions and authorization policies to control the MaaS models that each user group in your organization can access."
+      description={
+        <>
+          {isProviderAdmin
+            ? 'Manage subscriptions and authorization policies for the selected tenant to control which MaaS models each user group can access.'
+            : 'Manage subscriptions and authorization policies to control the MaaS models that each user group in your organization can access.'}{' '}
+          <MaaSGovernanceLearnMore />
+        </>
+      }
     >
           <Tabs activeKey={activeTab} onSelect={(_e, tabIndex) => setActiveTab(tabIndex as MainTab)} id="j2-main-tabs">
             <Tab
@@ -2058,23 +2108,6 @@ const MaaSGovernancePage = () => {
             <Tab
               eventKey="subscriptions"
               title={<TabTitleText id="j2-tab-subs-title">{'Subscriptions'}</TabTitleText>}
-              actions={
-                <TabAction>
-                  <Popover
-                    bodyContent="Subscriptions define which models user groups can access and the token rate limits for each group."
-                    id="j2-tab-subs-popover"
-                  >
-                    <Button
-                      variant="plain"
-                      aria-label="More info about subscriptions"
-                      className="tenant-genai-page__tab-help"
-                      id="j2-tab-subs-help"
-                    >
-                      <OutlinedQuestionCircleIcon />
-                    </Button>
-                  </Popover>
-                </TabAction>
-              }
               id="j2-tab-subs"
             >
               <GenaiPageStack id="j2-subs-panel">
@@ -2084,23 +2117,6 @@ const MaaSGovernancePage = () => {
             <Tab
               eventKey="policies"
               title={<TabTitleText id="j2-tab-pols-title">{'Authorization policies'}</TabTitleText>}
-              actions={
-                <TabAction>
-                  <Popover
-                    bodyContent="Authorization policies control the access permissions for API calls, determining which user groups can invoke specific models."
-                    id="j2-tab-pols-popover"
-                  >
-                    <Button
-                      variant="plain"
-                      aria-label="More info about authorization policies"
-                      className="tenant-genai-page__tab-help"
-                      id="j2-tab-pols-help"
-                    >
-                      <OutlinedQuestionCircleIcon />
-                    </Button>
-                  </Popover>
-                </TabAction>
-              }
               id="j2-tab-pols"
             >
               <GenaiPageStack id="j2-pols-panel">
@@ -2134,7 +2150,7 @@ const MaaSGovernancePage = () => {
                 <Checkbox
                   key={sub.id}
                   id={`j2-remove-group-sub-${sub.id}`}
-                  label={sub.name}
+                  label={<strong>{sub.name}</strong>}
                   isChecked={!!removeGroupChecked[`sub-${sub.id}`]}
                   onChange={(_e, checked) => setRemoveGroupChecked((prev) => ({ ...prev, [`sub-${sub.id}`]: checked }))}
                   style={{ marginBottom: 'var(--pf-t--global--spacer--xs)' }}
@@ -2149,7 +2165,7 @@ const MaaSGovernancePage = () => {
                 <Checkbox
                   key={pol.id}
                   id={`j2-remove-group-pol-${pol.id}`}
-                  label={pol.name}
+                  label={<strong>{pol.name}</strong>}
                   isChecked={!!removeGroupChecked[`pol-${pol.id}`]}
                   onChange={(_e, checked) => setRemoveGroupChecked((prev) => ({ ...prev, [`pol-${pol.id}`]: checked }))}
                   style={{ marginBottom: 'var(--pf-t--global--spacer--xs)' }}
@@ -2211,7 +2227,7 @@ const MaaSGovernancePage = () => {
             isDisabled={deleteSubConfirmText !== subToDelete?.name}
             onClick={() => {
               if (subToDelete) {
-                deleteSubscriptionFromStore(subToDelete.id);
+                deleteSubscriptionFromStore(subToDelete.id, isModelDeploymentMvp);
                 refreshData();
                 setDeleteSubModalOpen(false);
               }
@@ -2264,7 +2280,7 @@ const MaaSGovernancePage = () => {
             isDisabled={deletePolicyConfirmText !== policyToDelete?.name}
             onClick={() => {
               if (policyToDelete) {
-                deleteAuthPolicyFromStore(policyToDelete.id);
+                deleteAuthPolicyFromStore(policyToDelete.id, isModelDeploymentMvp);
                 refreshData();
                 setDeletePolicyModalOpen(false);
               }

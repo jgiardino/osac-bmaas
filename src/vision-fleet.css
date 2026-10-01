@@ -7,11 +7,11 @@
   overflow: hidden;
 }
 
-.ai-grid-future-vision__toolbar {
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--lg)
-    var(--pf-t--global--spacer--md);
+.vision-org-select__toggle.pf-v6-c-menu-toggle {
+  --pf-v6-c-menu-toggle--BorderRadius: var(--pf-t--global--border--radius--pill);
+  --pf-v6-c-menu-toggle--BorderColor: var(--pf-t--global--border--color--brand--default);
+  --pf-v6-c-menu-toggle--hover--BorderColor: var(--pf-t--global--border--color--brand--hover);
+  --pf-v6-c-menu-toggle--expanded--BorderColor: var(--pf-t--global--border--color--brand--clicked);
 }
 
 .ai-grid-future-vision__fleet {

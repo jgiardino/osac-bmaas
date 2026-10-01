@@ -209,17 +209,17 @@ spec:
           window: 24h`,
   },
   {
-    id: 'enterprise-subscription',
-    title: 'Enterprise Subscription with Multiple Models',
-    description: 'An enterprise-grade subscription with multiple models and tiered rate limits.',
+    id: 'premium-subscription',
+    title: 'Premium Subscription with Multiple Models',
+    description: 'Priority access to flagship models with maximum limits and enterprise SLAs.',
     yaml: `apiVersion: maas.opendatahub.io/v1alpha1
 kind: MaaSSubscription
 metadata:
-  name: enterprise-tier
+  name: nsb-premium-access
   namespace: opendatahub
 annotation:
-  display-name: "Enterprise Subscription"
-  display-description: "Full access to enterprise AI models with premium limits"
+  display-name: "Premium"
+  display-description: "Priority access to flagship models with maximum limits and enterprise SLAs."
 spec:
   owner:
     groups:

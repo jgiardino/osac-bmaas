@@ -1,5 +1,7 @@
 import type { Subscription } from './types';
 import { maasGovernanceIdentities } from '../../../../../vision/legacyModelInstanceSeed';
+import { NORTH_SUMMIT_SUBSCRIPTION_TIERS } from '../../../../../vision/maasSubscriptionTiers';
+import { getMockSubscriptionsList } from '../../../../tenant-admin/ai/maas-governance/mockData';
 
 // Generate YAML for a subscription
 const generateSubscriptionYAML = (subscription: Subscription): string => {
@@ -32,12 +34,14 @@ status:
 
 // Available groups (shared with Tiers for consistency)
 export const mockOwnerGroups = [
+  { name: 'limited-users' },
+  { name: 'standard-users' },
+  { name: 'premium-users' },
   { name: 'acme-corp-ai-users' },
   { name: 'acme-data-science' },
   { name: 'enterprise-users' },
   { name: 'research-team' },
   { name: 'dev-team' },
-  { name: 'premium-users' },
 ];
 
 // Available models (MaaSModel references) — same identities as MaaS governance.
@@ -49,161 +53,52 @@ export const mockMaaSModels = maasGovernanceIdentities().map((item) => ({
   description: item.description,
 }));
 
-// Mock subscriptions based on the MaaSSubscription CRD spec
-export const mockSubscriptions: Subscription[] = [
-  {
-    id: 'enterprise-tier',
-    name: 'enterprise-tier',
-    displayName: 'Enterprise Subscription',
-    description: 'Subscription for enterprise AI workloads with high rate limits',
-    priority: 4, // 1–10 scale (higher = higher priority); demo uses 1–4 across four subscriptions
-    status: 'Active',
-    owner: {
-      groups: [
-        { name: 'acme-corp-ai-users' },
-        { name: 'enterprise-users' },
-      ],
-    },
-    modelRefs: [
-      {
-        name: 'granite-3b-instruct',
-        tokenRateLimits: { limit: 100000, window: '24h' },
-        billingRate: { perToken: 0.000001 },
-      },
-      {
-        name: 'mistral-7b',
-        tokenRateLimits: { limit: 200000, window: '24h' },
-        billingRate: { perToken: 0.000001 },
-      },
-      {
-        name: 'code-assist-ha',
-        tokenRateLimits: { limit: 50000, window: '24h' },
-        billingRate: { perToken: 0.00003 },
-      },
-    ],
-    billingMetadata: {
-      organizationId: 'acme-corp',
-      costCenter: 'ai-r-and-d',
-      labels: {
-        contract: 'enterprise-2024',
-        department: 'research',
-      },
-    },
-    dateCreated: new Date('2026-01-15T10:00:00Z'),
+const northSummitTierIds = new Set(
+  NORTH_SUMMIT_SUBSCRIPTION_TIERS.map((tier) => `sub-nsb-${tier.id}`),
+);
+const apiKeyModelRefIds = new Set(mockMaaSModels.map((model) => model.id));
+const governanceToApiKeyModelRefId: Record<string, string> = {
+  'granite-3b': 'granite-3b-instruct',
+};
+const getApiKeyModelRefId = (modelId: string): string =>
+  governanceToApiKeyModelRefId[modelId] ?? modelId;
+const getLegacyWindow = (per: number, unit: 'minute' | 'hour' | 'day'): string => {
+  const suffix = unit === 'minute' ? 'm' : unit === 'hour' ? 'h' : 'd';
+  return `${per}${suffix}`;
+};
+
+// Use the same Limited, Standard, and Premium source data as MaaS governance in every view.
+export const mockSubscriptions: Subscription[] = getMockSubscriptionsList()
+  .filter((subscription) => northSummitTierIds.has(subscription.id))
+  .map((subscription) => ({
+    id: subscription.id,
+    name: subscription.resourceName,
+    displayName: subscription.name,
+    description: subscription.description,
+    priority: subscription.priority,
+    status: subscription.phase === 'Active' ? 'Active' : 'Inactive',
+    owner: { groups: subscription.groups.map((name) => ({ name })) },
+    modelRefs: subscription.models.flatMap((modelId) => {
+      const apiKeyModelRefId = getApiKeyModelRefId(modelId);
+      if (!apiKeyModelRefIds.has(apiKeyModelRefId)) {
+        return [];
+      }
+
+      return [
+        {
+          name: apiKeyModelRefId,
+          tokenRateLimits: (subscription.tokenLimits[modelId] ?? []).map((limit) => ({
+            limit: limit.tokens,
+            window: getLegacyWindow(limit.per, limit.unit),
+            perAmount: limit.per,
+            perUnit: limit.unit,
+          })),
+        },
+      ];
+    }),
+    dateCreated: subscription.dateCreated,
     createdBy: 'platform-admin',
-  },
-  {
-    id: 'standard-tier',
-    name: 'standard-tier',
-    displayName: 'Standard Subscription',
-    description: 'Standard access tier for general AI development workloads',
-    priority: 2,
-    status: 'Active',
-    owner: {
-      groups: [
-        { name: 'dev-team' },
-        { name: 'acme-data-science' },
-      ],
-    },
-    modelRefs: [
-      {
-        name: 'granite-3b-instruct',
-        tokenRateLimits: { limit: 25000, window: '24h' },
-        billingRate: { perToken: 0.000001 },
-      },
-      {
-        name: 'mistral-7b',
-        tokenRateLimits: { limit: 25000, window: '24h' },
-        billingRate: { perToken: 0.0000015 },
-      },
-    ],
-    billingMetadata: {
-      organizationId: 'acme-corp',
-      costCenter: 'engineering',
-    },
-    dateCreated: new Date('2026-01-10T14:30:00Z'),
-    createdBy: 'admin',
-  },
-  {
-    id: 'research-unlimited',
-    name: 'research-unlimited',
-    displayName: 'Research Unlimited',
-    description: 'Unlimited access for research team with no rate limits',
-    priority: 3,
-    status: 'Active',
-    owner: {
-      groups: [
-        { name: 'research-team' },
-      ],
-    },
-    modelRefs: [
-      {
-        name: 'granite-3b-instruct',
-        tokenRateLimits: { limit: 1000000, window: '24h' },
-      },
-      {
-        name: 'llama-4-scout',
-        tokenRateLimits: { limit: 500000, window: '24h' },
-        billingRate: { perToken: 0.00003 },
-      },
-      {
-        name: 'bsfg-research-ha',
-        tokenRateLimits: { limit: 200000, window: '24h' },
-      },
-      {
-        name: 'mistral-7b',
-        tokenRateLimits: { limit: 1000000, window: '24h' },
-      },
-    ],
-    billingMetadata: {
-      organizationId: 'acme-corp',
-      costCenter: 'research',
-      labels: {
-        project: 'ai-research-2026',
-      },
-    },
-    dateCreated: new Date('2026-01-05T09:00:00Z'),
-    createdBy: 'platform-admin',
-  },
-  {
-    id: 'premium-external',
-    name: 'premium-external',
-    displayName: 'Premium External Models',
-    description: 'Access to Code Assist, Gemini, and Embeddings Pool for premium users',
-    priority: 1,
-    status: 'Pending',
-    owner: {
-      groups: [
-        { name: 'premium-users' },
-      ],
-    },
-    modelRefs: [
-      {
-        name: 'code-assist-ha',
-        tokenRateLimits: { limit: 100000, window: '24h' },
-        billingRate: { perToken: 0.00003 },
-      },
-      {
-        name: 'gemini-pro',
-        tokenRateLimits: { limit: 80000, window: '24h' },
-        billingRate: { perToken: 0.00003 },
-      },
-      {
-        name: 'embeddings-pool',
-        tokenRateLimits: { limit: 100000, window: '24h' },
-      },
-    ],
-    billingMetadata: {
-      organizationId: 'acme-corp',
-      costCenter: 'premium-ai',
-      labels: {
-        tier: 'premium',
-      },
-    },
-    dateCreated: new Date('2026-01-25T16:00:00Z'),
-    createdBy: 'platform-admin',
-  },
-];
+  }));
 
 // Populate YAML for each subscription
 mockSubscriptions.forEach(subscription => {
@@ -249,18 +144,16 @@ export interface RelatedPolicy {
 }
 
 export const mockRelatedPolicies: Record<string, RelatedPolicy[]> = {
-  'enterprise-tier': [
-    { id: 'acme-corp-enterprise-access', name: 'A MaaS Policy', description: 'My Policy Description', type: 'MaaS Auth Policy' },
-    { id: 'enterprise-token-rate-limit', name: 'Enterprise Token Rate Limits', description: 'Token rate limits for enterprise subscription users with high throughput allowance', type: 'Token Rate Limit Policy' },
-  ],
-  'standard-tier': [
-    { id: 'standard-token-rate-limit', name: 'Standard Token Rate Limits', description: 'Token rate limits for standard subscription tier with moderate throughput', type: 'Token Rate Limit Policy' },
-  ],
-  'research-unlimited': [
-    { id: 'research-maas-auth', name: 'Research Team MaaS Auth', description: 'SSO authentication policy for research team members accessing AI models', type: 'MaaS Auth Policy' },
-  ],
-  'premium-external': [
+  'sub-nsb-premium': [
+    { id: 'north-summit-premium-access', name: 'Premium access policy', description: 'Authorization for North Summit Bank premium model access.', type: 'MaaS Auth Policy' },
+    { id: 'premium-token-rate-limit', name: 'Premium Token Rate Limits', description: 'Maximum token limits for premium model access.', type: 'Token Rate Limit Policy' },
     { id: 'prod-rate-limit-high', name: 'Production Rate Limit High', description: 'High throughput for production workloads: 10K requests/minute, 500K tokens/minute', type: 'Token Rate Limit Policy' },
+  ],
+  'sub-nsb-standard': [
+    { id: 'standard-token-rate-limit', name: 'Standard Token Rate Limits', description: 'Balanced token limits for general development and production.', type: 'Token Rate Limit Policy' },
+  ],
+  'sub-nsb-limited': [
+    { id: 'limited-token-rate-limit', name: 'Limited Token Rate Limits', description: 'Lightweight access and reduced token limits for larger models.', type: 'Token Rate Limit Policy' },
   ],
 };
 

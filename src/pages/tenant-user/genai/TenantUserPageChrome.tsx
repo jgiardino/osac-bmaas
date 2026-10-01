@@ -8,7 +8,7 @@ type TenantUserPageChromeProps = {
    */
   pageClassName?: string
   title: string
-  description?: string
+  description?: ReactNode
   children?: ReactNode
   className?: string
   /** Optional section label above the title (e.g. Networking / AI). */
@@ -54,7 +54,7 @@ export function TenantUserPageChrome({
             <Flex
               className="pf-v6-u-mb-sm"
               display={{ default: 'inlineFlex' }}
-              alignItems={{ default: 'alignItemsCenter' }}
+              alignItems={{ default: 'alignItemsBaseline' }}
               spaceItems={{ default: 'spaceItemsSm' }}
               flexWrap={{ default: 'wrap' }}
             >

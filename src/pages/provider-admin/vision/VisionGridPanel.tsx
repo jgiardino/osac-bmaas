@@ -15,7 +15,7 @@ import type { VisionCluster, VisionDeployment, VisionGateway, VisionOffPlatformM
 import {
   CATALOG_OBJECT_TYPES,
   getVisionDrawerSelectionLabel,
-  SERVICES_OBJECT_TYPES,
+  SERVICES_OBJECT_TYPE_OPTIONS,
   type VisionDrawerSelection,
   type VisionDrawerTab,
   type VisionGridObjectType,
@@ -111,7 +111,8 @@ export const VisionGridPanel = ({
           onOpenCatalogItem,
         )
       : []
-  const typeOptions = tab === 'catalog' ? CATALOG_OBJECT_TYPES : SERVICES_OBJECT_TYPES
+  const typeOptions =
+    tab === 'catalog' ? CATALOG_OBJECT_TYPES : SERVICES_OBJECT_TYPE_OPTIONS
   const searchId = tab === 'catalog' ? 'vision-catalog-search' : 'vision-services-search'
   const searchPlaceholder =
     tab === 'catalog' ? 'Search catalog items' : 'Search instances'

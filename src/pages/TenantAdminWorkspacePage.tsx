@@ -120,8 +120,14 @@ function normalizeTenantAdminNavParam(
     return 'api-keys'
   }
   if (isTenantAdminNavId(value)) {
-    if (isModelDeploymentMvp && value === 'services-models') {
-      return 'admin-models'
+    if (
+      isModelDeploymentMvp &&
+      (value === 'ai-grid' ||
+        value === 'services-models' ||
+        value === 'admin-models' ||
+        value === 'admin-model-catalog-settings')
+    ) {
+      return 'admin-maas-governance'
     }
     return value
   }
@@ -199,7 +205,13 @@ function readInitialTenantAdminNav(
 
   syncNorthSummitBillingInactiveScenarioFromSearch(searchParams)
   const activeNav = getTenantActiveNav(tenant)
-  return isModelDeploymentMvp && activeNav === 'services-models' ? 'admin-models' : activeNav
+  return isModelDeploymentMvp &&
+    (activeNav === 'ai-grid' ||
+      activeNav === 'services-models' ||
+      activeNav === 'admin-models' ||
+      activeNav === 'admin-model-catalog-settings')
+    ? 'admin-maas-governance'
+    : activeNav
 }
 
 export function TenantAdminWorkspacePage() {
@@ -281,7 +293,13 @@ export function TenantAdminWorkspacePage() {
 
     const activeNav = getTenantActiveNav(tenant)
     const normalizedActiveNav =
-      isModelDeploymentMvp && activeNav === 'services-models' ? 'admin-models' : activeNav
+      isModelDeploymentMvp &&
+      (activeNav === 'ai-grid' ||
+        activeNav === 'services-models' ||
+        activeNav === 'admin-models' ||
+        activeNav === 'admin-model-catalog-settings')
+        ? 'admin-maas-governance'
+        : activeNav
     if (normalizedActiveNav !== activeNav) {
       setTenantActiveNav(tenant, normalizedActiveNav)
     }
@@ -397,7 +415,7 @@ export function TenantAdminWorkspacePage() {
       case 'admin-api-keys':
         return <GenaiApiKeysPage surface="tenant-admin" kicker="AI" />
       case 'admin-maas-governance':
-        return <MaaSGovernancePage />
+        return <MaaSGovernancePage isModelDeploymentMvp={isModelDeploymentMvp} />
       case 'admin-models':
         return <TenantAdminModelsPage />
       case 'admin-model-catalog-settings':
